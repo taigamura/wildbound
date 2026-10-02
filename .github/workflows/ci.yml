@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            game/package-lock.json
+            app/package-lock.json
+      - name: Install
+        run: |
+          npm --prefix game ci
+          npm --prefix app ci
+      - name: Build game and embed into app
+        run: npm --prefix game run build:app
+      - name: Typecheck app
+        run: npm --prefix app run typecheck
+      - name: Bundle app for iOS (Metro)
+        working-directory: app
+        run: npx expo export --platform ios --output-dir /tmp/ios-export

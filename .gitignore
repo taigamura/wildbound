@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.expo/
+web-build/
+ios/
+android/
+*.log
+.DS_Store
+.env
+.env.local
+
+# generated from game/dist by scripts/embed-game.mjs
+app/src/game-html.generated.ts

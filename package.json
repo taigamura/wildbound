@@ -1,0 +1,15 @@
+{
+  "name": "wildbound",
+  "private": true,
+  "description": "Wildbound: a quickfire 2D creature roguelite with real-time card combat. Web game + Expo iOS shell.",
+  "scripts": {
+    "setup": "npm --prefix game install && npm --prefix app install",
+    "dev": "npm --prefix game run dev",
+    "build": "npm --prefix game run build:app",
+    "typecheck": "npm --prefix game run typecheck && npm --prefix app run typecheck",
+    "app": "npm --prefix app start",
+    "build:ios": "cd app && eas build --platform ios --profile production",
+    "submit:ios": "cd app && eas submit --platform ios --latest"
+  },
+  "engines": { "node": ">=20.19" }
+}

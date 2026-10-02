@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0f1f">
+  <title>Wildbound</title>
+</head>
+<body>
+<div id="app">
+  <canvas id="gl"></canvas>
+  <div id="vig"></div>
+  <div id="flash"></div>
+  <div id="fx"></div>
+  <div id="banner"></div>
+  <div id="toast"></div>
+
+  <div id="hud" hidden>
+    <div class="top" data-band-top>
+      <div class="meta">
+        <span class="pill">Floor <b id="floorT">1</b>/8</span>
+        <span class="pill">Deck <b id="deckT">0</b></span>
+        <span class="grow"></span>
+        <button class="iconbtn" id="muteBtn" aria-label="Toggle sound"></button>
+      </div>
+      <div class="plate foe">
+        <div class="prow"><span class="elchip" id="eEl"></span><span class="nm" id="eName"></span><span class="sp"></span><span class="lv" id="eLv"></span></div>
+        <div class="bar"><i class="ghost" id="eGhost"></i><i class="hpfill" id="eHp"></i><b id="eHpT"></b></div>
+        <div class="bar intent" id="eIntBar"><i id="eInt"></i></div>
+        <div class="status" id="eStat"></div>
+      </div>
+    </div>
+    <div class="bottom" data-band-bottom>
+      <div class="plate mine">
+        <div class="prow"><span class="elchip" id="pEl"></span><span class="nm" id="pName"></span><span class="sp"></span><span class="lv" id="pLv"></span></div>
+        <div class="bar"><i class="ghost" id="pGhost"></i><i class="hpfill" id="pHp"></i><i class="shf" id="pSh"></i><b id="pHpT"></b></div>
+        <div class="status" id="pStat"></div>
+      </div>
+      <div class="actrow">
+        <div class="bench" id="bench"></div>
+        <button id="capBtn" hidden>Capture<small>3 energy</small></button>
+      </div>
+      <div class="energy"><div class="segs" id="segs"></div><span id="enT">3</span></div>
+      <div class="hand" id="hand"></div>
+    </div>
+  </div>
+
+  <section class="screen" id="scr-title">
+    <div class="logo" data-band-top>
+      <h1>Wildbound</h1>
+      <p>Catch · Deal · Survive</p>
+    </div>
+    <div class="sheet" data-band-bottom>
+      <div>
+        <div class="eyebrow">Choose your partner</div>
+        <p class="sub" style="margin-top:6px">Eight floors of wild creatures. Cards play in real time, energy refills on its own, and anything below 40% health can be caught.</p>
+      </div>
+      <div class="starters" id="starters"></div>
+      <div class="artrow" id="artRow">
+        <div class="eyebrow">Art style</div>
+        <div class="artpick" id="artPicker"></div>
+      </div>
+      <button class="big" id="startBtn">Start expedition</button>
+      <div class="best" id="bestT"></div>
+    </div>
+  </section>
+
+  <section class="screen" id="scr-map" hidden>
+    <div></div>
+    <div class="sheet" data-band-bottom>
+      <div class="trail" id="trail"></div>
+      <div>
+        <div class="eyebrow" id="mapEyebrow">Floor 1 of 8</div>
+        <h2 class="h" style="margin-top:6px">Pick a path</h2>
+      </div>
+      <div class="nodes" id="nodes"></div>
+      <div class="party" id="mapParty"></div>
+      <div class="deckline" id="deckLine"></div>
+    </div>
+  </section>
+
+  <section class="screen" id="scr-reward" hidden>
+    <div></div>
+    <div class="sheet" data-band-bottom>
+      <div>
+        <div class="eyebrow" id="rwEyebrow">Victory</div>
+        <h2 class="h" id="rwTitle" style="margin-top:6px">Take a card</h2>
+        <p class="sub" id="rwSub" style="margin-top:6px"></p>
+      </div>
+      <div class="rewards" id="rewards"></div>
+      <div class="row"><span class="best" id="rwDeck"></span><button class="ghostbtn" id="skipBtn">Skip</button></div>
+    </div>
+  </section>
+
+  <section class="screen" id="scr-catch" hidden>
+    <div></div>
+    <div class="sheet" data-band-bottom>
+      <div>
+        <div class="eyebrow">Party full</div>
+        <h2 class="h" id="ctTitle" style="margin-top:6px">Who makes room?</h2>
+        <p class="sub" style="margin-top:6px">Tap a partner to release them, or let the new catch go. Its card joins your deck either way.</p>
+      </div>
+      <div class="nodes" id="ctList"></div>
+    </div>
+  </section>
+
+  <section class="screen" id="scr-end" hidden>
+    <div class="logo" data-band-top>
+      <h1 id="endH" style="font-size:clamp(44px,13vw,64px)">Run over</h1>
+      <p id="endP"></p>
+    </div>
+    <div class="sheet" data-band-bottom>
+      <div class="stats" id="endStats"></div>
+      <div class="party" id="endParty"></div>
+      <button class="big" id="againBtn">New expedition</button>
+    </div>
+  </section>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
