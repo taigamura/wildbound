@@ -19,7 +19,7 @@ Portrait iOS creature roguelite. Real-time card combat, catching creatures mid-r
 
 ## 2. Core loop
 ```
-Daily pack (1 creature) → pick a starter → 8-floor run → catch & upgrade → win/lose → keep catches → repeat
+Daily pack (1 creature) → pick a starter → 8-floor run → catch & upgrade → win/lose → keep catches + Essence → spend Essence on loadouts → repeat
 ```
 
 ## 3. Elements
@@ -53,7 +53,7 @@ Each element owns one status:
 
 ### 4.2 Lineup
 - The party holds **up to 6** creatures. The **lineup** is 3 of them: 1 lead and 2 bench.
-- The **deck** is the lineup's cards only: 3 creatures × 3 cards (Strike / Skill / Signature).
+- The **deck** is the lineup's *equipped* cards only: 3 creatures × 3 cards (Strike / Skill / Signature, as set in each creature's loadout, §16).
 - Party members outside the lineup contribute no cards and don't fight.
 - The party screen (set lineup and lead) opens automatically after a catch, and from the map's **Lineup** button at any time. It is never forced otherwise (pillar 3).
 
@@ -133,7 +133,7 @@ A swap outside the window is a normal swap. During a heavy wind-up, bench portra
 ## 7. Rewards (after every non-boss win that isn't a flee)
 Pick **1 of 3**: **Upgrade a card**, **Heal** (40% max HP to the whole party, reviving KOs), or **+1 Capture charge**. Alphas give 2 picks; repeats are allowed.
 
-- **Upgrade:** choose any card in your party, then **+30% effect** or **−1 cost** (min 0). Each card can be upgraded once. A card with no number to scale (e.g. Static, Flicker) offers only −1 cost.
+- **Upgrade:** choose any equipped card in your party, then **+30% effect** or **−1 cost** (min 0). Each card can be upgraded once. A card with no number to scale (e.g. Static, Flicker) offers only −1 cost.
 - Upgrades belong to the card, so they leave with a released creature.
 
 ## 8. Warden and Boss
@@ -144,44 +144,46 @@ Pick **1 of 3**: **Upgrade a card**, **Heal** (40% max HP to the whole party, re
 - **Whatever creature you start the run with** has an **Evolution meter**. It fills with damage dealt by that creature (cards, auto-attacks, its Burns): **150** to fill.
 - When full, an **Evolve** button appears in the action row. (Not a portrait tap: tapping a bench portrait swaps.) **3 energy** to evolve mid-fight: 0.5s slow-mo, flash, burst, heavy haptic.
 - Effects: **+50% max HP, then a full heal**; the **Signature card is upgraded** (stacks with a §7 upgrade); evolved art.
-  - The 3 starters have named evolutions with their own Signature (§10).
-  - Any other creature used as a starter becomes "Prime <name>", with its Signature at **×1.4 effect**. This keeps non-starters a real choice (pillar 4).
+  - The 3 starters have named evolutions with their own Signature (§10). The named Signature replaces only the **default** Signature. If the starter has its alternate Signature equipped (§16), that card gets the Prime **×1.4 effect** instead.
+  - Any other creature used as a starter becomes "Prime <name>", with its equipped Signature at **×1.4 effect**. This keeps non-starters a real choice (pillar 4).
   - If the active art style has no image for the evolved form, the base art is drawn at ×1.2 scale with a glow.
 - Evolution lasts for the rest of the run only.
 
 ## 10. Roster (12 creatures + 3 evolutions)
-Each creature has 3 cards: **Strike / Skill / Signature**. HP is max HP at run start. Atk/Spd only affect it as an enemy.
+Each creature has 3 card slots: **Strike / Skill / Signature**. Strike has one option; Skill and Signature each have the default and one alternate (unlocked with Essence, §16). Each creature also has a built-in Trait (§16). HP is max HP at run start. Atk/Spd only affect it as an enemy.
+
+"N dmg ×H" hits H times; each hit gets the chain bonus. "+N if Burned" (or Soaked, Rooted) adds N damage if the enemy has that status.
 
 ### Ember
-| Creature | Role | HP | Strike | Skill | Signature |
-|---|---|---|---|---|---|
-| **Emberwick** ⭐ | Balanced | 50 | Peck (1): 6 dmg | Kindle (2): apply Burn | Wickflare (3): 14 dmg, +8 if Burned |
-| ↳ **Pyrowl** | | | | | Crownflare (3): 20 dmg, +12 if Burned, apply Burn |
-| **Cinderpip** | Glass cannon | 35 | Scorch (1): 7 dmg | Flicker (1): next card costs 1 less | Flashfire (4): 24 dmg |
-| **Kilnback** | Tank | 75 | Bash (1): 5 dmg | Hearth Shell (2): shield 12 | Slow Burn (3): apply Burn, shield 8 |
+| Creature | Role | HP | Strike | Skill | Alt Skill | Signature | Alt Signature | Trait |
+|---|---|---|---|---|---|---|---|---|
+| **Emberwick** ⭐ | Balanced | 50 | Peck (1): 6 dmg | Kindle (2): apply Burn | Flare Step (1): +1 energy, +1 chain | Wickflare (3): 14 dmg, +8 if Burned | Wildfire (3): 8 dmg, apply Burn, +1 chain | Afterglow |
+| ↳ **Pyrowl** | | | | | | Crownflare (3): 20 dmg, +12 if Burned, apply Burn | | |
+| **Cinderpip** | Glass cannon | 35 | Scorch (1): 7 dmg | Flicker (1): next card costs 1 less | Flare Up (1): +1 chain, take 2 | Flashfire (4): 24 dmg | Ember Barrage (3): 5 dmg ×3 | Quickfuse |
+| **Kilnback** | Tank | 75 | Bash (1): 5 dmg | Hearth Shell (2): shield 12 | Forge (2): shield 6, next Strike ×2 | Slow Burn (3): apply Burn, shield 8 | Magma Ram (3): 16 dmg, take 4 | Bulwark |
 
 ### Tide
-| Creature | Role | HP | Strike | Skill | Signature |
-|---|---|---|---|---|---|
-| **Bellspring** ⭐ | Sustain | 55 | Splash (1): 5 dmg | Drench (2): apply Soak | Lantern Tide (3): 10 dmg, heal team 8 |
-| ↳ **Lanternmere** | | | | | Beacon Tide (3): 14 dmg, heal team 14 |
-| **Puddlet** | Healer | 40 | Drip (1): 4 dmg | Mend (2): heal self 15 | Spring Rain (4): heal team 12, cleanse team |
-| **Brinecrab** | Tank | 80 | Pinch (1): 6 dmg | Barnacle (2): shield 14 | Undertow (3): 12 dmg, apply Soak |
+| Creature | Role | HP | Strike | Skill | Alt Skill | Signature | Alt Signature | Trait |
+|---|---|---|---|---|---|---|---|---|
+| **Bellspring** ⭐ | Sustain | 55 | Splash (1): 5 dmg | Drench (2): apply Soak | Tidecall (2): shield team 5 | Lantern Tide (3): 10 dmg, heal team 8 | Undertide (3): 14 dmg, +6 if Soaked | Ebb |
+| ↳ **Lanternmere** | | | | | | Beacon Tide (3): 14 dmg, heal team 14 | | |
+| **Puddlet** | Healer | 40 | Drip (1): 4 dmg | Mend (2): heal self 15 | Bubble (1): shield 7 | Spring Rain (4): heal team 12, cleanse team | Wellspring (3): heal team 6, +2 energy | Undercurrent |
+| **Brinecrab** | Tank | 80 | Pinch (1): 6 dmg | Barnacle (2): shield 14 | Brace (1): next hit taken reflects 30% | Undertow (3): 12 dmg, apply Soak | Tidal Clamp (3): 10 dmg, shield 10 | Counterweave |
 
 ### Thorn
-| Creature | Role | HP | Strike | Skill | Signature |
-|---|---|---|---|---|---|
-| **Truffmole** ⭐ | Control | 55 | Dig (1): 6 dmg | Tangle (2): apply Root | Sporeburst (3): 12 dmg, heal self 6 |
-| ↳ **Morelord** | | | | | Spore Bloom (3): 18 dmg, heal team 8 |
-| **Brambat** | Drain | 40 | Nip (1): 5 dmg, heal self 2 | Thornveil (2): next hit taken reflects 50% | Leech Dive (3): 12 dmg, heal self 50% of damage |
-| **Mossling** | Support | 50 | Swat (1): 5 dmg | Overgrow (2): apply Root, shield 6 | Canopy (3): shield team 8 |
+| Creature | Role | HP | Strike | Skill | Alt Skill | Signature | Alt Signature | Trait |
+|---|---|---|---|---|---|---|---|---|
+| **Truffmole** ⭐ | Control | 55 | Dig (1): 6 dmg | Tangle (2): apply Root | Burrow (2): shield 8, next Strike ×2 | Sporeburst (3): 12 dmg, heal self 6 | Rootquake (4): 16 dmg, apply Root | Deep Roots |
+| ↳ **Morelord** | | | | | | Spore Bloom (3): 18 dmg, heal team 8 | | |
+| **Brambat** | Drain | 40 | Nip (1): 5 dmg, heal self 2 | Thornveil (2): next hit taken reflects 50% | Hemlock (2): apply Root, heal self 6 | Leech Dive (3): 12 dmg, heal self 50% of damage | Thorn Storm (4): 8 dmg ×2, next hit taken reflects 30% | Thirst |
+| **Mossling** | Support | 50 | Swat (1): 5 dmg | Overgrow (2): apply Root, shield 6 | Photosynth (2): heal team 5 | Canopy (3): shield team 8 | Strangle Vine (3): 10 dmg, +6 if Rooted | Overshade |
 
 ### Volt
-| Creature | Role | HP | Strike | Skill | Signature |
-|---|---|---|---|---|---|
-| **Skiray** | Tempo | 45 | Zap (0): 3 dmg | Static (2): apply Shock | Gale Strike (3): 10 dmg, +1 chain |
-| **Sparkit** | Glass cannon | 35 | Jolt (1): 7 dmg | Overcharge (1): +2 energy, take 4 | Thunderclap (4): 22 dmg |
-| **Coilsnail** | Tank | 70 | Prod (1): 5 dmg | Capacitor (2): shield 10, next Strike ×2 | Discharge (3): damage equal to your shield, consuming it |
+| Creature | Role | HP | Strike | Skill | Alt Skill | Signature | Alt Signature | Trait |
+|---|---|---|---|---|---|---|---|---|
+| **Skiray** | Tempo | 45 | Zap (0): 3 dmg | Static (2): apply Shock | Tailwind (1): +2 chain | Gale Strike (3): 10 dmg, +1 chain | Arc Lash (3): 6 dmg, apply Shock | Relay |
+| **Sparkit** | Glass cannon | 35 | Jolt (1): 7 dmg | Overcharge (1): +2 energy, take 4 | Supercharge (2): next Strike ×3 | Thunderclap (4): 22 dmg | Ball Lightning (3): 14 dmg, +1 chain | Live Wire |
+| **Coilsnail** | Tank | 70 | Prod (1): 5 dmg | Capacitor (2): shield 10, next Strike ×2 | Grounding (2): shield 8, cleanse team | Discharge (3): damage equal to your shield, consuming it | Static Field (3): shield team 6, apply Shock | Grounded |
 
 - **Shields** absorb damage until broken, and decay 20%/s once 3s have passed since they were last added to.
 - **Spawn pools:** Biome A (floors 1–3): Cinderpip, Puddlet, Brambat, Skiray, Kilnback, Mossling. Biome B (5–7): Brinecrab, Sparkit, Coilsnail, plus the Biome A pool at +2 floors' scaling.
@@ -189,11 +191,11 @@ Each creature has 3 cards: **Strike / Skill / Signature**. HP is max HP at run s
 ## 11. Collection and the daily pack
 - **New install:** you own the 3 starters.
 - **Daily pack:** one per day, resetting at **04:00 device-local time**. A card-flip reveal grants **1 creature you don't own**, random from the 9 non-starters. Once you own all 12, it grants a **shiny** of a random owned creature that isn't shiny yet (a hue-shift with a sparkle on entry). With everything shiny, it says so.
-- **Starting a run:** pick any owned creature. It starts at its §10 stats.
-- **End of run:** **Win:** every species caught this run joins the collection. **Loss:** keep **1** caught species of your choice. Duplicates are ignored.
-- **Collection screen:** 12 slots; unowned are silhouettes. Tap any slot to see its 3 cards.
+- **Starting a run:** pick any owned creature. It starts at its §10 stats with its saved loadout (§16).
+- **End of run:** **Win:** every species caught this run joins the collection. **Loss:** keep **1** caught species of your choice. Every species caught this run that was already owned before the run converts to **+3 Essence** of its element (win or loss, §16).
+- **Collection screen:** 12 slots; unowned are silhouettes. Tap any slot to see its cards and Trait. It is also the **loadout editor** for owned creatures (§16).
 - **"Run again"** on the results screen restarts immediately with the same starter.
-- **Persisted** (through `core/platform.ts` `store`): `owned`, `shiny`, `packDay`, `best`, `wins`, `starter`, `art`, `muted`.
+- **Persisted** (through `core/platform.ts` `store`): `owned`, `shiny`, `packDay`, `best`, `wins`, `starter`, `art`, `muted`, `essence`, `learned`, `loadout`.
 
 ## 12. Feel
 - **Haptics:** light on card play, medium on a hit landing, heavy on a Perfect Swap, a capture success or an evolution.
@@ -204,12 +206,65 @@ Each creature has 3 cards: **Strike / Skill / Signature**. HP is max HP at run s
 12 creature stills, 3 evolution stills, 1 Warden, 1 boss, 2 biome backgrounds = **19 images**. Element icons and card frames are drawn in code. Shinies are a filter. Missing images fall back to the procedural Sticker look (evolutions fall back to scaled base art with a glow, §9).
 
 ## 14. Out of scope (later)
-Shop, events, rival tamers, tamer cards, eggs, Warden part-breaking and crafting, sightings-based packs, evolutions for non-starters beyond "Prime", a second Warden, ranked mode and leaderboards, a daily seeded run, cosmetic card frames, monetization.
+Shop, events, rival tamers, tamer cards, eggs, Warden part-breaking, crafting beyond Essence unlocks (§16), more than one alternate per card slot, sightings-based packs, evolutions for non-starters beyond "Prime", a second Warden, ranked mode and leaderboards, a daily seeded run, cosmetic card frames, monetization.
 
 ## 15. Open tuning questions (decide by playing)
 - Does bench-card swapping churn the lead so much that Perfect Swaps happen by accident? Fallback: bench cards fire from the bench without swapping, and only portrait taps swap.
 - Wild spawns include unowned species, so most players will own everything within a few days and the pack becomes shinies-only. Fallback: spawn only owned species and make the pack the only way to unlock new ones.
+- Essence earn rate: target **1–2 unlocks per run**. Levers: `BAL.essWild`/`essAlpha`/`essCatch`/`essDupe`, `moveCost`, `traitCost`.
+- Do the chain Traits (Live Wire, Quickfuse, Relay) stack too strongly when socketed together? Levers: raise `BAL.livewireChain`, or allow only one chain Trait per lineup.
 - Late-floor difficulty with no leveling: watch floor 6–8 death rates. The levers are `BAL.hpPerFloor`/`dmgPerFloor`, Spring frequency and Heal reward size.
+
+## 16. Loadouts, Essence and Traits
+Collection gives options, not power (pillar 4): every alternate is a sidegrade, and nothing raises a creature's numbers.
+
+### 16.1 Loadouts
+- Per creature: **Skill** (default or alternate), **Signature** (default or alternate), and a **Trait** socket. Strike has one option. Alternates are in §10.
+- Loadouts are saved per species and edited only on the **Collection screen**, never mid-run, so "Run again" stays one tap (pillar 3).
+- A creature uses its saved loadout whenever it joins the party (starter or catch). It's fixed for that creature for the rest of the run.
+- Locked or missing choices fall back to the default.
+- Unlocking a card equips it; learning a Trait sockets it in the creature being viewed (one tap fewer).
+
+### 16.2 Traits
+- Every creature has a built-in Trait in its socket. **The socket is never empty.**
+- Once a Trait is **learned**, other creatures can socket it. A learned Trait sits in **only one** other creature at a time: socketing it elsewhere returns the previous holder to its built-in Trait. The creature it's built into always keeps it.
+- A learned Trait is usable only while its source creature is owned.
+- "It" / "its" means the creature holding the Trait.
+
+| Trait | Built into | Effect |
+|---|---|---|
+| **Afterglow** | Emberwick | When its Burn on the enemy ends, +1 energy |
+| **Quickfuse** | Cinderpip | Its first card each fight costs 0 |
+| **Bulwark** | Kilnback | Its shields start decaying **3s** later |
+| **Ebb** | Bellspring | Heals **4** when swapped out |
+| **Undercurrent** | Puddlet | Its heals also cleanse whoever they heal |
+| **Counterweave** | Brinecrab | A Perfect Swap into it also fires its Strike for free |
+| **Deep Roots** | Truffmole | Root it applies lasts **+1.5s** |
+| **Thirst** | Brambat | Its Strikes heal it for **30%** of their damage |
+| **Overshade** | Mossling | When it shields itself, the weakest teammate gets **half** |
+| **Relay** | Skiray | After a card swaps it in, your next card costs 1 less |
+| **Live Wire** | Sparkit | The first time its card reaches chain **3+**, +1 energy |
+| **Grounded** | Coilsnail | Can't be Shocked; a Shock on it gives +1 energy instead |
+
+### 16.3 Essence
+One persisted currency split into the 4 elements. The end-of-run screen shows the Essence earned.
+
+| Source | Essence |
+|---|---|
+| Defeat a Wild | **+1** of its element |
+| Catch a creature | **+2** of its element (instead of the Wild amount) |
+| Defeat an Alpha | **+2** of its element |
+| Defeat the Warden | **+3** Thorn and **+3** Ember |
+| Defeat Noctyrm | **+2** of every element |
+| A wild flees | nothing |
+| End of run: each species caught that was already owned before the run | **+3** of its element (win or loss) |
+
+| Spend | Cost | Requires |
+|---|---|---|
+| Unlock an alternate card | **5** Essence of the creature's element | the creature is owned |
+| Learn a Trait | **8** Essence of its source creature's element | the source creature is owned |
+
+Unlocks are permanent.
 
 ---
 
@@ -236,11 +291,11 @@ A PixiJS web app (`game/`) shipped inside an Expo WebView shell (`app/`). iOS bu
 - `cd app && npx expo export --platform ios`: proves the iOS bundle compiles (CI runs this)
 
 ## Where things live
-- Balance and content: `game/src/core/data.ts`. `BAL` holds every tuning number; `SPECIES` holds the roster and cards.
-- Combat, statuses, Perfect Swap, chain, capture, evolution: `game/src/game/battle.ts`.
-- Map, nodes, rewards, upgrades, party/lineup, end of run, title: `game/src/game/run.ts`.
-- Collection, daily pack and persisted progress: `game/src/game/meta.ts`.
-- Run state and card resolution helpers (deck building, upgraded card stats): `game/src/game/state.ts`.
+- Balance and content: `game/src/core/data.ts`. `BAL` holds every tuning number; `SPECIES` holds the roster and cards (each slot is a list: `[default, ...alternates]`); `TRAITS` holds the Trait definitions.
+- Combat, statuses, Perfect Swap, chain, capture, evolution, Trait effects: `game/src/game/battle.ts`.
+- Map, nodes, rewards, upgrades, party/lineup, end of run, title, Collection and the loadout editor: `game/src/game/run.ts`.
+- Collection, daily pack, Essence, unlocks, saved loadouts and persisted progress: `game/src/game/meta.ts`.
+- Run state and card resolution helpers (deck building, equipped and upgraded card stats): `game/src/game/state.ts`.
 - DOM HUD and card rendering: `game/src/game/ui.ts`.
 - On-screen creatures: `render/actor.ts` (the `Actor` class). Gameplay only ever uses Actors.
 - Art: `art/types.ts` (contracts), `art/registry.ts` (active style), `art/sticker/`, `art/sprite/`, `art/packs/<id>/`.
@@ -273,5 +328,5 @@ A PixiJS web app (`game/`) shipped inside an Expo WebView shell (`app/`). iOS bu
 ## Verifying changes
 - Run `npm run typecheck` and `npm run build`.
 - Play a run in the browser at 390×844 in every art style (switch on the title screen).
-- In dev, `window.__wb` is the run state; `__wb.debug` has helpers (see `main.ts`).
+- In dev, `window.__wb` is the run state; `__wb.debug` has helpers (see `main.ts`), including `__wb.debug.essence(n)` (grant Essence) and `__wb.debug.trait(key)` (socket a Trait on the lead).
 - For app-side changes, also run the iOS export.

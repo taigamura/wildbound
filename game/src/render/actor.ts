@@ -83,9 +83,10 @@ export class Actor {
     if (!this.filter) { this.filter = new ColorMatrixFilter(); this.flip.filters = [this.filter]; }
     this.filter.brightness(1 + v * 2.2, false);
   }
+  private flashT = { v: 0 };   // tween target, so destroy() can kill a running flash
   hitFlash() {
-    const o = { v: 1 }; this.setFlash(1);
-    gsap.to(o, { v: 0, duration: 0.22, onUpdate: () => this.setFlash(o.v) });
+    this.flashT.v = 1; this.setFlash(1);
+    gsap.to(this.flashT, { v: 0, duration: 0.22, overwrite: true, onUpdate: () => this.setFlash(this.flashT.v) });
     gsap.fromTo(this.sq.scale, { x: 1.25, y: 0.75 }, { x: 1, y: 1, duration: 0.45, ease: 'elastic.out(1,0.4)' });
   }
 
@@ -103,7 +104,7 @@ export class Actor {
   }
 
   destroy() {
-    [this.off, this.sq.scale, this.flip, this.rig, this.sq, this.root].forEach(o => gsap.killTweensOf(o));
+    [this.off, this.sq.scale, this.flip, this.rig, this.sq, this.root, this.flashT].forEach(o => gsap.killTweensOf(o));
     this.setFlash(0); this.shiny = this.silhouette = false; this.applyLook(); this.art.destroy(); this.root.destroy({ children: true });
   }
 }

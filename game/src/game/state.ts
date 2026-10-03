@@ -47,6 +47,7 @@ export const S = {
   energy: 0, charges: 0, floor: 1, enemy: null as Enemy | null,
   swapCd: 0, autoT: 0,
   chain: 0, chainT: 99, discount: 0,
+  wired: false,                          // Live Wire already paid out for the current chain
   /** Bumped whenever a battle/run ends; delayed callbacks compare against it and bail if stale. */
   tok: 0,
   starter: 'emberwick',
@@ -86,7 +87,10 @@ export function cardOf(r: CardRef): { def: CardDef; pow: number; owner: Mon } {
   const def = { ...scaleCard(base, pow), cost: Math.max(0, base.cost - (up === 'cost' ? 1 : 0)) };
   return { def, pow, owner };
 }
-export const cardCost = (r: CardRef) => Math.max(0, cardOf(r).def.cost - S.discount);
+export const cardCost = (r: CardRef) => {
+  const { def, owner } = cardOf(r);
+  return owner.trait === 'quickfuse' && owner.played === 0 ? 0 : Math.max(0, def.cost - S.discount);   // Quickfuse: first card free
+};
 
 /** Why a card can't be played right now ('' = playable). */
 export function cardBlock(r: CardRef): '' | 'energy' | 'swap' | 'busy' {

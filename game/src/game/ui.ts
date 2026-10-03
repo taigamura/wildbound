@@ -2,7 +2,7 @@
 import { measureBand, PPOS, U } from '../render/layout';
 import { world } from '../render/app';
 import { S, act, mon, team, cardOf, cardCost, cardBlock, isHeavy, heavyOf, inPerfectWindow, canCapture, captureOdds, evoCandidate, type Mon, type CardRef } from './state';
-import { BAL, ELEM, SPECIES, STATUS_NAME, STATUS_EL, adv, resists, cardText, svg, elCss, type CardDef, type El, type GlyphKey } from '../core/data';
+import { BAL, ELEM, SPECIES, TRAITS, STATUS_NAME, STATUS_EL, adv, resists, cardText, svg, elCss, type CardDef, type El, type GlyphKey } from '../core/data';
 import { $, clamp } from '../core/util';
 import { isMuted, setMuted, audio } from '../core/audio';
 
@@ -79,7 +79,7 @@ const chip = (id: string, el: El) => `<span class="elchip" id="${id}" style="--c
 export function renderPlayerPlate() {
   const c = act(); if (!c) return;
   $('#pEl').outerHTML = chip('pEl', c.el); $('#pName').textContent = c.name;
-  $('#pLv').textContent = SPECIES[c.key].role ?? '';
+  $('#pLv').innerHTML = (SPECIES[c.key].role ?? '') + (c.trait ? ` · <span class="tr">${TRAITS[c.trait].name}</span>` : '');
 }
 export function renderEnemyPlate() {
   const e = S.enemy; if (!e) return;
