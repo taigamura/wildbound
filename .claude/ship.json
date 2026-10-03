@@ -18,5 +18,9 @@
   },
   "submit": {
     "command": "IPA=$(realpath {ipa}) && cd app && npx eas-cli@24.10.0 submit -p ios --profile production --path \"$IPA\" --non-interactive"
+  },
+  "releaseLog": {
+    "file": "CLAUDE.md",
+    "anchor": "- **History**"
   }
 }

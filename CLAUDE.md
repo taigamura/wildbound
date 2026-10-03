@@ -216,9 +216,10 @@ Shop, events, rival tamers, tamer cards, eggs, Warden part-breaking and crafting
 # Part 2: Engineering
 
 ## Session start: catching up
-1. **Recent work:** run `git log -10 --format='%h %ad %s%n%b' --date=short`. The commit messages say what changed and why.
+A SessionStart hook (`.claude/hooks/session-context.sh`, registered in `.claude/settings.json`) prints the last 10 commits and any uncommitted changes into context automatically.
+1. **Recent work:** that hook output. The commit messages say what changed and why. If it's missing, run `.claude/hooks/session-context.sh` yourself.
 2. **Current state:** read "Releasing" below for what has shipped and how builds work. That section is the authority for anything git can't see (TestFlight uploads, credentials, the build server).
-3. **Uncommitted work:** check `git status`.
+3. **Uncommitted work:** also in the hook output.
 
 Keep both up to date: write commit bodies that explain *why*, and edit "Releasing" in the same change whenever release state changes (a new upload, a credentials change, a pipeline change).
 
@@ -265,7 +266,7 @@ A PixiJS web app (`game/`) shipped inside an Expo WebView shell (`app/`). iOS bu
 - **Credentials live on EAS:** distribution certificate, provisioning profile and the App Store Connect API key. No Apple login is needed for routine builds and submits, so they can run with `--non-interactive`. If submit returns `401 NOT_AUTHORIZED`, the stored ASC key is bad: remove it via `eas credentials -p ios` (App Store Connect: Manage your API Key) and let the next interactive `eas submit` generate a new one.
 - **Normal path: `/ship-ios`** (config in `.claude/ship.json`). Commit, PR and merge, then a local EAS build on the Mac build server (`taigamura-MBP`, 192.168.50.175, repo at `~/dev/wildbound`, builds from `app/`), copy the `.ipa` back, and submit from this machine. If a local build fails with keychain `error code: 36`, unlock the Mac's login keychain in a terminal there.
 - **Fallback: EAS cloud build** from the repo root: `npm run build:ios`, then `npm run submit:ios`.
-- **History** (newest first; add a line per TestFlight upload):
+- **History** (newest first; `/ship-ios` adds a line per upload via `releaseLog` in `.claude/ship.json`; add one by hand for any other upload):
   - 2026-10-03: `/ship-ios` configured. It has not completed a full run yet, so the first run is also its test.
   - 2026-10-03: v0.2.0 build 2 (EAS cloud build) uploaded to TestFlight. This is the MVP design build.
 
