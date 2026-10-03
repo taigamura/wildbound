@@ -29,6 +29,12 @@
           "backgroundColor": "#0a0f1f"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a12b0444-a9e0-4f39-bda7-ba8fce473872"
+      }
+    },
+    "owner": "taigamura"
   }
 }
