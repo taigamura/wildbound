@@ -19,7 +19,7 @@
     <div class="top" data-band-top>
       <div class="meta">
         <span class="pill">Floor <b id="floorT">1</b>/8</span>
-        <span class="pill">Deck <b id="deckT">0</b></span>
+        <span class="pill">Charges <b id="chargeT">0</b></span>
         <span class="grow"></span>
         <button class="iconbtn" id="muteBtn" aria-label="Toggle sound"></button>
       </div>
@@ -34,16 +34,21 @@
       <div class="plate mine">
         <div class="prow"><span class="elchip" id="pEl"></span><span class="nm" id="pName"></span><span class="sp"></span><span class="lv" id="pLv"></span></div>
         <div class="bar"><i class="ghost" id="pGhost"></i><i class="hpfill" id="pHp"></i><i class="shf" id="pSh"></i><b id="pHpT"></b></div>
+        <div class="evobar" id="pEvo" hidden><i></i></div>
         <div class="status" id="pStat"></div>
       </div>
       <div class="actrow">
         <div class="bench" id="bench"></div>
-        <button id="capBtn" hidden>Capture<small>3 energy</small></button>
+        <button id="evoBtn" hidden>Evolve<small>3 energy</small></button>
+        <button id="capBtn" hidden>Capture<small id="capOdds"></small></button>
       </div>
       <div class="energy"><div class="segs" id="segs"></div><span id="enT">3</span></div>
       <div class="hand" id="hand"></div>
     </div>
   </div>
+
+  <div id="heavy" class="pinned" hidden></div>
+  <div id="chain" class="pinned" hidden></div>
 
   <section class="screen" id="scr-title">
     <div class="logo" data-band-top>
@@ -52,10 +57,11 @@
     </div>
     <div class="sheet" data-band-bottom>
       <div>
-        <div class="eyebrow">Choose your partner</div>
-        <p class="sub" style="margin-top:6px">Eight floors of wild creatures. Cards play in real time, energy refills on its own, and anything below 40% health can be caught.</p>
+        <div class="eyebrow">Choose your starter</div>
+        <p class="sub" style="margin-top:6px">Your team is your deck. Catch creatures below 40% health to add their cards, and swap to dodge heavy hits.</p>
       </div>
       <div class="starters" id="starters"></div>
+      <div class="metarow"><button class="metabtn" id="packBtn"></button><button class="metabtn" id="collBtn"></button></div>
       <div class="artrow" id="artRow">
         <div class="eyebrow">Art style</div>
         <div class="artpick" id="artPicker"></div>
@@ -75,7 +81,7 @@
       </div>
       <div class="nodes" id="nodes"></div>
       <div class="party" id="mapParty"></div>
-      <div class="deckline" id="deckLine"></div>
+      <div class="row"><span class="best" id="mapCharges"></span><button class="ghostbtn" id="lineupBtn">Lineup</button></div>
     </div>
   </section>
 
@@ -92,13 +98,58 @@
     </div>
   </section>
 
+  <section class="screen" id="scr-upgrade" hidden>
+    <div></div>
+    <div class="sheet tall" data-band-bottom>
+      <div>
+        <div class="eyebrow">Upgrade a card</div>
+        <h2 class="h" style="margin-top:6px">Pick a card</h2>
+        <p class="sub" style="margin-top:6px">Each card can be upgraded once. Upgrades leave with a released creature.</p>
+      </div>
+      <div class="uplist" id="upList"></div>
+      <div class="upchoice" id="upChoice" hidden></div>
+      <div class="row"><span></span><button class="ghostbtn" id="upBack">Back</button></div>
+    </div>
+  </section>
+
+  <section class="screen" id="scr-party" hidden>
+    <div></div>
+    <div class="sheet tall" data-band-bottom>
+      <div>
+        <div class="eyebrow">Party</div>
+        <h2 class="h" style="margin-top:6px">Set your lineup</h2>
+        <p class="sub" id="ptSub" style="margin-top:6px"></p>
+      </div>
+      <div class="nodes" id="ptList"></div>
+      <button class="big" id="ptDone">Done</button>
+    </div>
+  </section>
+
+  <section class="screen" id="scr-pack" hidden>
+    <div class="logo" data-band-top><h1 style="font-size:clamp(40px,12vw,58px)">Daily pack</h1><p>One new friend a day</p></div>
+    <div class="sheet" data-band-bottom>
+      <div class="flip" id="packCard"><div class="face back"><span class="mark">W</span><b>Wildbound</b></div><div class="face front" id="packFront"></div></div>
+      <div id="packTxt"></div>
+      <button class="big" id="packOk">Nice!</button>
+    </div>
+  </section>
+
+  <section class="screen" id="scr-coll" hidden>
+    <div class="logo" data-band-top><h1 style="font-size:clamp(36px,11vw,52px)">Collection</h1><p id="collCount"></p></div>
+    <div class="sheet tall" data-band-bottom>
+      <div class="collgrid" id="collGrid"></div>
+      <div class="colldetail" id="collDetail"></div>
+      <button class="ghostbtn" id="collBack">Back</button>
+    </div>
+  </section>
+
   <section class="screen" id="scr-catch" hidden>
     <div></div>
     <div class="sheet" data-band-bottom>
       <div>
         <div class="eyebrow">Party full</div>
         <h2 class="h" id="ctTitle" style="margin-top:6px">Who makes room?</h2>
-        <p class="sub" style="margin-top:6px">Tap a partner to release them, or let the new catch go. Its card joins your deck either way.</p>
+        <p class="sub" style="margin-top:6px">Your party holds six. Release one (its cards and upgrades go with it), or let the new catch go. It still counts as caught.</p>
       </div>
       <div class="nodes" id="ctList"></div>
     </div>
@@ -111,8 +162,10 @@
     </div>
     <div class="sheet" data-band-bottom>
       <div class="stats" id="endStats"></div>
+      <div id="endKeep"></div>
       <div class="party" id="endParty"></div>
-      <button class="big" id="againBtn">New expedition</button>
+      <button class="big" id="againBtn">Run again</button>
+      <button class="ghostbtn" id="titleBtn">Title</button>
     </div>
   </section>
 </div>

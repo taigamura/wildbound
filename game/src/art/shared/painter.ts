@@ -30,6 +30,16 @@ export const NIGHT: ScenePalette = {
   pedestal: { top: 0x1d2b52, rim: 0x2c3c70, inner: 0x24366a, shadow: 0x05070f },
 };
 
+/** Biome B for the sticker style: a warm twilight canyon. */
+export const EMBERGLOW: ScenePalette = {
+  ...NIGHT,
+  sky: ['#3a1238', '#5a1d3a', '#8a3b3a'], celestial: 'sun', celestialColor: '#ffb27a', celestialGlow: 'rgba(255,140,90,.4)',
+  stars: 40, twinkleColors: [0xffd0a0, 0xffffff],
+  hills: ['#45173a', '#33112e'], trees: '#220a22', ground: ['#3b1630', '#2c1026', '#1a0916'], grass: 'rgba(255,150,120,.12)',
+  mushroomColors: [0xffb36e, 0xff7ad9, 0xffe08a],
+  pedestal: { top: 0x4a1d40, rim: 0x6e2c58, inner: 0x5a2350, shadow: 0x12050f },
+};
+
 /** Paints the static backdrop into one texture; adds animated twinkles and glowing props on top. */
 export function paintedScene(pal: ScenePalette, image?: { tex: Texture; horizon: number }): SceneArt {
   let bg: Container, deco: Container, backdrop: Sprite | null = null;

@@ -99,7 +99,7 @@ export class StickerCreature implements CreatureArt {
       eg.ellipse(x, 0, 11 * s, 13 * s).fill(0xffffff).stroke(o.outline ? { width: 3.5, color: OUT } : { width: 0, alpha: 0 });
       eg.ellipse(x + 3, 1, 6.5 * s, 8 * s).fill(0x14101f); eg.circle(x + 5, -4, 2.6 * s).fill(0xffffff);
     }
-    if (sp.boss) { eg.moveTo(-4, -16).lineTo(18, -10).stroke({ width: 4, color: 0x14102a, cap: 'round' }); eg.moveTo(46, -14).lineTo(26, -9).stroke({ width: 4, color: 0x14102a, cap: 'round' }); }
+    if (sp.boss || sp.warden) { eg.moveTo(-4, -16).lineTo(18, -10).stroke({ width: 4, color: 0x14102a, cap: 'round' }); eg.moveTo(46, -14).lineTo(26, -9).stroke({ width: 4, color: 0x14102a, cap: 'round' }); }
     const mouth = G(); mouth.moveTo(16, -42).quadraticCurveTo(22, -36, 30, -42).stroke({ width: 3, color: 0x14102a, cap: 'round' });
     mouth.circle(-2, -46, 5).fill({ color: 0xff8fb0, alpha: 0.45 }); mouth.circle(44, -45, 4).fill({ color: 0xff8fb0, alpha: 0.45 });
     if (f.has('whisk')) { const g = G(); g.moveTo(42, -48).lineTo(64, -54).stroke({ width: 2.5, color: 0x14102a, cap: 'round' }); g.moveTo(42, -44).lineTo(64, -40).stroke({ width: 2.5, color: 0x14102a, cap: 'round' }); }

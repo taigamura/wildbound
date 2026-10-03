@@ -24,13 +24,16 @@ export interface SpriteEntry {
   tintByElement?: boolean;
 }
 
+export interface SceneSpec { image?: string; horizon?: number; palette?: Partial<ScenePalette> }
 export interface PackManifest {
   id: string;
   name: string;
   blurb: string;
   creatures: Record<string, SpriteEntry>;
   /** Background: an image (cover-fit; `horizon` = fraction of image height where the ground starts), or a palette for the painted scene. */
-  scene?: { image?: string; horizon?: number; palette?: Partial<ScenePalette> };
+  scene?: SceneSpec;
+  /** Biome B background (floors 5–8). Defaults to `scene`. */
+  sceneB?: SceneSpec;
   pedestal?: { image?: string };
   ambience?: Partial<Ambience>;
   cssVars?: Record<string, string>;
@@ -65,8 +68,10 @@ class SpriteCreature implements CreatureArt {
 
 export function spritePackStyle(m: PackManifest, files: Record<string, string>, fallback: ArtStyle): ArtStyle {
   const textures = new Map<string, Texture>();
-  const pal: ScenePalette = { ...NIGHT, ...(m.scene?.palette || {}), pedestal: { ...NIGHT.pedestal, ...(m.scene?.palette?.pedestal || {}) } };
+  const palOf = (sc?: SceneSpec): ScenePalette => ({ ...NIGHT, ...(sc?.palette || {}), pedestal: { ...NIGHT.pedestal, ...(sc?.palette?.pedestal || {}) } });
+  const pal = palOf(m.scene);
   const tex = (f: string) => textures.get(f);
+  const sceneFor = (sc?: SceneSpec) => paintedScene(palOf(sc), sc?.image && tex(sc.image) ? { tex: tex(sc.image)!, horizon: sc.horizon ?? 0.4 } : undefined);
   return {
     id: m.id, name: m.name, blurb: m.blurb, cssVars: m.cssVars,
     ambience: { ...fallback.ambience, ...(m.ambience || {}) },
@@ -74,6 +79,7 @@ export function spritePackStyle(m: PackManifest, files: Record<string, string>, 
       const needed = new Set<string>();
       Object.values(m.creatures).forEach(c => { needed.add(c.image); Object.values(c.variants || {}).forEach(v => v && needed.add(v)); });
       if (m.scene?.image) needed.add(m.scene.image);
+      if (m.sceneB?.image) needed.add(m.sceneB.image);
       if (m.pedestal?.image) needed.add(m.pedestal.image);
       await Promise.all([...needed].filter(f => !textures.has(f)).map(async f => {
         if (!files[f]) { console.warn(`[art:${m.id}] missing file ${f}`); return; }
@@ -81,11 +87,12 @@ export function spritePackStyle(m: PackManifest, files: Record<string, string>, 
       }));
       await fallback.preload();
     },
+    has: species => !!(m.creatures[species] && tex(m.creatures[species].image)),
     creature(species, el) {
       const e = m.creatures[species];
       return e && tex(e.image) ? new SpriteCreature(e, tex, el) : fallback.creature(species, el);
     },
-    scene: () => paintedScene(pal, m.scene?.image && tex(m.scene.image) ? { tex: tex(m.scene.image)!, horizon: m.scene.horizon ?? 0.4 } : undefined),
+    scene: biome => sceneFor(biome && m.sceneB ? m.sceneB : m.scene),
     pedestal: () => paintedPedestal(pal, m.pedestal?.image ? tex(m.pedestal.image) : undefined),
   };
 }

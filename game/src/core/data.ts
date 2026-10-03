@@ -1,5 +1,5 @@
-// Static game content: elements, creatures, cards, icons.
-// Balance tweaks belong here.
+// Static game content: elements, statuses, roster, cards, balance numbers.
+// CLAUDE.md (Part 1) is the spec. Change a number here, change it there too.
 
 export type El = 'ember' | 'tide' | 'thorn' | 'volt';
 
@@ -12,64 +12,176 @@ export const ELEM: Record<El, ElementDef> = {
 };
 export const EL_KEYS = Object.keys(ELEM) as El[];
 
+/* ================= balance ================= */
+export const BAL = {
+  floors: 8,
+  // elements
+  strong: 1.5, weak: 0.66,
+  // energy & hand
+  energyRate: 1, energyMax: 10, energyStart: 3, hand: 4,
+  // swapping
+  swapCost: 1, swapCd: 1,
+  // auto-attack
+  autoIv: 1.5, autoDmg: 2,
+  // enemy
+  intent: 3, heavyEvery: 3, heavyExtra: 2, heavyMult: 2.5, enemyDmg: 5,
+  wildHp: 90, hpPerFloor: 0.15, dmgPerFloor: 0.10, biomeBBonus: 2,
+  alphaHp: 1.5, alphaDmg: 1.25,
+  wardenHp: 300, wardenDmg: 7, bossDmg: 8, bossShift: 7,
+  // perfect swap
+  perfectWin: 0.4, perfectReflect: 0.5, perfectRefund: 2, slowScale: 0.3, slowDur: 0.5,
+  // chain
+  chainWin: 1.5, chainStep: 0.1, chainMax: 5,
+  // statuses
+  burnDps: 2, burnDur: 4, soakMult: 1.25, soakDur: 4, rootSlow: 0.4, rootDur: 3, shockImmune: 6,
+  // shields
+  shieldDelay: 3, shieldDecay: 0.2,
+  // capture
+  capTh: 0.4, capBase: 0.5, capStatus: 0.15, capEnraged: 0.2, capMax: 0.95,
+  startCharges: 2, fleeTime: 15, enrageSpeed: 1.3, caughtHp: 0.6,
+  // party & run
+  partyMax: 6, lineup: 3, reviveHp: 0.25, healReward: 0.4,
+  // upgrades & evolution
+  upPower: 1.3, evoFill: 150, evoCost: 3, evoHp: 1.5, primePower: 1.4,
+  // daily pack
+  packResetHour: 4,
+};
+
 /** Each element beats the next one in the loop: ember → thorn → volt → tide → ember. */
 export const BEATS: Record<El, El> = { ember: 'thorn', thorn: 'volt', volt: 'tide', tide: 'ember' };
-export const adv = (a?: El | null, d?: El | null) => (!a || !d) ? 1 : BEATS[a] === d ? 1.5 : BEATS[d] === a ? 0.7 : 1;
+export const adv = (a?: El | null, d?: El | null) => (!a || !d) ? 1 : BEATS[a] === d ? BAL.strong : BEATS[d] === a ? BAL.weak : 1;
+/** True if a creature of element `def` resists attacks of element `atk`. */
+export const resists = (def: El, atk: El) => BEATS[def] === atk;
 
+/* ================= statuses ================= */
+export type Status = 'burn' | 'soak' | 'root' | 'shock';
+export const STATUS_OF: Record<El, Status> = { ember: 'burn', tide: 'soak', thorn: 'root', volt: 'shock' };
+export const STATUS_EL: Record<Status, El> = { burn: 'ember', soak: 'tide', root: 'thorn', shock: 'volt' };
+export const STATUS_NAME: Record<Status, string> = { burn: 'Burn', soak: 'Soak', root: 'Root', shock: 'Shock' };
+export const STATUS_DUR: Record<Status, number> = { burn: BAL.burnDur, soak: BAL.soakDur, root: BAL.rootDur, shock: 0 };
+
+/* ================= cards ================= */
+export type Slot = 'strike' | 'skill' | 'sig';
+export const SLOTS: Slot[] = ['strike', 'skill', 'sig'];
+export interface CardDef {
+  name: string; cost: number;
+  dmg?: number;            // damage in the owner's element
+  bonusBurned?: number;    // extra damage if the target is Burned
+  fromShield?: boolean;    // damage = owner's shield (consumed)
+  status?: Status;         // applied to the enemy (after damage)
+  shield?: number;         // shield on self
+  shieldTeam?: number;     // shield on every living lineup member
+  heal?: number;           // heal self
+  healTeam?: number;       // heal every living lineup member
+  lifesteal?: number;      // heal self for this fraction of damage dealt
+  energy?: number;         // gain energy
+  selfDmg?: number;        // take damage
+  discount?: number;       // next card costs this much less
+  chain?: number;          // extra chain steps
+  reflect?: number;        // next hit taken reflects this fraction
+  nextStrike?: number;     // next Strike deals ×this
+  cleanse?: boolean;       // remove statuses from the team
+}
+
+/** Scales every number a "+30% effect" upgrade (or evolution) touches. */
+export function scaleCard(c: CardDef, k: number): CardDef {
+  if (k === 1) return c;
+  const r = (v?: number) => v == null ? v : Math.round(v * k);
+  return { ...c, dmg: r(c.dmg), bonusBurned: r(c.bonusBurned), shield: r(c.shield), shieldTeam: r(c.shieldTeam), heal: r(c.heal),
+    healTeam: r(c.healTeam), energy: r(c.energy), lifesteal: c.lifesteal && Math.min(1, +(c.lifesteal * k).toFixed(2)),
+    reflect: c.reflect && Math.min(1, +(c.reflect * k).toFixed(2)), nextStrike: c.nextStrike && +(c.nextStrike * k).toFixed(1) };
+}
+/** True if "+30% effect" changes anything (otherwise only −1 cost is offered). */
+export const scalable = (c: CardDef) => !!(c.dmg || c.bonusBurned || c.fromShield || c.shield || c.shieldTeam || c.heal || c.healTeam
+  || c.energy || c.lifesteal || c.reflect || c.nextStrike || (c.status && c.status !== 'shock'));
+
+/** Short rules text for a card. `pow` is the effect multiplier (status durations and Discharge scale with it). */
+export function cardText(c: CardDef, pow = 1): string {
+  const out: string[] = [];
+  if (c.fromShield) out.push(pow > 1 ? `Dmg = shield ×${pow.toFixed(1)}` : 'Dmg = your shield');
+  if (c.dmg) out.push(`${c.dmg} dmg`);
+  if (c.bonusBurned) out.push(`+${c.bonusBurned} if Burned`);
+  if (c.status) out.push(STATUS_NAME[c.status] + (c.status !== 'shock' && pow > 1 ? ` ${(STATUS_DUR[c.status] * pow).toFixed(1)}s` : ''));
+  if (c.shield) out.push(`shield ${c.shield}`);
+  if (c.shieldTeam) out.push(`team shield ${c.shieldTeam}`);
+  if (c.heal) out.push(`heal ${c.heal}`);
+  if (c.healTeam) out.push(`team heal ${c.healTeam}`);
+  if (c.lifesteal) out.push(`heal ${Math.round(c.lifesteal * 100)}% of dmg`);
+  if (c.energy) out.push(`+${c.energy} energy`);
+  if (c.selfDmg) out.push(`take ${c.selfDmg}`);
+  if (c.discount) out.push('next card −1');
+  if (c.chain) out.push('+1 chain');
+  if (c.reflect) out.push(`reflect ${Math.round(c.reflect * 100)}% next hit`);
+  if (c.nextStrike) out.push(`next Strike ×${c.nextStrike}`);
+  if (c.cleanse) out.push('cleanse team');
+  return out.join(', ');
+}
+
+/* ================= roster ================= */
 export type Feature = 'ears' | 'horns' | 'flame' | 'tail' | 'fin' | 'whisk' | 'leaf' | 'spikes' | 'antenna' | 'wings' | 'crown';
 export interface SpeciesDef {
-  name: string; el: El; hp: number; atk: number; spd: number; size: number;
-  feats: Feature[]; sig: CardId | null; blurb?: string; boss?: boolean;
+  name: string; el: El; hp: number; size: number; feats: Feature[];
+  role?: string;
+  atk?: number; spd?: number;                    // only used when it's an enemy (default 1)
+  cards?: Record<Slot, CardDef>;
+  evo?: { key: string; sig: CardDef };           // named evolution (starters)
+  evoOf?: string;                                // art-only species: the evolved form of …
+  heavy?: string;                                // heavy attack name override
+  warden?: boolean; boss?: boolean;
 }
+const C = (name: string, cost: number, fx: Omit<CardDef, 'name' | 'cost'>): CardDef => ({ name, cost, ...fx });
+
 export const SPECIES: Record<string, SpeciesDef> = {
-  cindrel:   { name: 'Cindrel',   el: 'ember', hp: 62,  atk: 1.0,  spd: 1.0,  size: 1,    feats: ['ears', 'flame', 'tail'], sig: 'flare', blurb: 'Quick, fiery' },
-  magmaw:    { name: 'Magmaw',    el: 'ember', hp: 82,  atk: 1.15, spd: 0.85, size: 1.22, feats: ['horns', 'spikes', 'flame'], sig: 'flare' },
-  plipp:     { name: 'Plipp',     el: 'tide',  hp: 68,  atk: 0.95, spd: 1.05, size: 0.95, feats: ['fin', 'tail', 'whisk'], sig: 'torrent', blurb: 'Sturdy healer' },
-  brinehorn: { name: 'Brinehorn', el: 'tide',  hp: 86,  atk: 1.05, spd: 0.9,  size: 1.18, feats: ['horns', 'fin', 'whisk'], sig: 'torrent' },
-  sproutle:  { name: 'Sproutle',  el: 'thorn', hp: 72,  atk: 0.95, spd: 1.0,  size: 1,    feats: ['leaf', 'ears'], sig: 'bramble', blurb: 'Tanky, shields' },
-  barkback:  { name: 'Barkback',  el: 'thorn', hp: 92,  atk: 1.05, spd: 0.8,  size: 1.22, feats: ['spikes', 'leaf'], sig: 'bramble' },
-  zapling:   { name: 'Zapling',   el: 'volt',  hp: 56,  atk: 1.05, spd: 1.2,  size: 0.9,  feats: ['antenna', 'ears', 'tail'], sig: 'zap' },
-  joltusk:   { name: 'Joltusk',   el: 'volt',  hp: 78,  atk: 1.12, spd: 1.0,  size: 1.12, feats: ['horns', 'antenna', 'wings'], sig: 'zap' },
-  noctyrm:   { name: 'Noctyrm',   el: 'ember', hp: 270, atk: 1.3,  spd: 1.0,  size: 1.5,  feats: ['wings', 'tail', 'spikes', 'horns', 'crown'], sig: null, boss: true },
+  // ---------- Ember
+  emberwick: { name: 'Emberwick', el: 'ember', hp: 50, size: 1, feats: ['ears', 'flame', 'tail'], role: 'Balanced',
+    cards: { strike: C('Peck', 1, { dmg: 6 }), skill: C('Kindle', 2, { status: 'burn' }), sig: C('Wickflare', 3, { dmg: 14, bonusBurned: 8 }) },
+    evo: { key: 'pyrowl', sig: C('Crownflare', 3, { dmg: 20, bonusBurned: 12, status: 'burn' }) } },
+  pyrowl: { name: 'Pyrowl', el: 'ember', hp: 50, size: 1.2, feats: ['ears', 'flame', 'wings', 'tail'], evoOf: 'emberwick' },
+  cinderpip: { name: 'Cinderpip', el: 'ember', hp: 35, size: 0.85, feats: ['ears', 'flame'], role: 'Glass cannon', atk: 1.2, spd: 1.1,
+    cards: { strike: C('Scorch', 1, { dmg: 7 }), skill: C('Flicker', 1, { discount: 1 }), sig: C('Flashfire', 4, { dmg: 24 }) } },
+  kilnback: { name: 'Kilnback', el: 'ember', hp: 75, size: 1.22, feats: ['horns', 'spikes', 'flame'], role: 'Tank', atk: 0.85, spd: 0.9,
+    cards: { strike: C('Bash', 1, { dmg: 5 }), skill: C('Hearth Shell', 2, { shield: 12 }), sig: C('Slow Burn', 3, { status: 'burn', shield: 8 }) } },
+  // ---------- Tide
+  bellspring: { name: 'Bellspring', el: 'tide', hp: 55, size: 0.95, feats: ['fin', 'tail', 'whisk'], role: 'Sustain',
+    cards: { strike: C('Splash', 1, { dmg: 5 }), skill: C('Drench', 2, { status: 'soak' }), sig: C('Lantern Tide', 3, { dmg: 10, healTeam: 8 }) },
+    evo: { key: 'lanternmere', sig: C('Beacon Tide', 3, { dmg: 14, healTeam: 14 }) } },
+  lanternmere: { name: 'Lanternmere', el: 'tide', hp: 55, size: 1.15, feats: ['fin', 'tail', 'whisk', 'antenna'], evoOf: 'bellspring' },
+  puddlet: { name: 'Puddlet', el: 'tide', hp: 40, size: 0.85, feats: ['fin', 'whisk'], role: 'Healer', atk: 0.9,
+    cards: { strike: C('Drip', 1, { dmg: 4 }), skill: C('Mend', 2, { heal: 15 }), sig: C('Spring Rain', 4, { healTeam: 12, cleanse: true }) } },
+  brinecrab: { name: 'Brinecrab', el: 'tide', hp: 80, size: 1.18, feats: ['horns', 'fin', 'whisk'], role: 'Tank', atk: 0.9, spd: 0.9,
+    cards: { strike: C('Pinch', 1, { dmg: 6 }), skill: C('Barnacle', 2, { shield: 14 }), sig: C('Undertow', 3, { dmg: 12, status: 'soak' }) } },
+  // ---------- Thorn
+  truffmole: { name: 'Truffmole', el: 'thorn', hp: 55, size: 1, feats: ['leaf', 'ears'], role: 'Control',
+    cards: { strike: C('Dig', 1, { dmg: 6 }), skill: C('Tangle', 2, { status: 'root' }), sig: C('Sporeburst', 3, { dmg: 12, heal: 6 }) },
+    evo: { key: 'morelord', sig: C('Spore Bloom', 3, { dmg: 18, healTeam: 8 }) } },
+  morelord: { name: 'Morelord', el: 'thorn', hp: 55, size: 1.2, feats: ['leaf', 'ears', 'spikes', 'crown'], evoOf: 'truffmole' },
+  brambat: { name: 'Brambat', el: 'thorn', hp: 40, size: 0.9, feats: ['wings', 'ears', 'spikes'], role: 'Drain', atk: 1.1, spd: 1.1,
+    cards: { strike: C('Nip', 1, { dmg: 5, heal: 2 }), skill: C('Thornveil', 2, { reflect: 0.5 }), sig: C('Leech Dive', 3, { dmg: 12, lifesteal: 0.5 }) } },
+  mossling: { name: 'Mossling', el: 'thorn', hp: 50, size: 1.1, feats: ['spikes', 'leaf'], role: 'Support', atk: 0.9,
+    cards: { strike: C('Swat', 1, { dmg: 5 }), skill: C('Overgrow', 2, { status: 'root', shield: 6 }), sig: C('Canopy', 3, { shieldTeam: 8 }) } },
+  // ---------- Volt
+  skiray: { name: 'Skiray', el: 'volt', hp: 45, size: 0.9, feats: ['antenna', 'ears', 'tail'], role: 'Tempo', spd: 1.15,
+    cards: { strike: C('Zap', 0, { dmg: 3 }), skill: C('Static', 2, { status: 'shock' }), sig: C('Gale Strike', 3, { dmg: 10, chain: 1 }) } },
+  sparkit: { name: 'Sparkit', el: 'volt', hp: 35, size: 0.85, feats: ['antenna', 'tail'], role: 'Glass cannon', atk: 1.2, spd: 1.1,
+    cards: { strike: C('Jolt', 1, { dmg: 7 }), skill: C('Overcharge', 1, { energy: 2, selfDmg: 4 }), sig: C('Thunderclap', 4, { dmg: 22 }) } },
+  coilsnail: { name: 'Coilsnail', el: 'volt', hp: 70, size: 1.12, feats: ['horns', 'antenna', 'wings'], role: 'Tank', atk: 0.85, spd: 0.9,
+    cards: { strike: C('Prod', 1, { dmg: 5 }), skill: C('Capacitor', 2, { shield: 10, nextStrike: 2 }), sig: C('Discharge', 3, { fromShield: true }) } },
+  // ---------- Warden & boss
+  warden: { name: 'Gravewood', el: 'thorn', hp: 300, size: 1.45, feats: ['horns', 'spikes', 'leaf', 'tail'], warden: true },
+  noctyrm: { name: 'Noctyrm', el: 'ember', hp: 270, size: 1.5, feats: ['wings', 'tail', 'spikes', 'horns', 'crown'], boss: true, heavy: 'Eclipse Volley' },
 };
-export const SMALL = ['cindrel', 'plipp', 'sproutle', 'zapling'];
-export const BIG = ['magmaw', 'brinehorn', 'barkback', 'joltusk'];
-export const STARTERS = ['cindrel', 'plipp', 'sproutle'];
+export const STARTERS = ['emberwick', 'bellspring', 'truffmole'];
+/** The 12 collectible creatures, in collection order. */
+export const ROSTER = ['emberwick', 'cinderpip', 'kilnback', 'bellspring', 'puddlet', 'brinecrab', 'truffmole', 'brambat', 'mossling', 'skiray', 'sparkit', 'coilsnail'];
+export const POOL_A = ['cinderpip', 'puddlet', 'brambat', 'skiray', 'kilnback', 'mossling'];
+export const POOL_B = ['brinecrab', 'sparkit', 'coilsnail'];
+export const biomeOf = (floor: number) => floor <= 4 ? 0 : 1;
 
-export type CardId = 'strike' | 'guard' | 'mend' | 'focus' | 'spark' | 'flare' | 'torrent' | 'bramble' | 'zap' | 'inferno' | 'tidal' | 'overgrow' | 'storm';
-export interface CardDef {
-  name: string; cost: number; el: El | null; txt: string; g?: GlyphKey;
-  dmg?: number; hits?: number; shield?: number; heal?: number; focus?: boolean; energy?: number;
-  burn?: number; stun?: number; regen?: number; rare?: boolean;
-}
-export const CARDS: Record<CardId, CardDef> = {
-  strike:  { name: 'Strike',  cost: 1, el: null, dmg: 6, txt: "Deal 6 in your partner's element", g: 'claw' },
-  guard:   { name: 'Guard',   cost: 1, el: null, shield: 8, txt: '+8 shield', g: 'shield' },
-  mend:    { name: 'Mend',    cost: 2, el: null, heal: 12, txt: 'Heal 12', g: 'heart' },
-  focus:   { name: 'Focus',   cost: 1, el: null, focus: true, txt: 'Next attack ×2', g: 'star' },
-  spark:   { name: 'Spark',   cost: 0, el: null, energy: 2, txt: '+2 energy', g: 'spark' },
-  flare:   { name: 'Flare',   cost: 2, el: 'ember', dmg: 11, burn: 4, txt: 'Deal 11, burn 4s' },
-  torrent: { name: 'Torrent', cost: 2, el: 'tide',  dmg: 10, heal: 6, txt: 'Deal 10, heal 6' },
-  bramble: { name: 'Bramble', cost: 2, el: 'thorn', dmg: 8, shield: 8, txt: 'Deal 8, +8 shield' },
-  zap:     { name: 'Zap',     cost: 1, el: 'volt',  dmg: 3, hits: 3, stun: 0.6, txt: '3 × 3, stun' },
-  inferno: { name: 'Inferno', cost: 3, el: 'ember', dmg: 26, burn: 3, rare: true, txt: 'Deal 26, burn' },
-  tidal:   { name: 'Tidal',   cost: 3, el: 'tide',  dmg: 17, heal: 14, rare: true, txt: 'Deal 17, heal 14' },
-  overgrow:{ name: 'Overgrow',cost: 3, el: 'thorn', heal: 10, shield: 12, regen: 6, rare: true, txt: 'Heal 10, +12 shield, regen' },
-  storm:   { name: 'Storm',   cost: 3, el: 'volt',  dmg: 4, hits: 6, stun: 1.2, rare: true, txt: '6 × 4, long stun' },
-};
-export const SIG: Record<El, CardId> = { ember: 'flare', tide: 'torrent', thorn: 'bramble', volt: 'zap' };
-export const RARE: Record<El, CardId> = { ember: 'inferno', tide: 'tidal', thorn: 'overgrow', volt: 'storm' };
-export const COMMONS: CardId[] = ['guard', 'mend', 'focus', 'spark', 'strike'];
-export const STARTING_DECK = (el: El): CardId[] => ['strike', 'strike', 'strike', 'strike', 'guard', 'guard', 'mend', SIG[el], SIG[el]];
+/** Heavy attack names by element. The Warden alternates two. */
+export const HEAVY_NAME: Record<El, string> = { ember: 'Blaze Charge', tide: 'Riptide Slam', thorn: 'Bramble Crush', volt: 'Thunder Ram' };
+export const WARDEN_HEAVIES: { name: string; el: El }[] = [{ name: 'Bramble Crush', el: 'thorn' }, { name: 'Wildfire Roar', el: 'ember' }];
 
-export const FLOORS = 8;
-export const CAP_TH = 0.4;      // capture unlocks below this HP fraction
-export const CAPTURE_COST = 3;
-export const ENERGY_RATE = 0.95; // energy per second
-export const ENERGY_MAX = 10;
-export const HAND = 4;
-export const SWAP_COOLDOWN = 4;
-
+/* ================= icons ================= */
 export const GLYPH = {
   ember: '<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4 1-7 1-9z"/>',
   tide: '<path d="M12 2C9 7 5 11 5 15a7 7 0 0 0 14 0c0-4-4-8-7-13z"/>',
@@ -85,6 +197,9 @@ export const GLYPH = {
   moon: '<path d="M15 2a9 9 0 1 0 7 13A8 8 0 0 1 15 2z"/>',
   chest: '<path d="M3 9a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v1H3zm0 3h7v2h4v-2h7v8H3z"/>',
   paw: '<path d="M12 12c3 0 6 3 6 6 0 2-2 3-3.5 3-1 0-1.5-.7-2.5-.7s-1.5.7-2.5.7C8 21 6 20 6 18c0-3 3-6 6-6zM5 8a2 2.5 0 1 1 0 5 2 2.5 0 0 1 0-5zm14 0a2 2.5 0 1 1 0 5 2 2.5 0 0 1 0-5zM9 3a2 2.5 0 1 1 0 5 2 2.5 0 0 1 0-5zm6 0a2 2.5 0 1 1 0 5 2 2.5 0 0 1 0-5z"/>',
+  orb: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 0 1 7.9 7H15a3 3 0 0 0-6 0H4.1A8 8 0 0 1 12 4z"/>',
+  swap: '<path d="M7 4L3 8l4 4V9h10V7H7zm10 8v3H7v2h10v3l4-4z"/>',
+  up: '<path d="M12 3l8 9h-5v9H9v-9H4z"/>',
   sound: '<path d="M3 9h4l5-5v16l-5-5H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/>',
   mute: '<path d="M3 9h4l5-5v16l-5-5H3zm13.6-.6L19 10.8l2.4-2.4 1.4 1.4-2.4 2.4 2.4 2.4-1.4 1.4-2.4-2.4-2.4 2.4-1.4-1.4 2.4-2.4-2.4-2.4z"/>',
 };
