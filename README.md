@@ -1,12 +1,8 @@
 # Wildbound
 
-A quickfire 2D creature roguelite for iPhone. Cards play in real time, energy refills on its own, wild creatures can be caught mid-fight, and a run is eight floors (about five minutes) ending at a boss that shifts element.
+A quickfire 2D creature roguelite for iPhone: real-time card combat where your team is your deck, catching creatures mid-run, and an eight-floor run (about five minutes) ending at a boss that shifts element.
 
-**The art style is swappable.** Creatures, background and pedestals come from an *art style*. Two ship today:
-- **Sticker:** procedural outlined vector creatures on a moonlit night.
-- **Dusk:** an image pack (PNG creatures plus a sunset palette).
-
-Drop in a folder of AI-generated art and it becomes a third. See [docs/ART.md](docs/ART.md).
+**[CLAUDE.md](CLAUDE.md) is the single source of truth**: the game design spec (rules, numbers, roster), the code map and the rules for changing code. This README only covers setup and shipping. Art packs: [docs/ART.md](docs/ART.md).
 
 | Folder | What it is | Stack |
 | --- | --- | --- |
@@ -54,35 +50,6 @@ EAS uploads the whole repo. The `eas-build-post-install` hook builds `game/` and
 
 ## How the code is organised
 
-```
-game/src
-├── main.ts                 boot + frame loop
-├── core/                   no rendering here
-│   ├── data.ts             ← content & balance: elements, creatures, cards, constants
-│   ├── platform.ts         storage + haptics (browser vs. native bridge)
-│   ├── audio.ts            WebAudio synth SFX
-│   └── util.ts
-├── render/                 style-independent rendering
-│   ├── app.ts              Pixi app, world layers, effect textures
-│   ├── layout.ts           HUD-aware stage layout (unit U, positions)
-│   ├── actor.ts            on-screen creature: movement, squash, flash; holds the style's art
-│   ├── stage.ts            current style's scene + pedestals, arena tint
-│   ├── particles.ts        2,200-sprite pool, element bursts, rings, bloom
-│   └── fx.ts               damage numbers, banners, shake, hit-stop
-├── art/                    ← everything that is "the look"
-│   ├── types.ts            ArtStyle / CreatureArt / SceneArt / PedestalArt contracts
-│   ├── registry.ts         list of styles, active style, persistence
-│   ├── shared/painter.ts   palette-driven procedural scene + pedestal
-│   ├── sticker/            procedural vector style
-│   ├── sprite/             image-pack style (manifest + PNG/WebP)
-│   └── packs/<id>/         one folder per image pack (auto-discovered)
-├── game/                   rules & flow (talks to Actors, never to art)
-│   ├── state.ts  battle.ts  run.ts  ui.ts
-└── tools/exportPack.ts     bake procedural art into a sprite pack
-```
-
-**The bridge:** the game calls `store` and `haptic()` from `core/platform.ts`.
-- In a browser, these use `localStorage` and skip haptics.
-- In the app, they post messages to `app/src/bridge.ts`, which uses AsyncStorage and expo-haptics.
+See "Part 2: Engineering" in [CLAUDE.md](CLAUDE.md).
 
 **Build output:** `npm run build` produces one self-contained `index.html` (about 1.2 MB), with fonts and pack images inlined, so the app works offline.

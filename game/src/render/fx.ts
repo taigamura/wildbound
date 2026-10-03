@@ -3,11 +3,12 @@ import gsap from 'gsap';
 import { world } from './app';
 import { $, rand, REDUCED } from '../core/util';
 
-export const feel = { trauma: 0, hitStop: 0 };
+/** hitStop: near-freeze seconds left. slow: seconds of slow-mo left at slowScale. Both in real time. */
+export const feel = { trauma: 0, hitStop: 0, slow: 0, slowScale: 1 };
 type Pt = { x: number; y: number };
 
-export function popNum(pos: Pt, text: string | number, cls = '', label = '') {
-  const d = document.createElement('div'); d.className = 'num ' + cls;
+export function popNum(pos: Pt, text: string | number, cls = '', label = '', color = '') {
+  const d = document.createElement('div'); d.className = 'num ' + cls; if (color) d.style.setProperty('--nc', color);
   d.style.left = (pos.x + world.x + rand(-18, 18)) + 'px'; d.style.top = (pos.y + world.y) + 'px';
   d.innerHTML = text + (label ? `<small>${label}</small>` : ''); $('#fx').appendChild(d); setTimeout(() => d.remove(), 950);
 }
@@ -21,6 +22,13 @@ let toastT = 0;
 export function toast(t: string) { const e = $('#toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toastT); toastT = window.setTimeout(() => e.classList.remove('on'), 1800); }
 export const shake = (v: number) => { if (!REDUCED) feel.trauma = Math.min(1, feel.trauma + v); };
 export const hitStop = (t: number) => { if (!REDUCED) feel.hitStop = Math.max(feel.hitStop, t); };
+/** Run the whole world (sim, particles, tweens) at `scale` speed for `t` real seconds. */
+export const slowMo = (t: number, scale: number) => { feel.slow = Math.max(feel.slow, t); feel.slowScale = scale; };
+/** Big centred word (PERFECT, EVOLVED…). */
+export function callout(text: string, color = '#ffcf6b') {
+  const d = document.createElement('div'); d.className = 'callout'; d.style.setProperty('--bc', color); d.textContent = text;
+  $('#fx').appendChild(d); setTimeout(() => d.remove(), 1100);
+}
 
 /** Apply decaying screen shake to the world container. Call once per frame. */
 export function applyShake(real: number, U: number) {

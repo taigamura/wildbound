@@ -17,7 +17,8 @@ export function measureBand(snap = false) {
   let top = 0, bot = H;
   document.querySelectorAll<HTMLElement>('[data-band-top]').forEach(e => { if (shown(e)) top = Math.max(top, e.getBoundingClientRect().bottom); });
   document.querySelectorAll<HTMLElement>('[data-band-bottom]').forEach(e => { if (shown(e)) bot = Math.min(bot, e.getBoundingClientRect().top); });
-  if (bot - top < H * 0.22) { top = 0; bot = H * 0.5; }
+  if (bot - top < H * 0.22) top = 0;          // tall sheet: let the stage run up under the header
+  if (bot - top < H * 0.22) bot = H * 0.5;
   const h = bot - top, cx = W / 2;
   T.U = clamp(Math.min(h / 4.8, W / 5), 34, 110);
   const spread = Math.min(W * 0.19, T.U * 1.6);
