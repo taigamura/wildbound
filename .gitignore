@@ -11,3 +11,6 @@ android/
 
 # generated from game/dist by scripts/embed-game.mjs
 app/src/game-html.generated.ts
+
+# iOS build artifacts (ship-ios copies them here)
+*.ipa

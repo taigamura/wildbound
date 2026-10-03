@@ -1,0 +1,22 @@
+{
+  "git": {
+    "defaultBranch": "main",
+    "workflow": "pr",
+    "commitTrailers": [
+      "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+    ]
+  },
+  "buildServer": {
+    "host": "192.168.50.175",
+    "user": "taigamura",
+    "sshKey": "~/.ssh/simple-bookkeeping-buildserver",
+    "repoPath": "~/dev/wildbound/app",
+    "pathPrepend": "/usr/local/bin:/opt/homebrew/bin",
+    "logPath": "/tmp/wildbound-build.log",
+    "artifactGlob": "build-*.ipa",
+    "buildCommand": "EAS_SKIP_AUTO_FINGERPRINT=1 EAS_BUILD_NO_EXPO_GO_WARNING=true eas build -p ios --local --profile production"
+  },
+  "submit": {
+    "command": "IPA=$(realpath {ipa}) && cd app && npx eas-cli@24.10.0 submit -p ios --profile production --path \"$IPA\" --non-interactive"
+  }
+}
