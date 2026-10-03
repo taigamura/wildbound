@@ -253,6 +253,15 @@ A PixiJS web app (`game/`) shipped inside an Expo WebView shell (`app/`). iOS bu
 - **Native modules:** Expo SDK 57. Install with `npx expo install` so versions match the SDK.
 - **Bundle size:** pack images are inlined into the single-file build, so keep them small (WebP, about 512 px).
 
+## Releasing (iOS / TestFlight)
+- **Identity:** bundle ID `com.taiga.wildbound`, App Store Connect app ID `6818680785`, EAS project `@taigamura/wildbound` (ID in `app/app.json`). The version is `expo.version` in `app/app.json`; EAS manages build numbers remotely (`appVersionSource: remote`, auto-increment), so `ios.buildNumber` in `app.json` is ignored.
+- **Credentials live on EAS:** distribution certificate, provisioning profile and the App Store Connect API key. No Apple login is needed for routine builds and submits, so they can run with `--non-interactive`. If submit returns `401 NOT_AUTHORIZED`, the stored ASC key is bad: remove it via `eas credentials -p ios` (App Store Connect: Manage your API Key) and let the next interactive `eas submit` generate a new one.
+- **Normal path: `/ship-ios`** (config in `.claude/ship.json`). Commit, PR and merge, then a local EAS build on the Mac build server (`taigamura-MBP`, 192.168.50.175, repo at `~/dev/wildbound`, builds from `app/`), copy the `.ipa` back, and submit from this machine. If a local build fails with keychain `error code: 36`, unlock the Mac's login keychain in a terminal there.
+- **Fallback: EAS cloud build** from the repo root: `npm run build:ios`, then `npm run submit:ios`.
+- **History** (newest first; add a line per TestFlight upload):
+  - 2026-10-03: `/ship-ios` configured. It has not completed a full run yet, so the first run is also its test.
+  - 2026-10-03: v0.2.0 build 2 (EAS cloud build) uploaded to TestFlight. This is the MVP design build.
+
 ## Verifying changes
 - Run `npm run typecheck` and `npm run build`.
 - Play a run in the browser at 390×844 in every art style (switch on the title screen).

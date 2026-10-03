@@ -37,14 +37,14 @@ cd app && EXPO_PUBLIC_GAME_URL=http://<your-LAN-IP>:5173 npx expo start   # term
 
 ## Shipping to TestFlight
 
-You need an Apple Developer account. Before the first build, change `ios.bundleIdentifier` in `app/app.json` (currently `com.taiga.wildbound`).
+The project is already linked to EAS and its signing credentials are stored there. Current release state, credentials notes and the build history are in the "Releasing" section of [CLAUDE.md](CLAUDE.md).
 
 ```bash
-npm i -g eas-cli
-cd app && eas login && eas build:configure   # first time only
-npm run build:ios                            # from repo root: cloud build
-npm run submit:ios                           # upload to TestFlight
+npm run build:ios    # EAS cloud build (from the repo root)
+npm run submit:ios   # upload the latest build to TestFlight
 ```
+
+In Claude Code, `/ship-ios` runs the whole pipeline with a local build on the Mac build server (config: `.claude/ship.json`).
 
 EAS uploads the whole repo. The `eas-build-post-install` hook builds `game/` and embeds it, so the generated file is never committed.
 
