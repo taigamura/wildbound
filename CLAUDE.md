@@ -319,10 +319,11 @@ A PixiJS web app (`game/`) shipped inside an Expo WebView shell (`app/`). iOS bu
 ## Releasing (iOS / TestFlight)
 - **Identity:** bundle ID `com.taiga.wildbound`, App Store Connect app ID `6818680785`, EAS project `@taigamura/wildbound` (ID in `app/app.json`). The version is `expo.version` in `app/app.json`; EAS manages build numbers remotely (`appVersionSource: remote`, auto-increment), so `ios.buildNumber` in `app.json` is ignored.
 - **Credentials live on EAS:** distribution certificate, provisioning profile and the App Store Connect API key. No Apple login is needed for routine builds and submits, so they can run with `--non-interactive`. If submit returns `401 NOT_AUTHORIZED`, the stored ASC key is bad: remove it via `eas credentials -p ios` (App Store Connect: Manage your API Key) and let the next interactive `eas submit` generate a new one.
-- **Normal path: `/ship-ios`** (config in `.claude/ship.json`). Commit, PR and merge, then a local EAS build on the Mac build server (`taigamura-MBP`, 192.168.50.175, repo at `~/dev/wildbound`, builds from `app/`), copy the `.ipa` back, and submit from this machine. If a local build fails with keychain `error code: 36`, unlock the Mac's login keychain in a terminal there.
-- **Fallback: EAS cloud build** from the repo root: `npm run build:ios`, then `npm run submit:ios`.
+- **Normal path: `/ship-ios`** (config in `.claude/ship.json`). Commit, PR and merge, then a local EAS build on the Mac build server (`taigamura-MBP`, 192.168.50.175, repo at `~/dev/wildbound`, builds from `app/`), copy the `.ipa` back, and submit from this machine. If a local build fails with keychain `error code: 36`, unlock the Mac's login keychain in a terminal there. **Currently blocked:** the Mac's Xcode 26.3 fails to compile `expo-modules-jsi` (`RuntimeScheduler.h`: "cannot be annotated with SWIFT_RETURNS_RETAINED"), an Expo SDK 57 / Xcode mismatch unrelated to game code. Use the cloud fallback until an Expo patch or an Xcode change fixes it.
+- **Fallback: EAS cloud build** from the repo root: `npm run build:ios`, then `npm run submit:ios`. `app/eas.json` sets `ascAppId` in the production submit profile, which `--non-interactive` submits require.
 - **History** (newest first; `/ship-ios` adds a line per upload via `releaseLog` in `.claude/ship.json`; add one by hand for any other upload):
-  - 2026-10-03: `/ship-ios` configured. It has not completed a full run yet, so the first run is also its test.
+  - 2026-10-03: v0.2.0 build 4 (EAS cloud build `bbc5de69`, commit `ccfaec7`, submission `b282dadf`) uploaded to TestFlight. Loadouts, Traits and Essence (§16). The first `/ship-ios` run: commit, PR #2 and merge worked; the local Mac build failed (see above), so it fell back to the cloud.
+  - 2026-10-03: `/ship-ios` configured.
   - 2026-10-03: v0.2.0 build 2 (EAS cloud build) uploaded to TestFlight. This is the MVP design build.
 
 ## Verifying changes
