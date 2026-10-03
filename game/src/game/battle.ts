@@ -13,14 +13,23 @@ import { S, act, mon, team, newMon, activeActor, actorFor, dropActor, cardOf, ca
   type Mon, type MapNode, type Enemy, type CardRef } from './state';
 import { slots, show, paintCard, refreshHand, renderBench, renderPlayerPlate, renderEnemyPlate } from './ui';
 import { placePlayer, afterFight, onCaught, endRun } from './run';
-import { BAL, ELEM, EL_KEYS, SPECIES, SLOTS, STATUS_OF, STATUS_DUR, STATUS_NAME, STATUS_EL, adv, resists, biomeOf, elHexCss,
-  type CardDef, type El, type Slot, type Status } from '../core/data';
+import { BAL, ELEM, EL_KEYS, SPECIES, SLOTS, STATUS_OF, STATUS_DUR, STATUS_NAME, STATUS_EL, STATUS_PAST, TRAITS, adv, resists, biomeOf, elHexCss,
+  type CardDef, type El, type Slot, type Status, type TraitKey } from '../core/data';
+import { earn } from './meta';
 import { rand, pick, shuffle } from '../core/util';
 import { SFX, audio } from '../core/audio';
 import { haptic } from '../core/platform';
 
 type Pt = { x: number; y: number };
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+/** Does this creature have Trait t socketed? (Always the socketed one, not the species' built-in.) */
+const has = (c: Mon | null | undefined, t: TraitKey) => c?.trait === t;
+/** Trait feedback: a popup over the lead with the Trait's name. */
+function traitPop(t: TraitKey, text: string, cls = 'shield', at?: Mon) {
+  const a = at ? actorFor(at) : activeActor(); if (!a) return;
+  const p = a.head(); popNum({ x: p.x, y: p.y - U * 1.5 }, text, cls, TRAITS[t].name);
+}
+function traitEnergy(t: TraitKey) { S.energy = Math.min(BAL.energyMax, S.energy + 1); SFX.energy(); traitPop(t, '+1'); }
 
 /* ================= setup ================= */
 export function startBattle(n: MapNode) {
@@ -37,8 +46,8 @@ export function startBattle(n: MapNode) {
     t: 0, windup: iv, count: 0, enraged: false, status: null, statusSrc: 0, shockCd: 0, shiftT: BAL.bossShift, fleeT: null, perfect: false, heavyIdx: 0,
   };
   S.enemy = e;
-  S.energy = BAL.energyStart; S.swapCd = 0; S.autoT = 0; S.chain = 0; S.chainT = 99; S.discount = 0;
-  team().forEach(c => { c.shield = 0; c.status = null; c.reflect = 0; c.nextStrike = 1; });
+  S.energy = BAL.energyStart; S.swapCd = 0; S.autoT = 0; S.chain = 0; S.chainT = 99; S.discount = 0; S.wired = false;
+  team().forEach(c => { c.shield = 0; c.status = null; c.reflect = 0; c.nextStrike = 1; c.played = 0; });
   if (!S.lineup.includes(S.active)) S.active = S.lineup[0];
   if (!act()?.alive) S.active = healthiest()!.uid;
   buildDeck();
@@ -97,15 +106,19 @@ export function playCard(i: number) {
   const block = cardBlock(r);
   if (block) { b.classList.remove('deny'); void b.offsetWidth; b.classList.add('deny'); SFX.deny(); haptic('warning'); if (block === 'swap') toast('Swapping is cooling down'); return; }
   const { def, pow, owner } = cardOf(r);
-  S.energy -= cardCost(r); S.discount = 0;
+  S.energy -= cardCost(r); S.discount = 0; owner.played++;
   S.hand[i] = null; S.disc.push(r);
   b.classList.remove('deal'); b.classList.add('play'); SFX.card(); haptic('light');
   drawInto(i);
   // chain: within the window of the last card → +1 step
   S.chain = S.chainT <= BAL.chainWin ? Math.min(BAL.chainMax, S.chain + 1) : 0; S.chainT = 0;
-  if (owner.uid !== S.active) swapTo(owner.uid, 'card');
+  if (!S.chain) S.wired = false;   // a fresh chain re-arms Live Wire
+  const swapped = owner.uid !== S.active;
+  if (swapped) swapTo(owner.uid, 'card');
   resolveCard(def, pow, owner, r.slot);
   if (def.chain) S.chain = Math.min(BAL.chainMax, S.chain + def.chain);
+  if (swapped && has(owner, 'relay') && owner.alive) { S.discount = Math.max(S.discount, 1); traitPop('relay', '−1'); }
+  if (has(owner, 'livewire') && !S.wired && S.chain >= BAL.livewireChain) { S.wired = true; traitEnergy('livewire'); }
   refreshHand();
 }
 
@@ -117,10 +130,24 @@ function resolveCard(C: CardDef, pow: number, me: Mon, slot: Slot) {
   if (C.reflect) { me.reflect = C.reflect; SFX.shield(); popNum({ x: pp.x, y: pp.y - U * 0.8 }, Math.round(C.reflect * 100) + '%', 'shield', 'Thornveil'); }
   if (C.nextStrike) { me.nextStrike = C.nextStrike; SFX.focus(); stars(); }
   if (C.cleanse) team().forEach(c => { c.status = null; });
-  if (C.shield) addShield(me, C.shield);
+  if (C.shield) {
+    addShield(me, C.shield);
+    const t = has(me, 'overshade') && team().filter(c => c.alive && c.uid !== me.uid).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+    if (t) { const v = Math.round(C.shield * BAL.overshade); addShield(t, v); traitPop('overshade', `+${v} ${t.name}`); }
+  }
   if (C.shieldTeam) team().filter(c => c.alive).forEach(c => addShield(c, C.shieldTeam!));
-  if (C.heal) healMon(me, C.heal);
-  if (C.healTeam) team().filter(c => c.alive).forEach(c => healMon(c, C.healTeam!));
+  const under = has(me, 'undercurrent');
+  const heal = (c: Mon, v: number) => {
+    healMon(c, v);
+    if (under && c.alive && c.status) { c.status = null; traitPop('undercurrent', 'Cleansed', 'heal', c.uid === S.active ? undefined : c); }
+  };
+  if (C.heal) heal(me, C.heal);
+  if (C.healTeam) team().filter(c => c.alive).forEach(c => heal(c, C.healTeam!));
+  const thirst = slot === 'strike' && has(me, 'thirst');
+  const drain = (d: number) => {
+    if (C.lifesteal && d) healMon(me, Math.round(d * C.lifesteal));
+    if (thirst && d) { const v = Math.round(d * BAL.thirst); if (v) healMon(me, v, 'Thirst'); }
+  };
 
   let dmg = C.dmg ?? 0;
   if (C.fromShield) { dmg = Math.round(me.shield * pow); me.shield = 0; }
@@ -131,11 +158,15 @@ function resolveCard(C: CardDef, pow: number, me: Mon, slot: Slot) {
   projectile(pp, () => S.em!.head(), el, dmg ? { size: big ? 0.42 : 0.26, arc: big ? 1.6 : 0.7, dur: big ? 0.42 : 0.3 } : { size: 0.18, arc: 1, dur: 0.32 }, () => {
     const e = S.enemy; if (tok !== S.tok || !e || !e.alive) return;
     if (dmg) {
-      const bonus = C.bonusBurned && e.status?.k === 'burn' ? C.bonusBurned : 0;
-      const dealt = hurtEnemy((dmg + bonus) * chainMul, el, uid, { big, bonus: !!bonus });
-      if (C.lifesteal && dealt) healMon(me, Math.round(dealt * C.lifesteal));
+      const bonus = C.bonusIf && e.status?.k === C.bonusIf.status ? C.bonusIf.dmg : 0;
+      drain(hurtEnemy((dmg + bonus) * chainMul, el, uid, { big, bonus: bonus ? STATUS_PAST[C.bonusIf!.status] + '!' : '' }));
     }
     if (C.status && e.alive) applyEnemyStatus(C.status, pow, uid);
+    // extra hits of a multi-hit card follow the first one
+    for (let h = 1; h < (C.hits ?? 1); h++) gsap.delayedCall(h * 0.14, () => {
+      if (tok !== S.tok || !S.enemy?.alive) return;
+      drain(hurtEnemy(dmg * chainMul, el, uid, { small: true }));
+    });
   });
 }
 function stars() {
@@ -153,12 +184,14 @@ function applyEnemyStatus(k: Status, pow: number, src: number) {
     popNum({ x: hp.x, y: hp.y - U * 1 }, 'Shock', '', heavy ? 'Wind-up broken' : 'Reset', ELEM.volt.css);
     return;
   }
-  e.status = { k, t: STATUS_DUR[k] * pow, acc: 0 }; e.statusSrc = src;
-  popNum({ x: hp.x, y: hp.y - U * 1 }, STATUS_NAME[k], '', '', ELEM[STATUS_EL[k]].css);
+  const deep = k === 'root' && has(mon(src), 'deeproots');
+  e.status = { k, t: STATUS_DUR[k] * pow + (deep ? BAL.deepRoots : 0), acc: 0 }; e.statusSrc = src;
+  popNum({ x: hp.x, y: hp.y - U * 1 }, STATUS_NAME[k], '', deep ? TRAITS.deeproots.name : '', ELEM[STATUS_EL[k]].css);
   burst(hp, STATUS_EL[k], 0.5);
 }
 function applyMonStatus(c: Mon, k: Status) {
   const hp = actorFor(c).head();
+  if (k === 'shock' && has(c, 'grounded')) { traitEnergy('grounded'); return; }
   if (k === 'shock') { S.chain = 0; S.chainT = 99; S.swapCd = Math.max(S.swapCd, BAL.swapCd); popNum({ x: hp.x, y: hp.y - U * 1.1 }, 'Shocked', '', 'Chain lost', ELEM.volt.css); return; }
   c.status = { k, t: STATUS_DUR[k], acc: 0 };
   popNum({ x: hp.x, y: hp.y - U * 1.1 }, STATUS_NAME[k], '', '', ELEM[STATUS_EL[k]].css);
@@ -196,14 +229,14 @@ function lightning(a: Pt, b: Pt, el: El) {
 
 /* ================= damage ================= */
 /** Damage the enemy. `src` is the uid of the creature that dealt it (0 = none), for the evolution meter. */
-function hurtEnemy(amount: number, el: El, src: number, o: { dot?: boolean; big?: boolean; small?: boolean; bonus?: boolean } = {}) {
+function hurtEnemy(amount: number, el: El, src: number, o: { dot?: boolean; big?: boolean; small?: boolean; bonus?: string } = {}) {
   const e = S.enemy, m = S.em; if (!e || !e.alive || !m) return 0;
   const a = adv(el, e.el), dmg = Math.max(1, Math.round(amount * a * soakMul(e.status)));
   e.hp = Math.max(0, e.hp - dmg); S.stats.dealt += dmg;
   const sm = src ? mon(src) : null; if (sm && sm.starter && !sm.evolved) sm.evo = Math.min(BAL.evoFill, sm.evo + dmg);
   const hp = m.head();
   popNum({ x: hp.x, y: hp.y - U * 0.7 }, dmg, a > 1 ? 'crit' : a < 1 ? 'weak' : o.dot ? 'dot' : '',
-    a > 1 && !o.dot ? 'Super' : a < 1 && !o.dot ? 'RESIST' : o.bonus ? 'Burned!' : '', ELEM[el].css);
+    a > 1 && !o.dot ? 'Super' : a < 1 && !o.dot ? 'RESIST' : o.bonus || '', ELEM[el].css);
   if (o.dot) emit(hp.x, hp.y, { n: 10, color: ELEM[el].glow, spd: 1.5, up: 1, life: 0.7, size: 0.22, grav: -2 });
   else {
     burst(hp, el, o.big ? 1.6 : o.small ? 0.55 : 1); m.hitFlash(); lightFlash(ELEM[el].hex, hp, o.big ? 7 : 4);
@@ -246,12 +279,12 @@ function addShield(c: Mon, v: number) {
   emit(hp.x, hp.y, { n: 40, color: [0x8fe3ff, 0xffffff, 0x3fb6ff], spd: 2.2, life: 0.7, size: 0.18, drag: 2.5, swirl: 9, r: 0.5 });
   gsap.fromTo(shieldPulse, { s: 0.3 }, { s: 1, duration: 0.4, ease: 'back.out(2)' }); SFX.shield();
 }
-function healMon(c: Mon, v: number) {
+function healMon(c: Mon, v: number, label = '') {
   if (!c.alive) return;
   c.hp = Math.min(c.maxHp, c.hp + v);
   if (c.uid !== S.active) return;
   const hp = actorFor(c).head(), p = PPOS();
-  popNum({ x: hp.x + U * 0.3, y: hp.y - U * 0.8 }, '+' + Math.round(v), 'heal');
+  popNum({ x: hp.x + U * 0.3, y: hp.y - U * 0.8 }, '+' + Math.round(v), 'heal', label);
   emit(p.x, p.y, { n: 45, color: [0x6ff0a0, 0xc8ffd9, 0xffffff], spd: 2.2, dir: [0, -1], cone: 0.25, life: 1, size: 0.22, drag: 1, r: 0.5, swirl: 4 });
   ring(p.x, p.y, 0x6ff0a0, 1.6); SFX.heal();
 }
@@ -316,6 +349,9 @@ export function swapTap(uid: number) {
 /** Make `uid` the lead. Logic is instant; the visuals catch up. */
 function swapTo(uid: number, how: 'tap' | 'card' | 'forced') {
   const old = activeActor(), prev = act(), tok = S.tok;
+  if (how !== 'forced' && prev?.alive && prev.uid !== uid && has(prev, 'ebb') && prev.hp < prev.maxHp) {
+    prev.hp = Math.min(prev.maxHp, prev.hp + BAL.ebbHeal); traitPop('ebb', '+' + BAL.ebbHeal, 'heal', prev);
+  }
   S.active = uid; S.autoT = 0; if (how !== 'forced') S.swapCd = BAL.swapCd;
   SFX.swap(); haptic('light');
   const p = PPOS(); emit(p.x, p.y, { n: 70, color: ELEM[(prev ?? act()).el].glow, spd: 4, dir: [0, -1], cone: 0.12, life: 0.6, size: 0.22, r: 0.35, tex: 'spark', streak: true });
@@ -332,6 +368,11 @@ function perfectSwap() {
   callout('PERFECT', elHexCss(act().el));
   const p = activeActor()!.head(); popNum({ x: p.x, y: p.y - U * 1.3 }, '+' + BAL.perfectRefund, 'shield', 'Energy');
   ring(p.x, p.y, 0xffffff, 3, 0.5, false);
+  const me = act();
+  if (has(me, 'counterweave')) {   // free Strike: no energy, no hand change, chain untouched
+    const { def, pow } = cardOf({ uid: me.uid, slot: 'strike' });
+    traitPop('counterweave', 'Counter'); resolveCard(def, pow, me, 'strike');
+  }
 }
 function monDown(c: Mon) {
   c.alive = false; c.shield = 0; c.status = null; const tok = S.tok, lead = c.uid === S.active;
@@ -480,7 +521,7 @@ export function tickBattle(dt: number, t: number) {
   if (me && me.alive) { S.autoT += dt; if (S.autoT >= BAL.autoIv) { S.autoT = 0; autoAttack(); } }
   for (const c of team()) {
     if (!c.alive) continue;
-    if (c.shield > 0) { c.shieldT += dt; if (c.shieldT > BAL.shieldDelay) { c.shield -= c.shield * BAL.shieldDecay * dt; if (c.shield < 0.5) c.shield = 0; } }
+    if (c.shield > 0) { c.shieldT += dt; if (c.shieldT > BAL.shieldDelay + (has(c, 'bulwark') ? BAL.bulwarkDelay : 0)) { c.shield -= c.shield * BAL.shieldDecay * dt; if (c.shield < 0.5) c.shield = 0; } }
     tickStatusOnMon(c, dt);
     if (S.mode !== 'battle') return;
   }
@@ -500,7 +541,11 @@ export function tickBattle(dt: number, t: number) {
       if (Math.random() < dt * 20) emit(p.x, p.y, { n: 1, color: ELEM.ember.glow, spd: 0.8, r: 0.4, up: 1, life: 0.6, size: 0.2, grav: -2 });
     } else if (s.k === 'soak' && Math.random() < dt * 12) emit(p.x, p.y - U * 0.4, { n: 1, color: ELEM.tide.glow, spd: 0.5, r: 0.5, life: 0.6, size: 0.16, grav: 6 });
     else if (s.k === 'root' && Math.random() < dt * 8) emit(p.x, p.y + U * 0.6, { n: 1, color: ELEM.thorn.glow, spd: 0.6, r: 0.6, up: 0.6, life: 0.9, size: 0.2, tex: 'leaf', spin: 4 });
-    if (s.t <= 0 && e.status === s) e.status = null;
+    if (s.t <= 0 && e.status === s) {
+      e.status = null;
+      const src = mon(e.statusSrc);
+      if (s.k === 'burn' && e.alive && src?.alive && has(src, 'afterglow')) traitEnergy('afterglow');   // its Burn ran its course
+    }
   }
   if (!e.alive) return;
   if (e.kind === 'boss') { e.shiftT -= dt; if (e.shiftT <= 0) { e.shiftT = BAL.bossShift; shiftBoss(); } }
@@ -514,5 +559,7 @@ export const debug = {
   evo: () => { const c = S.party.find(m => m.starter); if (c) c.evo = BAL.evoFill; },
   /** Add a creature to the party (and lineup if there's room). Use on the map, before a fight. */
   add: (key: string) => { const c = newMon(key); S.party.push(c); if (S.lineup.length < BAL.lineup) S.lineup.push(c.uid); return c.uid; },
+  essence: (n = 20) => EL_KEYS.forEach(el => earn(el, n)),
+  trait: (t: TraitKey) => { const c = act(); if (c) c.trait = t; },
   heavy: () => { const e = S.enemy; if (e) { while (!isHeavy(e)) e.count++; e.windup = e.iv + BAL.heavyExtra; e.t = e.windup - 1; } },
 };

@@ -7,10 +7,10 @@ import { toast } from '../render/fx';
 import { Actor } from '../render/actor';
 import { buildStage, tintArena, setBiome } from '../render/stage';
 import { STYLES, getStyle, useStyle } from '../art/registry';
-import { S, act, newMon, actorFor, dropActor, clearActors, cardOf, type MapNode, type Mon, type Enemy } from './state';
+import { S, act, newMon, actorFor, dropActor, clearActors, cardOf, baseCard, type MapNode, type Mon, type Enemy } from './state';
 import { show, cardFace, partyHTML } from './ui';
 import { startBattle } from './battle';
-import { BAL, ELEM, SPECIES, SLOTS, ROSTER, POOL_A, POOL_B, STARTERS, adv, biomeOf, scalable, svg, elCss, type GlyphKey, type Slot } from '../core/data';
+import { BAL, ELEM, EL_KEYS, SPECIES, SLOTS, TRAITS, ROSTER, POOL_A, POOL_B, STARTERS, adv, biomeOf, scalable, svg, elCss, type El, type GlyphKey, type Slot, type TraitKey } from '../core/data';
 import { $, rand, pick } from '../core/util';
 import { SFX, audio } from '../core/audio';
 import { haptic } from '../core/platform';
@@ -32,8 +32,26 @@ export function startRun() {
   S.party = [c]; S.lineup = [c.uid]; S.active = c.uid; S.floor = 1; S.charges = BAL.startCharges; S.caught = [];
   S.stats = { caught: 0, start: performance.now(), dealt: 0, perfects: 0 };
   meta.saveStarter(S.starter);
+  runEss = meta.EMPTY_ESSENCE(); ownedAtStart = meta.owned(); justCaught = false;
   setBiome(0); placePlayer(true); SFX.win(); showMap();
 }
+
+/* ================= essence (§16.3) ================= */
+let runEss = meta.EMPTY_ESSENCE(), ownedAtStart: string[] = [], justCaught = false;
+function gain(el: El, n: number) { meta.earn(el, n); runEss[el] += n; }
+/** Essence for a won fight. A catch pays the catch amount instead of the Wild amount. */
+function fightEssence(e: Enemy) {
+  if (justCaught) gain(SPECIES[e.key].el, BAL.essCatch);
+  else if (e.kind === 'wild') gain(SPECIES[e.key].el, BAL.essWild);
+  else if (e.kind === 'alpha') gain(SPECIES[e.key].el, BAL.essAlpha);
+  else if (e.kind === 'warden') { gain('thorn', BAL.essWarden); gain('ember', BAL.essWarden); }
+  else EL_KEYS.forEach(el => gain(el, BAL.essBoss));
+  justCaught = false;
+}
+/** Essence chips: totals (`plus` = false) or this run's gains, skipping zeros. */
+const essHTML = (e: meta.Essence, plus = false) => EL_KEYS.filter(el => !plus || e[el] > 0)
+  .map(el => `<span class="ess" style="--c:${elCss(el)}">${svg(el)}${plus ? `+${e[el]} ${ELEM[el].name}` : e[el]}</span>`).join('');
+const costHTML = (c: { el: El; n: number }) => `${c.n}${svg(c.el)}`;
 
 /** Show the lead on its pedestal and hide everyone else (except `keep`, which may be animating out). */
 export function placePlayer(pop: boolean, keep: Actor | null = null) {
@@ -117,6 +135,7 @@ export function afterFight(result: 'win' | 'flee', caught: Mon | null = null) {
     c.shield = 0; c.status = null; c.reflect = 0; c.nextStrike = 1;
   });
   if (!S.lineup.includes(S.active)) S.active = S.lineup[0];
+  if (e && result === 'win') fightEssence(e);
   if (e && e.kind === 'boss' && result === 'win') { endRun(true); return; }
   S.em?.destroy(); S.em = null; placePlayer(false);
   if (result === 'flee') { nextFloor(); return; }
@@ -124,7 +143,7 @@ export function afterFight(result: 'win' | 'flee', caught: Mon | null = null) {
 }
 export function onCaught(e: Enemy) {
   const c = newMon(e.key, meta.isShiny(e.key)); c.hp = Math.round(c.maxHp * BAL.caughtHp);
-  S.caught.push(e.key);
+  S.caught.push(e.key); justCaught = true;
   if (S.party.length < BAL.partyMax) { join(c); afterFight('win', c); return; }
   S.mode = 'reward';
   $('#ctTitle').textContent = 'Make room for ' + c.name + '?';
@@ -184,8 +203,8 @@ function showUpgrade(onDone: () => void, onBack: () => void) {
   });
   function pickUpgrade(c: Mon, slot: Slot, b: HTMLElement) {
     list.querySelectorAll('.card.sel').forEach(x => x.classList.remove('sel')); b.classList.add('sel');
-    const { def } = cardOf({ uid: c.uid, slot }), base = SPECIES[c.key].cards![slot];
-    const evoBase = slot === 'sig' && c.evolved && SPECIES[c.key].evo ? SPECIES[c.key].evo!.sig : base;
+    const { def } = cardOf({ uid: c.uid, slot }), base = baseCard(c, slot);
+    const evoBase = slot === 'sig' && c.evolved && SPECIES[c.key].evo && c.moves.sig === 0 ? SPECIES[c.key].evo!.sig : base;
     choice.innerHTML = `<div class="eyebrow">${def.name}</div>`;
     const row = document.createElement('div'); row.className = 'row2';
     const apply = (u: 'power' | 'cost') => { c.ups[slot] = u; SFX.caught(); haptic('success'); toast(`${def.name} upgraded`); onDone(); };
@@ -207,7 +226,7 @@ export function showParty(onDone: () => void, sub = 'Three creatures fight. Thei
     S.party.forEach(c => {
       const i = S.lineup.indexOf(c.uid), inLine = i >= 0, lead = i === 0;
       const row = document.createElement('div'); row.className = 'ptrow' + (inLine ? ' on' : ''); row.style.setProperty('--c', elCss(c.el));
-      const main = btn('ptmain', `<span class="orb">${svg(c.el)}</span><span><b>${c.name}${c.shiny ? ' ✦' : ''}</b><span>${ELEM[c.el].name} · ${SPECIES[c.key].role ?? ''} · ${Math.ceil(c.hp)}/${c.maxHp} HP</span></span><span class="pill">${lead ? 'Lead' : inLine ? 'Bench' : 'Reserve'}</span>`, () => {
+      const main = btn('ptmain', `<span class="orb">${svg(c.el)}</span><span><b>${c.name}${c.shiny ? ' ✦' : ''}</b><span>${ELEM[c.el].name} · ${SPECIES[c.key].role ?? ''} · ${Math.ceil(c.hp)}/${c.maxHp} HP${c.trait ? ' · ' + TRAITS[c.trait].name : ''}</span></span><span class="pill">${lead ? 'Lead' : inLine ? 'Bench' : 'Reserve'}</span>`, () => {
         if (inLine) { if (S.lineup.length > 1) S.lineup.splice(i, 1); }
         else if (S.lineup.length < BAL.lineup) S.lineup.push(c.uid);
         else S.lineup[S.lineup.length - 1] = c.uid;
@@ -239,6 +258,8 @@ export function endRun(won: boolean) {
   $('#endParty').innerHTML = partyHTML(S.party);
   const keep = $('#endKeep'); keep.innerHTML = ''; keepPick = null;
   const species = [...new Set(S.caught)];
+  species.filter(k => ownedAtStart.includes(k)).forEach(k => gain(SPECIES[k].el, BAL.essDupe));
+  $('#endEss').innerHTML = EL_KEYS.some(el => runEss[el]) ? `<span class="eyebrow">Essence</span>${essHTML(runEss, true)}` : '';
   if (won) {
     const fresh = meta.addOwned(species);
     keep.innerHTML = fresh.length ? `<div class="eyebrow">New in your collection</div><p class="sub">${fresh.map(k => SPECIES[k].name).join(', ')}</p>`
@@ -341,22 +362,104 @@ function showPack() {
   show('#scr-pack'); measureBand(true);
 }
 
-/* ================= collection ================= */
+/* ================= collection & loadouts (§11, §16) ================= */
+type Pending = { slot: 'skill' | 'sig'; i: number } | { trait: TraitKey } | null;
 function showCollection() {
   S.mode = 'meta';
   const own = meta.owned(), grid = $('#collGrid'); grid.innerHTML = '';
   $('#collCount').textContent = `${own.length} / ${ROSTER.length}`;
+  let cur = '', pending: Pending = null;
   const detail = (k: string) => {
-    const sp = SPECIES[k], has = own.includes(k);
-    showTitleActor(k, { silhouette: !has });
+    cur = k; pending = null;
+    showTitleActor(k, { silhouette: !own.includes(k) });
     (grid as HTMLElement).querySelectorAll<HTMLElement>('.cslot').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === k)));
+    render();
+  };
+  /** The unlock panel for a locked option: what it costs and an Unlock button (disabled if too poor). */
+  const unlockBox = (what: string, c: { el: El; n: number }, onUnlock: () => boolean) => {
+    const have = meta.essence()[c.el], box = document.createElement('div'); box.className = 'upchoice';
+    box.innerHTML = `<p class="sub">${what}</p>`;
+    const b = document.createElement('button'); b.className = 'big alt'; b.disabled = have < c.n;
+    b.innerHTML = have < c.n ? `Unlock <small>· need ${c.n - have} more ${ELEM[c.el].name}</small>` : `Unlock <small>· ${c.n} ${ELEM[c.el].name} Essence</small>`;
+    b.onclick = () => { if (!onUnlock()) return; SFX.caught(); haptic('success'); pending = null; render(); };
+    box.appendChild(b); return box;
+  };
+  const render = () => {
+    const k = cur, sp = SPECIES[k], has = own.includes(k), lo = meta.loadout(k);
+    $('#collEss').innerHTML = essHTML(meta.essence());
     const d = $('#collDetail');
     d.innerHTML = `<div class="prow"><span class="elchip" style="--c:${elCss(sp.el)}">${svg(sp.el)}${ELEM[sp.el].name}</span><span class="nm">${sp.name}${meta.isShiny(k) ? ' ✦' : ''}</span><span class="sp"></span><span class="lv">${sp.role} · ${sp.hp} HP</span></div>
       ${has ? '' : '<p class="sub">Not found yet. Catch one in a run, or wait for a daily pack.</p>'}`;
-    const cards = document.createElement('div'); cards.className = 'upcards';
-    SLOTS.forEach(slot => { const c = document.createElement('div'); c.className = 'card mini'; c.style.setProperty('--c', elCss(sp.el)); c.innerHTML = cardFace(sp.cards![slot], sp.el); cards.appendChild(c); });
-    if (sp.evo) { const c = document.createElement('div'); c.className = 'card mini evo'; c.style.setProperty('--c', elCss(sp.el)); c.innerHTML = cardFace(sp.evo.sig, sp.el) + `<span class="evotag">${SPECIES[sp.evo.key].name}</span>`; cards.appendChild(c); }
-    d.appendChild(cards);
+    if (!has) {
+      const cards = document.createElement('div'); cards.className = 'upcards';
+      SLOTS.forEach(slot => { const c = document.createElement('div'); c.className = 'card mini'; c.style.setProperty('--c', elCss(sp.el)); c.innerHTML = cardFace(sp.cards![slot][0], sp.el); cards.appendChild(c); });
+      if (sp.evo) { const c = document.createElement('div'); c.className = 'card mini evo'; c.style.setProperty('--c', elCss(sp.el)); c.innerHTML = cardFace(sp.evo.sig, sp.el) + `<span class="evotag">${SPECIES[sp.evo.key].name}</span>`; cards.appendChild(c); }
+      d.appendChild(cards); return;
+    }
+    // card slots: one row each, options in columns (the evolved Signature sits in the Signature row's last column)
+    SLOTS.forEach(slot => {
+      const sec = document.createElement('div'); sec.className = 'loslot';
+      sec.innerHTML = `<div class="eyebrow">${slot === 'strike' ? 'Strike' : slot === 'skill' ? 'Skill' : 'Signature'}</div>`;
+      const cards = document.createElement('div'); cards.className = 'upcards lo';
+      sp.cards![slot].forEach((def, i) => {
+        const on = slot === 'strike' || (slot === 'skill' ? lo.skill : lo.sig) === i, open = meta.moveUnlocked(k, slot, i);
+        const b = document.createElement('button'); b.className = 'card mini' + (open ? '' : ' locked'); b.style.setProperty('--c', elCss(sp.el));
+        b.setAttribute('aria-pressed', String(on));
+        if (pending && 'slot' in pending && pending.slot === slot && pending.i === i) b.classList.add('sel');
+        b.innerHTML = cardFace(def, sp.el) + (open ? '' : `<span class="lock">${costHTML(meta.moveCost(k))}</span>`);
+        b.addEventListener('click', () => {
+          if (slot === 'strike' || on) return;
+          audio(); SFX.pick(); haptic('select');
+          if (open) { meta.setMove(k, slot, i); pending = null; } else pending = { slot, i };
+          render();
+        });
+        cards.appendChild(b);
+      });
+      if (slot === 'sig' && sp.evo) {
+        const c = document.createElement('div'); c.className = 'card mini evo' + (lo.sig ? ' off' : ''); c.style.setProperty('--c', elCss(sp.el));
+        c.innerHTML = cardFace(sp.evo.sig, sp.el) + `<span class="evotag">${SPECIES[sp.evo.key].name}</span>`; cards.appendChild(c);
+      }
+      sec.appendChild(cards);
+      if (slot === 'sig' && sp.evo) sec.insertAdjacentHTML('beforeend', `<p class="note">Evolving into ${SPECIES[sp.evo.key].name} replaces only ${sp.cards!.sig[0].name}. An alternate Signature gets ×${BAL.primePower} effect instead.</p>`);
+      if (pending && 'slot' in pending && pending.slot === slot) {
+        const p = pending, def = sp.cards![slot][p.i];
+        sec.appendChild(unlockBox(`Unlock <b>${def.name}</b> for ${sp.name}'s ${slot === 'skill' ? 'Skill' : 'Signature'} slot.`, meta.moveCost(k),
+          () => meta.unlockMove(k, p.slot, p.i) && meta.setMove(k, p.slot, p.i)));
+      }
+      d.appendChild(sec);
+    });
+    // Trait socket: built-in + learned Traits, then learnable ones (source owned) with their cost
+    const sec = document.createElement('div'); sec.className = 'loslot';
+    const t = lo.trait;
+    sec.innerHTML = `<div class="eyebrow">Trait</div>` + (t ? `<div class="trait-on" style="--c:${elCss(SPECIES[TRAITS[t].from].el)}"><b>${TRAITS[t].name}</b><span>${TRAITS[t].text}</span></div>` : '');
+    const opts = document.createElement('div'); opts.className = 'traits';
+    const keys = Object.keys(TRAITS) as TraitKey[];
+    const usable = keys.filter(x => meta.traitUsable(k, x)).sort((a, b) => +(b === sp.trait) - +(a === sp.trait)), learnable = keys.filter(x => !meta.traitUsable(k, x) && !meta.traitUnlocked(x) && own.includes(TRAITS[x].from));
+    [...usable, ...learnable].forEach(x => {
+      const def = TRAITS[x], open = usable.includes(x), holder = meta.traitHolder(x);
+      const tag = !open ? costHTML(meta.traitCost(x)) : x === sp.trait ? 'Built-in' : holder && holder !== k && x !== t ? `moves from ${SPECIES[holder].name}` : `from ${SPECIES[def.from].name}`;
+      const b = document.createElement('button'); b.className = 'trait' + (open ? '' : ' locked'); b.style.setProperty('--c', elCss(SPECIES[def.from].el));
+      b.setAttribute('aria-pressed', String(x === t));
+      if (pending && 'trait' in pending && pending.trait === x) b.classList.add('sel');
+      b.innerHTML = `<b>${def.name}</b><span>${tag}</span>`;
+      b.addEventListener('click', () => {
+        if (x === t) return;
+        audio(); SFX.pick(); haptic('select');
+        if (open) { meta.setTrait(k, x); pending = null; } else pending = { trait: x };
+        render();
+      });
+      opts.appendChild(b);
+    });
+    sec.appendChild(opts);
+    const hidden = keys.filter(x => !own.includes(TRAITS[x].from)).length;
+    if (hidden) sec.insertAdjacentHTML('beforeend', `<p class="note">${hidden} more Trait${hidden === 1 ? '' : 's'}: own the creature to learn ${hidden === 1 ? 'it' : 'them'}.</p>`);
+    if (pending && 'trait' in pending) {
+      const x = pending.trait, def = TRAITS[x];
+      sec.appendChild(unlockBox(`Learn <b>${def.name}</b>: ${def.text}. Any one creature can socket it besides ${SPECIES[def.from].name}.`, meta.traitCost(x),
+        () => meta.unlockTrait(x) && meta.setTrait(k, x)));
+    }
+    d.appendChild(sec);
+    d.querySelector('.upchoice')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   };
   ROSTER.forEach(k => {
     const sp = SPECIES[k], has = own.includes(k);
