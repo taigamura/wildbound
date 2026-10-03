@@ -7,7 +7,7 @@ import { toast } from '../render/fx';
 import { Actor } from '../render/actor';
 import { buildStage, tintArena, setBiome } from '../render/stage';
 import { STYLES, getStyle, useStyle } from '../art/registry';
-import { S, act, newMon, actorFor, dropActor, clearActors, cardOf, type MapNode, type Mon, type Enemy } from './state';
+import { S, act, newMon, actorFor, dropActor, clearActors, cardOf, baseCard, type MapNode, type Mon, type Enemy } from './state';
 import { show, cardFace, partyHTML } from './ui';
 import { startBattle } from './battle';
 import { BAL, ELEM, SPECIES, SLOTS, ROSTER, POOL_A, POOL_B, STARTERS, adv, biomeOf, scalable, svg, elCss, type GlyphKey, type Slot } from '../core/data';
@@ -184,8 +184,8 @@ function showUpgrade(onDone: () => void, onBack: () => void) {
   });
   function pickUpgrade(c: Mon, slot: Slot, b: HTMLElement) {
     list.querySelectorAll('.card.sel').forEach(x => x.classList.remove('sel')); b.classList.add('sel');
-    const { def } = cardOf({ uid: c.uid, slot }), base = SPECIES[c.key].cards![slot];
-    const evoBase = slot === 'sig' && c.evolved && SPECIES[c.key].evo ? SPECIES[c.key].evo!.sig : base;
+    const { def } = cardOf({ uid: c.uid, slot }), base = baseCard(c, slot);
+    const evoBase = slot === 'sig' && c.evolved && SPECIES[c.key].evo && c.moves.sig === 0 ? SPECIES[c.key].evo!.sig : base;
     choice.innerHTML = `<div class="eyebrow">${def.name}</div>`;
     const row = document.createElement('div'); row.className = 'row2';
     const apply = (u: 'power' | 'cost') => { c.ups[slot] = u; SFX.caught(); haptic('success'); toast(`${def.name} upgraded`); onDone(); };
@@ -354,7 +354,7 @@ function showCollection() {
     d.innerHTML = `<div class="prow"><span class="elchip" style="--c:${elCss(sp.el)}">${svg(sp.el)}${ELEM[sp.el].name}</span><span class="nm">${sp.name}${meta.isShiny(k) ? ' ✦' : ''}</span><span class="sp"></span><span class="lv">${sp.role} · ${sp.hp} HP</span></div>
       ${has ? '' : '<p class="sub">Not found yet. Catch one in a run, or wait for a daily pack.</p>'}`;
     const cards = document.createElement('div'); cards.className = 'upcards';
-    SLOTS.forEach(slot => { const c = document.createElement('div'); c.className = 'card mini'; c.style.setProperty('--c', elCss(sp.el)); c.innerHTML = cardFace(sp.cards![slot], sp.el); cards.appendChild(c); });
+    SLOTS.forEach(slot => { const c = document.createElement('div'); c.className = 'card mini'; c.style.setProperty('--c', elCss(sp.el)); c.innerHTML = cardFace(sp.cards![slot][0], sp.el); cards.appendChild(c); });
     if (sp.evo) { const c = document.createElement('div'); c.className = 'card mini evo'; c.style.setProperty('--c', elCss(sp.el)); c.innerHTML = cardFace(sp.evo.sig, sp.el) + `<span class="evotag">${SPECIES[sp.evo.key].name}</span>`; cards.appendChild(c); }
     d.appendChild(cards);
   };

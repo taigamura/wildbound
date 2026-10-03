@@ -13,7 +13,7 @@ import { S, act, mon, team, newMon, activeActor, actorFor, dropActor, cardOf, ca
   type Mon, type MapNode, type Enemy, type CardRef } from './state';
 import { slots, show, paintCard, refreshHand, renderBench, renderPlayerPlate, renderEnemyPlate } from './ui';
 import { placePlayer, afterFight, onCaught, endRun } from './run';
-import { BAL, ELEM, EL_KEYS, SPECIES, SLOTS, STATUS_OF, STATUS_DUR, STATUS_NAME, STATUS_EL, adv, resists, biomeOf, elHexCss,
+import { BAL, ELEM, EL_KEYS, SPECIES, SLOTS, STATUS_OF, STATUS_DUR, STATUS_NAME, STATUS_EL, STATUS_PAST, adv, resists, biomeOf, elHexCss,
   type CardDef, type El, type Slot, type Status } from '../core/data';
 import { rand, pick, shuffle } from '../core/util';
 import { SFX, audio } from '../core/audio';
@@ -131,11 +131,17 @@ function resolveCard(C: CardDef, pow: number, me: Mon, slot: Slot) {
   projectile(pp, () => S.em!.head(), el, dmg ? { size: big ? 0.42 : 0.26, arc: big ? 1.6 : 0.7, dur: big ? 0.42 : 0.3 } : { size: 0.18, arc: 1, dur: 0.32 }, () => {
     const e = S.enemy; if (tok !== S.tok || !e || !e.alive) return;
     if (dmg) {
-      const bonus = C.bonusBurned && e.status?.k === 'burn' ? C.bonusBurned : 0;
-      const dealt = hurtEnemy((dmg + bonus) * chainMul, el, uid, { big, bonus: !!bonus });
+      const bonus = C.bonusIf && e.status?.k === C.bonusIf.status ? C.bonusIf.dmg : 0;
+      const dealt = hurtEnemy((dmg + bonus) * chainMul, el, uid, { big, bonus: bonus ? STATUS_PAST[C.bonusIf!.status] + '!' : '' });
       if (C.lifesteal && dealt) healMon(me, Math.round(dealt * C.lifesteal));
     }
     if (C.status && e.alive) applyEnemyStatus(C.status, pow, uid);
+    // extra hits of a multi-hit card follow the first one
+    for (let h = 1; h < (C.hits ?? 1); h++) gsap.delayedCall(h * 0.14, () => {
+      if (tok !== S.tok || !S.enemy?.alive) return;
+      const d = hurtEnemy(dmg * chainMul, el, uid, { small: true });
+      if (C.lifesteal && d) healMon(me, Math.round(d * C.lifesteal));
+    });
   });
 }
 function stars() {
@@ -196,14 +202,14 @@ function lightning(a: Pt, b: Pt, el: El) {
 
 /* ================= damage ================= */
 /** Damage the enemy. `src` is the uid of the creature that dealt it (0 = none), for the evolution meter. */
-function hurtEnemy(amount: number, el: El, src: number, o: { dot?: boolean; big?: boolean; small?: boolean; bonus?: boolean } = {}) {
+function hurtEnemy(amount: number, el: El, src: number, o: { dot?: boolean; big?: boolean; small?: boolean; bonus?: string } = {}) {
   const e = S.enemy, m = S.em; if (!e || !e.alive || !m) return 0;
   const a = adv(el, e.el), dmg = Math.max(1, Math.round(amount * a * soakMul(e.status)));
   e.hp = Math.max(0, e.hp - dmg); S.stats.dealt += dmg;
   const sm = src ? mon(src) : null; if (sm && sm.starter && !sm.evolved) sm.evo = Math.min(BAL.evoFill, sm.evo + dmg);
   const hp = m.head();
   popNum({ x: hp.x, y: hp.y - U * 0.7 }, dmg, a > 1 ? 'crit' : a < 1 ? 'weak' : o.dot ? 'dot' : '',
-    a > 1 && !o.dot ? 'Super' : a < 1 && !o.dot ? 'RESIST' : o.bonus ? 'Burned!' : '', ELEM[el].css);
+    a > 1 && !o.dot ? 'Super' : a < 1 && !o.dot ? 'RESIST' : o.bonus || '', ELEM[el].css);
   if (o.dot) emit(hp.x, hp.y, { n: 10, color: ELEM[el].glow, spd: 1.5, up: 1, life: 0.7, size: 0.22, grav: -2 });
   else {
     burst(hp, el, o.big ? 1.6 : o.small ? 0.55 : 1); m.hitFlash(); lightFlash(ELEM[el].hex, hp, o.big ? 7 : 4);

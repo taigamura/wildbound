@@ -1,5 +1,6 @@
 // Run state. One mutable object, read and written by battle/run/ui.
-import { SPECIES, BAL, HEAVY_NAME, WARDEN_HEAVIES, scaleCard, type El, type Slot, type Status, type CardDef } from '../core/data';
+import { SPECIES, BAL, HEAVY_NAME, WARDEN_HEAVIES, scaleCard, type El, type Slot, type Status, type CardDef, type TraitKey } from '../core/data';
+import { loadout } from './meta';
 import { Actor } from '../render/actor';
 
 export interface StatusState { k: Status; t: number; acc?: number }
@@ -15,6 +16,9 @@ export interface Mon {
   starter: boolean; evo: number; evolved: boolean; shiny: boolean;
   reflect: number;      // Thornveil: next hit taken reflects this fraction
   nextStrike: number;   // Capacitor: next Strike multiplier
+  moves: Record<Slot, number>;  // equipped card per slot (index into SPECIES[key].cards[slot]), fixed when it joins
+  trait: TraitKey | null;       // socketed Trait, fixed when it joins
+  played: number;               // cards this creature has played this fight (Quickfuse)
 }
 export interface CardRef { uid: number; slot: Slot }
 export type EnemyKind = 'wild' | 'alpha' | 'warden' | 'boss';
@@ -61,17 +65,22 @@ export const team = () => S.lineup.map(mon).filter(Boolean) as Mon[];
 export const bench = () => team().filter(c => c.uid !== S.active);
 export const activeActor = () => { const c = act(); return c ? S.actors[c.uid] ?? null : null; };
 
+/** A fresh party member. Its moves and Trait come from the saved loadout for its species (§16). */
 export function newMon(key: string, shiny = false): Mon {
-  const sp = SPECIES[key];
+  const sp = SPECIES[key], lo = loadout(key);
   return { uid: S.uid++, key, art: key, name: sp.name, el: sp.el, maxHp: sp.hp, hp: sp.hp, alive: true, shield: 0, shieldT: 0,
-    status: null, ups: {}, starter: false, evo: 0, evolved: false, shiny, reflect: 0, nextStrike: 1 };
+    status: null, ups: {}, starter: false, evo: 0, evolved: false, shiny, reflect: 0, nextStrike: 1,
+    moves: { strike: 0, skill: lo.skill, sig: lo.sig }, trait: lo.trait, played: 0 };
 }
+/** The base card a creature has equipped in a slot (before upgrades and evolution). */
+export const baseCard = (c: Mon, slot: Slot): CardDef => { const l = SPECIES[c.key].cards![slot]; return l[c.moves[slot]] ?? l[0]; };
 
 /** The card a ref points at, with upgrades and evolution applied. `pow` scales status durations and Discharge. */
 export function cardOf(r: CardRef): { def: CardDef; pow: number; owner: Mon } {
   const owner = mon(r.uid)!, sp = SPECIES[owner.key];
-  let base = sp.cards![r.slot], pow = 1;
-  if (r.slot === 'sig' && owner.evolved) { if (sp.evo) base = sp.evo.sig; else pow *= BAL.primePower; }
+  let base = baseCard(owner, r.slot), pow = 1;
+  // a named evolution replaces only the default Signature; an alternate Signature gets the Prime boost
+  if (r.slot === 'sig' && owner.evolved) { if (sp.evo && owner.moves.sig === 0) base = sp.evo.sig; else pow *= BAL.primePower; }
   const up = owner.ups[r.slot];
   if (up === 'power') pow *= BAL.upPower;
   const def = { ...scaleCard(base, pow), cost: Math.max(0, base.cost - (up === 'cost' ? 1 : 0)) };
