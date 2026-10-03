@@ -215,6 +215,13 @@ Shop, events, rival tamers, tamer cards, eggs, Warden part-breaking and crafting
 
 # Part 2: Engineering
 
+## Session start: catching up
+1. **Recent work:** run `git log -10 --format='%h %ad %s%n%b' --date=short`. The commit messages say what changed and why.
+2. **Current state:** read "Releasing" below for what has shipped and how builds work. That section is the authority for anything git can't see (TestFlight uploads, credentials, the build server).
+3. **Uncommitted work:** check `git status`.
+
+Keep both up to date: write commit bodies that explain *why*, and edit "Releasing" in the same change whenever release state changes (a new upload, a credentials change, a pipeline change).
+
 ## What this is
 A PixiJS web app (`game/`) shipped inside an Expo WebView shell (`app/`). iOS builds run on EAS, so no Mac is needed.
 
