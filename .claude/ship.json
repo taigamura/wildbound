@@ -10,14 +10,17 @@
     "host": "192.168.50.175",
     "user": "taigamura",
     "sshKey": "~/.ssh/simple-bookkeeping-buildserver",
-    "repoPath": "~/dev/wildbound/app",
+    "repoPath": "~/dev/wildbound",
     "pathPrepend": "/usr/local/bin:/opt/homebrew/bin",
-    "logPath": "/tmp/wildbound-build.log",
-    "artifactGlob": "build-*.ipa",
-    "buildCommand": "EAS_SKIP_AUTO_FINGERPRINT=1 EAS_BUILD_NO_EXPO_GO_WARNING=true eas build -p ios --local --profile production"
+    "logPath": "~/wildbound-godot-build.log",
+    "artifactGlob": "dist/ios/Wildbound-*.ipa",
+    "runsLocally": true,
+    "buildCommand": "scripts/ship-ios-godot.sh --no-submit",
+    "note": "Godot port. buildCommand runs on THIS box from the repo root, not over SSH: it pulls on the Mac, copies the EAS signing credentials (app/credentials.json, gitignored) into a throwaway keychain there, runs the Godot export + xcodebuild detached with polling, and copies the ipa back to dist/ios/. artifactGlob is local. Skip the skill's manual SSH/poll/scp steps."
   },
   "submit": {
-    "command": "IPA=$(realpath {ipa}) && cd app && npx eas-cli@24.10.0 submit -p ios --profile production --path \"$IPA\" --non-interactive"
+    "command": "IPA=$(realpath {ipa}) && cd app && npx eas-cli@24.10.0 submit -p ios --profile production --path \"$IPA\" --non-interactive",
+    "afterSuccess": "Write the submitted build number into godot/ios/build-number.txt (the ipa name is Wildbound-<version>-<build>.ipa) and commit it with the release-log entry. Or run scripts/ship-ios-godot.sh without --no-submit, which builds, submits and bumps the file in one go."
   },
   "releaseLog": {
     "file": "CLAUDE.md",
