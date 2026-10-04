@@ -54,7 +54,10 @@ Each element owns one status:
 - **Quit:** a button in the battle HUD (beside mute) and on the map. There is no pause: the first tap arms it for 2s, the second ends the run as a loss ("Retreated"). Loot already banked is kept.
 
 ### 4.2 Lineup
-- Before a run, the **Team** screen (opened from the title's Team button, never the title itself) picks the team: **up to 3** owned creatures. Tap a creature to add or remove it; tap a lineup slot to make it the lead. The title shows the current team and Start. The party *is* this lineup for the whole run (no creatures join or leave mid-run). The last team is remembered (saved on every change).
+- Before a run, the **Team** screen (opened from the title's Team button, never the title itself) picks the team: **up to 3** owned creatures. Tap a creature to add or remove it (at least 1 stays); tap a lineup slot to make it the lead. The title shows the current team and Start. The party *is* this lineup for the whole run (no creatures join or leave mid-run). The last team is remembered (saved on every change).
+- **Selection is always readable.** Each lineup slot and its picker card share a numbered badge in the creature's element colour ("1 ★" is the lead, then "2", "3"); picked creatures glow with a bright element border, unpicked ones are dimmed.
+- **Nothing is replaced silently.** With the team full, tapping an unpicked creature makes it the *pending* pick (pulsing outline); the slots pulse with "Tap to replace" and the hint reads "Swap in X: tap a slot to replace". Tapping a slot (or an in-team picker card) puts X in that position, keeping the order (replacing the lead makes X the lead). Tapping X again cancels; tapping another unpicked creature changes the pending pick. The changed slot pops, with a select haptic.
+- Under the lineup, a **Deck** line shows the team's element mix (e.g. Ember ×2, Tide ×1).
 - The **deck** is the lineup's *equipped* cards: up to 3 creatures × 3 cards (Strike / Skill / Signature, as set in each creature's loadout, §16).
 - The party screen (choose the lead) opens from the map's **Lineup** button at any time. It is never forced (pillar 3).
 
@@ -63,14 +66,14 @@ Each element owns one status:
 - Hand of **4**. Playing a card immediately draws the next one. The deck cycles: the discard pile reshuffles when the draw pile is empty. With fewer than 4 cards in the deck (floor 1, solo starter), the extra slots stay empty.
 - Cards can be played any time, including during wind-ups. There is no global cooldown.
 - **Hold to read, slide to scrub, swipe up to play.** A touch magnifies the card under the finger (lifted, straightened, enlarged; the others make room). Sliding sideways moves the magnification along the fan, like picking a card from a held hand. Swiping up plays the magnified card (up more than 40% of its height, or released moving up fast after 15%). Once the swipe passes 12% of the card's height it locks to that card and the card follows the finger; dragging back down returns to scrubbing. Releasing without a swipe puts the card back. A card that can't be played can still be magnified; swiping it shakes it and it snaps back.
-- **Cards belong to a creature.** Each card shows its owner's mini-portrait and element colour, and uses the owner's element.
-  - Playing a lead card fires it normally.
-  - **Only the lead's cards can be played.** A bench creature's cards stay in the hand, dimmed with a swap marker, until you swap that creature in. Playing a card never swaps. Deciding when to swap (and living with a hand of bench cards meanwhile) is the strategy.
-  - A knocked-out creature's cards **stay in the deck**, greyed out. Swiping one up discards it for **1** energy and draws the next card (no chain, Trait or discount effects).
-- "Self" on a card means its owner, which is always the lead when it fires. "Team" means every living lineup member.
+- **Cards belong to an element, not a creature.** The deck is still built from each lineup creature's equipped cards (§4.2), and each card takes the element of the creature that brought it. The card face shows that element's icon and colour (no creature portrait).
+  - **Only cards of the lead's element can be played.** Any living lead of that element plays it, so two Ember creatures share their Ember cards. Cards of other elements stay in the hand, dimmed with a swap marker in their element's colour, until you swap in a creature of that element. Each bench portrait shows how many waiting hand cards it would unlock. Playing a card never swaps. Deciding when to swap (and living with a hand of off-element cards meanwhile) is the strategy.
+  - **A card fires as the lead.** The lead's permanent Power and Spirit (§5.2) and its Trait apply (Quickfuse counts the lead's first card, Thirst heals the lead on any Strike, and so on). The card's text, slot and in-run upgrade (§7) come from the card itself.
+  - A card is **dead** only when no living lineup member shares its element. Dead cards **stay in the deck**, greyed out. Swiping one up discards it for **1** energy and draws the next card (no chain, Trait or discount effects).
+- "Self" on a card means the lead that plays it. "Team" means every living lineup member.
 
 ### 4.4 Swapping
-- Swapping is **only** by tapping a bench portrait. It is free but has a **6s cooldown**. Bench portraits show the cooldown as a sweeping wedge with the seconds left, and pop when swapping is ready.
+- Swapping is **only** by tapping a bench portrait. It is free but has a **6s cooldown**. Bench portraits show the cooldown as a sweeping wedge with the seconds left, and pop when swapping is ready. A small element-coloured chip on a portrait counts the waiting hand cards it would make playable.
 - When the lead is knocked out, the healthiest bench creature auto-swaps in for free; this ignores and does not start the cooldown.
 - Shields and statuses stay on a creature when it is benched (shields keep decaying).
 
@@ -121,8 +124,8 @@ Every owned creature has three upgrade tracks, levels **0–5**, bought on the C
 
 | Track | Material | Per level |
 |---|---|---|
-| **Power** | Sword | **+8%** card damage (including bonus damage and Discharge) and auto-attack damage |
-| **Spirit** | Orb | **+10%** shield and heal amounts on its cards |
+| **Power** | Sword | **+8%** damage of the cards it plays (including bonus damage and Discharge) and auto-attack damage |
+| **Spirit** | Orb | **+10%** shield and heal amounts of the cards it plays |
 | **Vitality** | Jewel | **+8%** max HP |
 
 Level n → n+1 costs **(n+1)** of the track's material **+ 20 × (n+1)** gold (so level 1 is 1 material + 20 gold; level 5 is 5 + 100).
@@ -166,7 +169,7 @@ The fight's loot (§5.1) is shown and banked first. Then pick **1 of 3**: **Upgr
 Creatures don't evolve. Each of the 12 is a unique creature with a single form and a single image. Within a run, a creature only changes through §7 card upgrades; across runs, through its loadout (§16) and its permanent upgrades (§5.2).
 
 ## 10. Roster (12 creatures)
-Each creature has 3 card slots: **Strike / Skill / Signature**. Strike has one option; Skill and Signature each have the default and one alternate (unlocked with Essence, §16). Each creature also has a built-in Trait (§16). HP is max HP at run start before Vitality upgrades (§5.2). Atk/Spd only affect it as an enemy.
+Each creature has 3 card slots: **Strike / Skill / Signature**. They are the cards it brings to the deck; in battle they belong to its element and any lead of that element plays them (§4.3). Strike has one option; Skill and Signature each have the default and one alternate (unlocked with Essence, §16). Each creature also has a built-in Trait (§16). HP is max HP at run start before Vitality upgrades (§5.2). Atk/Spd only affect it as an enemy.
 
 "N dmg ×H" hits H times; each hit gets the chain bonus. "+N if Burned" (or Soaked, Rooted) adds N damage if the enemy has that status.
 
@@ -226,7 +229,7 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. Strike has one o
 Events, rival tamers, tamer cards, eggs, Warden part-breaking, crafting beyond Essence unlocks and material upgrades (§5, §16), equipment items, more than one alternate per card slot, sightings-based packs, evolution (§9), a second Warden, ranked mode and leaderboards, a daily seeded run, cosmetic card frames, monetization.
 
 ## 15. Open tuning questions (decide by playing)
-- Swap pace: is a 6s swap cooldown with no auto-swapping bench cards too clunky, or are hands clogged with bench and fainted cards too often? Levers: `BAL.swap_cd`, `discard_cost`. With no post-fight revive, also watch whether runs snowball after the first KO (levers: Spring frequency, Heal reward size).
+- Swap pace: is a 6s swap cooldown with no auto-swapping bench cards too clunky, or are hands clogged with off-element and dead cards too often? Element-shared cards make same-element teams smoother; watch whether mono-element lineups dominate. Levers: `BAL.swap_cd`, `discard_cost`. With no post-fight revive, also watch whether runs snowball after the first KO (levers: Spring frequency, Heal reward size).
 - Pack pace: with the daily pack plus bought packs (150 gold), how fast do players own all 12? Levers: `BAL.shopPack`, loot gold.
 - Loot and upgrade pace: target about **1 permanent upgrade per run**. Levers: `BAL.wildGold`/`goldPerFloor`/`wildMatChance`/`alphaGoldMul`/`alphaMats`/`wardenGold`/`wardenMats`/`bossGold`/`winGold`, `upGold`, `upMax`, `upDmg`/`upSpirit`/`upHp`, and shop prices `shopMat`/`shopPack`/`shopSell`.
 - Essence earn rate: target **1–2 unlocks per run**. Levers: `BAL.essWild`/`essAlpha`/`essWarden`/`essBoss`, `moveCost`, `traitCost`.
@@ -248,7 +251,7 @@ Loadouts give options, not power: every alternate is a sidegrade. Raising a crea
 - Every creature has a built-in Trait in its socket. **The socket is never empty.**
 - Once a Trait is **learned**, other creatures can socket it. A learned Trait sits in **only one** other creature at a time: socketing it elsewhere returns the previous holder to its built-in Trait. The creature it's built into always keeps it.
 - A learned Trait is usable only while its source creature is owned.
-- "It" / "its" means the creature holding the Trait.
+- "It" / "its" means the creature holding the Trait. "Its card" means a card it plays as the lead, whichever creature brought that card (§4.3).
 
 | Trait | Built into | Effect |
 |---|---|---|
@@ -307,7 +310,7 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 - **Shipped:** v0.3.0 build 7 on TestFlight (build 6 was the first Godot build). Everything in Part 1 is implemented: real-time card combat with the fanned hand, statuses, Perfect Swap, chain, 12 creatures with alternate cards and Traits, the 8-floor run with Warden and Noctyrm, loot, permanent upgrades, item shop, daily and bought packs, Collection with the loadout editor.
 - **Art is placeholder:** the 3 HD-2D anchors (Sable, ember fox, dragon) stand in for all 14 creatures, recoloured per element (§13). Generating the real roster with `docs/HD2D.md` is the next art task.
 - **Unverified on device:** frame rate on a real iPhone (the 3D stage was only measured on a software renderer; first lever if it drops below 60 fps: render the 3D scene at ~0.75 resolution), haptics, safe-area insets.
-- **Known gaps from the port:** no background blur on panels; a knocked-out creature's cards swap out instead of flying off; the HUD band isn't re-measured when status tags change its height.
+- **Known gaps from the port:** no background blur on panels; a card that turns dead repaints in place instead of flying off; the HUD band isn't re-measured when status tags change its height.
 - **Balance is untuned** for the loot economy and 3-creature teams from floor 1 (§15).
 - **Saves:** the Godot app's save file (`user://save.cfg`) starts fresh; progress from the web builds (≤ 0.2.0) does not carry over.
 - **Device floor:** iPhone XS or newer (A12), required by Godot's Mobile renderer.
@@ -316,7 +319,7 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godot hangs at startup without it here).
 - `godot --headless --audio-driver Dummy --path godot --quit`: load check (parse errors show here)
 - `godot --headless --audio-driver Dummy --path godot --script res://tests/test_core.gd`: core logic tests (all must pass)
-- `godot --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|team|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). Renders for real here (Vulkan llvmpipe).
+- `godot --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|team|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). `--shot=team-swap` shows the Team screen with every creature owned, a full team and Cinderpip pending (it uses a scratch save, `user://shot-team-swap.cfg`, never `save.cfg`). Renders for real here (Vulkan llvmpipe).
 - `godot --audio-driver Dummy --path godot --script res://tests/stage_preview.gd`: stage-only visual test (both biomes, effects)
 - `godot --path godot -e`: the editor
 

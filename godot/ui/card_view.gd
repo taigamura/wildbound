@@ -1,6 +1,6 @@
 class_name CardView
 extends Container
-## One card face (.card): gradient body in its owner's element colour, cost bubble, owner initial chip,
+## One card face (.card): gradient body in its element colour, cost bubble, element orb chip,
 ## bench-swap marker, STRONG badge, upgrade tag, glyph, name and rules text. Used by the hand, the
 ## reward/upgrade screens and the collection. Size variants via `v` (padding, font sizes, glyph %, aspect).
 
@@ -21,7 +21,7 @@ var nm: Label
 var tx: Label
 var decos: Array = []   # [Control, corner "tl" "tr" "bl" "br", offset Vector2]
 var key := ""           # what's painted (TS dataset.k)
-const DEAD_C := Color("#8c8c9c")   # a fainted owner's card is drained of its element colour
+const DEAD_C := Color("#8c8c9c")   # a dead card (its element all fainted) is drained of its element colour
 
 # visual states (CSS classes)
 var lift := false
@@ -42,18 +42,16 @@ func _init(variant := "hand") -> void:
 	resized.connect(update_minimum_size)
 	restyle()
 
-## TS cardFace(c, el, o). o: cost, owner (Mon), owner_key, bench, dead, strong, upgraded, pow.
+## TS cardFace(c, el, o). o: cost, chip (show the element orb), bench, dead, strong, upgraded, pow.
 func face(def: Dictionary, el, o := {}) -> CardView:
 	dead = o.get("dead", false)
 	c = DEAD_C if dead else UiKit.el_css(el)
-	var k = o.get("owner").key if o.get("owner") else o.get("owner_key", "")
-	var ini: String = Data.SPECIES[k].name.substr(0, 1) if k else ""
 	_reset()
 	_deco(_cost_bubble(str(o.get("cost", def.cost))), "tl", Vector2(-6, -7))
-	if ini != "":
-		_deco(_own_chip(ini), "tr", Vector2(-5, -6))
-	if o.get("bench", false) and not dead:   # its owner must be swapped in first
-		var s := UiKit.icon("swap", 14, UiKit.alpha(UiKit.INK, 0.8))
+	if o.get("chip", false) and el != null and str(el) != "":   # cards belong to an element, not a creature
+		_deco(UiKit.orb(c, 22, str(el), 13), "tr", Vector2(-5, -6))
+	if o.get("bench", false) and not dead:   # swap to a creature of this element first
+		var s := UiKit.icon("swap", 14, UiKit.mix(c, Color.WHITE, 0.35))
 		_deco(s, "tr", Vector2(5, 22))
 	if o.get("strong", false) and not dead:
 		_deco(_badge("STRONG", Vector4(4, 3, 4, 2), 4), "bl", Vector2(5, 5))
@@ -121,13 +119,6 @@ func _cost_bubble(t: String) -> Control:
 	var bx := UiKit.boxed(l, Vector2(26, 26), b)
 	l.set_meta("off", Vector2(0, 1))
 	return bx
-
-func _own_chip(t: String) -> Control:
-	var b := RRect.new({"radius": 11.0, "mode": "radial", "rc": Vector2(0.35, 0.3), "c0": UiKit.mix(c, Color.WHITE, 0.5), "c1": c,
-		"sh_off": Vector2(0, 2), "sh_c": Color(0, 0, 0, 0.4)})
-	var l := UiKit.lbl(t, "display", 12, Color("#1b1035"), {"align": "center"})
-	l.set_meta("off", Vector2(0, 1))
-	return UiKit.boxed(l, Vector2(22, 22), b)
 
 func _badge(t: String, pad: Vector4, r: float) -> Control:
 	var p := UiKit.panel(UiKit.flat(UiKit.GOLD, r, 0, Color(), pad))

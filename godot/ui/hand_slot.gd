@@ -72,7 +72,7 @@ func _apply() -> void:
 	rotation = deg_to_rad(cur.r)
 	scale = Vector2(cur.s, cur.s)
 
-## Dimming: poor = can't afford it; kind "bench" = its owner is on the bench, "dead" = its owner fainted.
+## Dimming: poor = can't afford it; kind "bench" = the lead isn't of its element, "dead" = no living creature is.
 func set_dim(is_poor: bool, kind := "") -> void:
 	if is_poor == poor and kind == dim_kind:
 		return

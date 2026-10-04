@@ -77,37 +77,66 @@ func base_card(c: Mon, slot: String) -> Dictionary:
 	var i: int = c.moves.get(slot, 0)
 	return l[i] if i >= 0 and i < l.size() else l[0]
 
-## The card a ref points at, with in-run and permanent upgrades applied: {def, pow, owner}.
+## Cards belong to an element, not a creature. A ref still names its source creature (whose equipped
+## card def, slot and in-run `ups` it carries); the card's element is the source's element.
+func card_el(r: CardRef) -> String:
+	var c := mon(r.uid)
+	return c.el if c else ""
+
+## Who fires the card: the lead when it is alive and shares the card's element, else the source
+## (used for previews of cards the lead can't play).
+func card_by(r: CardRef) -> Mon:
+	var lead := act()
+	if lead != null and lead.alive and lead.el == card_el(r):
+		return lead
+	return mon(r.uid)
+
+## The card a ref points at, with in-run upgrades (the source's `ups[slot]`) and the firer's permanent
+## Power/Spirit applied: {def, pow, src, by, el}. `by` defaults to card_by(r).
 ## `pow` scales status durations and Discharge.
-func card_of(r: CardRef) -> Dictionary:
-	var owner := mon(r.uid)
-	var base := base_card(owner, r.slot)
-	var up = owner.ups.get(r.slot)
+func card_of(r: CardRef, by: Mon = null) -> Dictionary:
+	var src := mon(r.uid)
+	if by == null:
+		by = card_by(r)
+	var base := base_card(src, r.slot)
+	var up = src.ups.get(r.slot)
 	var pow: float = Data.BAL.up_power if up == "power" else 1.0
-	var def: Dictionary = Data.boost_card(Data.scale_card(base, pow), owner.power, owner.spirit).duplicate(true)
+	var def: Dictionary = Data.boost_card(Data.scale_card(base, pow), by.power, by.spirit).duplicate(true)
 	def.cost = maxi(0, base.cost - (1 if up == "cost" else 0))
-	return {"def": def, "pow": pow, "owner": owner}
+	return {"def": def, "pow": pow, "src": src, "by": by, "el": src.el}
 
 func card_cost(r: CardRef) -> int:
 	var co := card_of(r)
-	var owner: Mon = co.owner
-	if owner.trait_key == "quickfuse" and owner.played == 0:
-		return 0   # Quickfuse: first card free
+	var by: Mon = co.by
+	if by.trait_key == "quickfuse" and by.played == 0:
+		return 0   # Quickfuse: the firer's first card free
 	return maxi(0, co.def.cost - discount)
 
-## The card's owner has fainted: playing it discards it for BAL.discard_cost.
+## No living lineup member has the card's element: playing it discards it for BAL.discard_cost.
 func card_dead(r: CardRef) -> bool:
-	var c := mon(r.uid)
-	return c == null or not c.alive
+	var el := card_el(r)
+	if el == "":
+		return true
+	for c in team():
+		if c.alive and c.el == el:
+			return false
+	return true
+
+## A living creature of the card's element is on the bench but the lead isn't of it: swap to play it.
+func card_benched(r: CardRef) -> bool:
+	if card_dead(r):
+		return false
+	var lead := act()
+	return lead == null or not lead.alive or lead.el != card_el(r)
 
 ## Why a card can't be played right now ("" = playable, "energy", "bench", "busy").
-## Only the lead's cards play; a living bench creature's cards wait for a swap.
+## Only cards of the lead's element play; the rest wait for a swap to a living creature of their element.
 func card_block(r: CardRef) -> String:
 	if mode != "battle":
 		return "busy"
 	if card_dead(r):
 		return "energy" if energy < Data.BAL.discard_cost else ""
-	if r.uid != active:
+	if card_benched(r):
 		return "bench"
 	if energy < card_cost(r):
 		return "energy"

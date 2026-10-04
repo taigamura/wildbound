@@ -63,6 +63,7 @@ func _run() -> void:
 	test_state()
 	test_enemy_numbers()
 	test_cards()
+	test_element_cards()
 	test_statuses()
 	test_shields()
 	test_traits()
@@ -281,12 +282,12 @@ func test_state() -> void:
 	St.energy = 5
 	eq(St.card_block(r), "", "playable")
 	var bref := CardRef.new(St.lineup[1], "strike")
-	eq(St.card_block(bref), "bench", "bench card never playable")
+	eq(St.card_block(bref), "bench", "other-element card never playable")
 	St.swap_cd = 1
 	eq(St.card_block(r), "", "lead card fine on cooldown")
 	St.swap_cd = 0
 	St.mon(St.lineup[1]).alive = false
-	check(St.card_dead(bref), "fainted owner → dead card")
+	check(St.card_dead(bref), "only Tide creature fainted → dead card")
 	eq(St.card_block(bref), "", "dead card can be discarded")
 	St.energy = 0
 	eq(St.card_block(bref), "energy", "discard needs energy")
@@ -469,6 +470,77 @@ func test_cards() -> void:
 	Bt.play_card(2)
 	eq(hp0 - e.hp, roundf(10 * 1.5), "Discharge = shield")
 	eq(coil.shield, 0.0, "shield consumed")
+
+## Cards belong to elements: any lead of the card's element plays it, as itself.
+func test_element_cards() -> void:
+	section = "element cards"
+	var e := _battle(["emberwick", "cinderpip", "bellspring"], "mossling")
+	var wick: Mon = St.party[0]
+	var pip: Mon = St.party[1]
+	var bell: Mon = St.party[2]
+	var scorch := CardRef.new(pip.uid, "strike")   # Scorch (1): 7 dmg
+	eq(St.card_el(scorch), "ember", "card element = source element")
+	eq(St.card_block(scorch), "", "same-element bench card playable by the lead")
+	check(not St.card_benched(scorch), "same-element card not benched")
+	var splash := CardRef.new(bell.uid, "strike")
+	eq(St.card_block(splash), "bench", "other element waits for a swap")
+	check(St.card_benched(splash), "other element benched")
+	# stats come from the lead, not the source
+	wick.power = 2.0
+	pip.power = 1.0
+	var co: Dictionary = St.card_of(scorch)
+	eq(co.by, wick, "fired by the lead")
+	eq(co.src, pip, "source kept")
+	eq(co.def.dmg, 14, "lead's Power applies: 7×2")
+	eq(St.card_of(scorch, pip).def.dmg, 7, "explicit firer")
+	_hand(0, scorch.uid, scorch.slot)
+	var hp0 := e.hp
+	var en0: float = St.energy
+	Bt.play_card(0)
+	eq(hp0 - e.hp, 21.0, "Scorch by Emberwick: 14×1.5")
+	eq(St.energy, en0 - 1, "Scorch costs 1")
+	eq(wick.played, 1, "the lead counts the play")
+	eq(pip.played, 0, "the source doesn't")
+	eq(St.active, wick.uid, "playing never swaps")
+	# Quickfuse belongs to whoever leads
+	pip.trait_key = "quickfuse"
+	pip.played = 0
+	var wsig := CardRef.new(wick.uid, "sig")
+	eq(St.card_cost(wsig), 3, "Emberwick leading: no Quickfuse")
+	St.active = pip.uid
+	eq(St.card_cost(wsig), 0, "Cinderpip leading: Quickfuse frees Emberwick's card")
+	St.active = wick.uid
+	# in-run upgrades stay on the card
+	pip.ups["strike"] = "cost"
+	eq(St.card_of(scorch).def.cost, 0, "upgrade follows the card")
+	pip.ups.clear()
+	# dead only when every creature of the element is down
+	wick.alive = false
+	St.active = bell.uid
+	check(not St.card_dead(scorch), "Cinderpip alive: Ember cards live on")
+	check(not St.card_dead(wsig), "the fainted source's card lives on")
+	eq(St.card_block(wsig), "bench", "Ember card waits for Cinderpip")
+	St.active = pip.uid
+	eq(St.card_block(wsig), "", "Cinderpip plays Emberwick's card")
+	pip.alive = false
+	St.active = bell.uid
+	check(St.card_dead(scorch), "all Ember down: dead")
+	check(St.card_dead(wsig), "all Ember down: dead (other source)")
+	check(not St.card_benched(scorch), "dead isn't benched")
+	eq(St.card_block(scorch), "", "dead card can be discarded")
+	wick.alive = true
+	pip.alive = true
+	# Thirst on the lead heals the lead on another creature's Strike
+	e = _battle(["truffmole", "brambat"], "puddlet")
+	var mole: Mon = St.party[0]
+	var bat: Mon = St.party[1]
+	mole.trait_key = "thirst"
+	mole.hp = 10
+	bat.hp = 10
+	_hand(0, bat.uid, "strike")   # Nip: dmg, heal self 2
+	Bt.play_card(0)
+	check(mole.hp > 12.0, "lead healed by Nip and its Thirst")
+	eq(bat.hp, 10.0, "source not healed")
 
 func test_statuses() -> void:
 	section = "status"
