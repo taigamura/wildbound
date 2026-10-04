@@ -280,10 +280,18 @@ func test_state() -> void:
 	eq(St.card_block(r), "energy", "no energy")
 	St.energy = 5
 	eq(St.card_block(r), "", "playable")
+	var bref := CardRef.new(St.lineup[1], "strike")
+	eq(St.card_block(bref), "bench", "bench card never playable")
 	St.swap_cd = 1
-	eq(St.card_block(CardRef.new(St.lineup[1], "strike")), "swap", "bench card on swap cooldown")
 	eq(St.card_block(r), "", "lead card fine on cooldown")
 	St.swap_cd = 0
+	St.mon(St.lineup[1]).alive = false
+	check(St.card_dead(bref), "fainted owner → dead card")
+	eq(St.card_block(bref), "", "dead card can be discarded")
+	St.energy = 0
+	eq(St.card_block(bref), "energy", "discard needs energy")
+	St.energy = 5
+	St.mon(St.lineup[1]).alive = true
 	St.discount = 1
 	eq(St.card_cost(r), 0, "discount")
 	St.discount = 0
@@ -385,39 +393,63 @@ func test_cards() -> void:
 	Bt.play_card(1)
 	eq(St.chain, 1, "chain 1")
 	eq(hp0 - e.hp, roundf(14 * 1.1 * 1.5), "Wickflare with chain")
-	# bench card swaps in
-	St.chain_t = 99
+	# bench cards don't play and don't swap
+	var ui = mod("Ui")
+	var denied := []
+	var on_denied := func(i, why): denied.append(why)
+	Bt.card_denied.connect(on_denied)
 	_hand(2, bell.uid, "skill")   # Drench: soak
+	var en0: float = St.energy
 	Bt.play_card(2)
-	eq(St.active, bell.uid, "bench card swapped lead")
-	eq(St.swap_cd, 1.0, "swap cooldown started")
+	eq(denied, ["bench"], "bench card denied")
+	eq(St.active, wick.uid, "bench card didn't swap")
+	eq(St.energy, en0, "bench card cost nothing")
+	# swap by portrait: free, 6s cooldown
+	Bt.swap_tap(bell.uid)
+	eq(St.active, bell.uid, "swap tap")
+	eq(St.energy, en0, "swap is free")
+	eq(St.swap_cd, 6.0, "swap cooldown 6s")
+	St.chain_t = 99
+	Bt.play_card(2)
 	eq(e.status.k, "soak", "Drench soaked")
 	# soak: Splash 5 tide vs thorn (resisted 0.66) ×1.25 → 4
 	_hand(3, bell.uid, "strike")
 	hp0 = e.hp
 	Bt.play_card(3)
 	eq(hp0 - e.hp, float(roundi(5 * 1.1 * 1.25)), "soaked: tide vs thorn neutral ×1.1 chain ×1.25")
-	# swap cooldown blocks bench cards
-	_hand(0, wick.uid, "strike")
-	var ui = mod("Ui")
-	var denied := []
-	var on_denied := func(i, why): denied.append(why)
-	Bt.card_denied.connect(on_denied)
-	Bt.play_card(0)
-	eq(denied, ["swap"], "denied while swapping cools down")
+	Bt.swap_tap(wick.uid)
+	eq(St.active, bell.uid, "swap tap blocked by cooldown")
+	_hand(0, bell.uid, "strike")
 	St.energy = 0
-	St.swap_cd = 0
 	Bt.play_card(0)
-	eq(denied, ["swap", "energy"], "denied without energy")
+	eq(denied, ["bench", "energy"], "denied without energy")
 	Bt.card_denied.disconnect(on_denied)
 	check(ui.calls.get("refresh_hand", 0) > 0, "UI refreshed")
-	# swap tap
+	# a fainted creature's cards stay and are discarded for 1 energy
+	wick.alive = false
+	wick.hp = 0
+	_hand(1, wick.uid, "sig")
+	var dead = St.hand[1]
 	St.energy = 3
+	St.chain = 2
+	St.chain_t = 0
+	var hp1: float = e.hp
+	var disc := []
+	var on_disc := func(i): disc.append(i)
+	Bt.card_discarded.connect(on_disc)
+	Bt.play_card(1)
+	Bt.card_discarded.disconnect(on_disc)
+	eq(disc, [1], "dead card discarded")
+	eq(St.energy, 2.0, "discard costs 1")
+	eq(e.hp, hp1, "discard does no damage")
+	eq(St.chain, 2, "discard leaves the chain")
+	check(dead in St.disc, "dead card in the discard pile")
+	check(St.hand[1] != dead, "slot redrawn")
+	St.swap_cd = 0
 	Bt.swap_tap(wick.uid)
-	eq(St.active, wick.uid, "swap tap")
-	eq(St.energy, 2.0, "swap costs 1")
-	Bt.swap_tap(bell.uid)
-	eq(St.active, wick.uid, "swap tap blocked by cooldown")
+	eq(St.active, bell.uid, "can't swap to a fainted creature")
+	wick.alive = true
+	wick.hp = wick.max_hp
 	# multi-hit lands extra hits later; from_shield; next_strike
 	e = _battle(["coilsnail", "kilnback"], "brinecrab")
 	var coil: Mon = St.party[0]
@@ -483,7 +515,7 @@ func test_statuses() -> void:
 	St.chain = 3
 	Bt._apply_mon_status(wick, "shock")
 	eq(St.chain, 0, "shock resets your chain")
-	eq(St.swap_cd, 1.0, "shock puts swapping on cooldown")
+	eq(St.swap_cd, 1.0, "shock puts swapping on a 1s cooldown")
 	Bt._apply_mon_status(wick, "root")
 	St.energy = 0
 	St.auto_t = -999
@@ -562,13 +594,13 @@ func test_traits() -> void:
 	e = _battle(["emberwick", "skiray", "sparkit"], "puddlet")
 	var sky: Mon = St.party[1]
 	var spk: Mon = St.party[2]
-	_hand(0, sky.uid, "strike")
-	Bt.play_card(0)
-	eq(St.discount, 1, "Relay: next card -1 after swapping in")
+	Bt.swap_tap(sky.uid)
+	eq(St.discount, 1, "Relay: next card -1 after swapping to it")
 	St.energy = 5
 	St.swap_cd = 0
 	St.chain = 2
 	St.chain_t = 0
+	St.active = spk.uid
 	_hand(1, spk.uid, "strike")   # Jolt 1 - 1 relay = 0; chain → 3 → Live Wire +1
 	Bt.play_card(1)
 	eq(St.chain, 3, "chain 3")
@@ -613,7 +645,7 @@ func test_perfect_swap() -> void:
 	var hs0: int = feel.calls.get("slow_mo", 0)
 	Bt.swap_tap(bell.uid)
 	check(e.perfect, "perfect swap")
-	eq(St.energy, 6.0, "refund 2 after paying 1")
+	eq(St.energy, 7.0, "refund 2 (swaps are free)")
 	eq(St.stats.perfects, 1, "perfect counted")
 	eq(feel.calls.get("slow_mo", 0), hs0 + 1, "slow-mo")
 	Bt.tick_battle(0.31, 0)   # the heavy fires

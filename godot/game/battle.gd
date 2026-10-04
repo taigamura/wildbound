@@ -1,4 +1,4 @@
-# Real-time combat: lineup deck, bench-card swaps, auto attacks, enemy intents and heavies,
+# Real-time combat: lineup deck, lead-only cards, portrait swaps, auto attacks, enemy intents and heavies,
 # statuses, Perfect Swap, chain meter. Spec: ../CLAUDE.md §3–§4. Port of game/src/game/battle.ts.
 #
 # Visuals go to the other modules per CONTRACT.md: Stage.projectile/lightning/tint_arena/set_biome,
@@ -7,8 +7,10 @@ extends Node
 
 ## A card was played from hand slot i (the UI animates it away).
 signal card_played(i: int)
-## A card in slot i was refused: why = "energy" | "swap" | "busy".
+## A card in slot i was refused: why = "energy" | "bench" | "busy".
 signal card_denied(i: int, why: String)
+## A fainted creature's card in slot i was thrown away for BAL.discard_cost (the UI animates it away).
+signal card_discarded(i: int)
 
 var debug := {}
 var _pending: Array[bool] = []   # slot i is waiting for its delayed repaint (TS: the slot has the 'play' class)
@@ -169,19 +171,14 @@ func start_battle(n: MapNode) -> void:
 				S.mode = "battle"))
 
 func _healthiest() -> Mon:
-	var best: Mon = null
-	for c in S.team():
-		if c.alive and (best == null or c.hp / c.max_hp > best.hp / best.max_hp):
-			best = c
-	return best
+	return S.healthiest()
 
 # ================= deck & hand =================
 func _build_deck() -> void:
 	var refs: Array[CardRef] = []
-	for c in S.team():
-		if c.alive:
-			for slot in Data.SLOTS:
-				refs.append(CardRef.new(c.uid, slot))
+	for c in S.team():   # fainted creatures' cards stay in: they clog the hand until discarded
+		for slot in Data.SLOTS:
+			refs.append(CardRef.new(c.uid, slot))
 	S.draw = refs
 	Util.shuffle(S.draw)
 	S.disc = []
@@ -209,19 +206,6 @@ func _draw_into(i: int, delay := 0.3) -> void:
 		_pending[i] = false
 		Ui.paint_card(i))
 
-## A creature fainted: its cards leave the fight.
-func _purge_cards(uid: int) -> void:
-	S.draw = S.draw.filter(func(r): return r.uid != uid)
-	S.disc = S.disc.filter(func(r): return r.uid != uid)
-	for i in S.hand.size():
-		var r = S.hand[i]
-		if r != null and r.uid == uid:
-			_draw_into(i, 0.25)
-	# an empty slot can be refilled now that the pool changed
-	for i in S.hand.size():
-		if S.hand[i] == null and not _pending[i]:
-			_draw_into(i, 0)
-
 func play_card(i: int) -> void:
 	Sfx.audio()
 	if i < 0 or i >= S.hand.size():
@@ -236,9 +220,12 @@ func play_card(i: int) -> void:
 	if block != "":
 		Sfx.deny()
 		Platform.haptic("warning")
-		if block == "swap":
-			Fx.toast("Swapping is cooling down")
+		if block == "bench":
+			Fx.toast("Swap to %s to play this" % S.mon(r.uid).name)
 		card_denied.emit(i, block)
+		return
+	if S.card_dead(r):
+		_discard(i)
 		return
 	var co := S.card_of(r)
 	var def: Dictionary = co.def
@@ -258,18 +245,25 @@ func play_card(i: int) -> void:
 	S.chain_t = 0
 	if not S.chain:
 		S.wired = false   # a fresh chain re-arms Live Wire
-	var swapped := owner.uid != S.active
-	if swapped:
-		_swap_to(owner.uid, "card")
 	_resolve_card(def, pow, owner, r.slot)
 	if def.get("chain"):
 		S.chain = mini(Data.BAL.chain_max, S.chain + def.chain)
-	if swapped and _has(owner, "relay") and owner.alive:
-		S.discount = maxi(S.discount, 1)
-		_trait_pop("relay", "−1")
 	if _has(owner, "livewire") and not S.wired and S.chain >= Data.BAL.livewire_chain:
 		S.wired = true
 		_trait_energy("livewire")
+	Ui.refresh_hand()
+
+## A fainted creature's card: pay to throw it away and draw. No chain, no Traits, discount kept.
+func _discard(i: int) -> void:
+	var r: CardRef = S.hand[i]
+	S.energy -= Data.BAL.discard_cost
+	S.hand[i] = null
+	S.disc.append(r)
+	Sfx.card()
+	Platform.haptic("light")
+	Fx.toast("Discarded %s's card" % S.mon(r.uid).name)
+	card_discarded.emit(i)
+	_draw_into(i)
 	Ui.refresh_hand()
 
 func _resolve_card(C: Dictionary, pow: float, me: Mon, slot: String) -> void:
@@ -418,7 +412,7 @@ func _apply_mon_status(c: Mon, k: String) -> void:
 	if k == "shock":
 		S.chain = 0
 		S.chain_t = 99
-		S.swap_cd = maxf(S.swap_cd, Data.BAL.swap_cd)
+		S.swap_cd = maxf(S.swap_cd, Data.BAL.shock_swap_cd)
 		Fx.pop_num(Vector2(hp.x, hp.y - U * 1.1), "Shocked", "", "Chain lost", _el_hex("volt"))
 		return
 	c.status = {"k": k, "t": Data.STATUS_DUR[k], "acc": 0.0}
@@ -668,13 +662,15 @@ func swap_tap(uid: int) -> void:
 	if S.swap_cd > 0 or S.energy < Data.BAL.swap_cost:
 		Sfx.deny()
 		Platform.haptic("warning")
-		if S.swap_cd <= 0:
+		if S.swap_cd > 0:
+			Fx.toast("Swap ready in %ds" % ceili(S.swap_cd))
+		else:
 			Fx.toast("Swapping costs %d energy" % Data.BAL.swap_cost)
 		return
 	S.energy -= Data.BAL.swap_cost
 	_swap_to(uid, "tap")
 
-## Make `uid` the lead. Logic is instant; the visuals catch up. how: "tap" | "card" | "forced".
+## Make `uid` the lead. Logic is instant; the visuals catch up. how: "tap" | "forced".
 func _swap_to(uid: int, how: String) -> void:
 	var old = S.active_actor()
 	var prev := S.act()
@@ -686,6 +682,9 @@ func _swap_to(uid: int, how: String) -> void:
 	S.auto_t = 0
 	if how != "forced":
 		S.swap_cd = Data.BAL.swap_cd
+		if _has(S.act(), "relay"):
+			S.discount = maxi(S.discount, 1)
+			_trait_pop("relay", "−1")
 	Sfx.swap()
 	Platform.haptic("light")
 	var p: Vector2 = Layout.ppos()
@@ -737,7 +736,7 @@ func _mon_down(c: Mon) -> void:
 	Platform.haptic("error")
 	Feel.shake(0.5)
 	Feel.hit_stop(0.12)
-	_purge_cards(c.uid)
+	Ui.refresh_hand()   # its cards stay in hand, now as discards
 	Ui.render_bench()
 	if lead:
 		var pm = S.actor_for(c)

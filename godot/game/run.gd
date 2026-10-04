@@ -327,19 +327,21 @@ func _next_floor() -> void:
 	show_map()
 
 # ================= after a fight =================
-## Revive and tidy the party, bank the loot, then route to rewards or the end of the run.
+## Tidy the party (victories don't heal: fainted creatures stay down until a Spring or Heal),
+## bank the loot, then route to rewards or the end of the run.
 func after_fight() -> void:
 	var e = S.enemy
 	for c in S.party:
-		if not c.alive:
-			c.alive = true
-			c.hp = roundi(c.max_hp * Data.BAL.revive_hp)
 		c.shield = 0.0
 		c.status = null
 		c.reflect = 0.0
 		c.next_strike = 1.0
 	if not (S.active in S.lineup):
 		S.active = S.lineup[0]
+	if S.act() == null or not S.act().alive:
+		var h := S.healthiest()
+		if h != null:
+			S.active = h.uid
 	var loot = null
 	if e != null:
 		_fight_essence(e)
