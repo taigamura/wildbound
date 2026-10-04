@@ -11,7 +11,7 @@ const SLOP := 6.0         # px of movement before a press counts as a drag
 const FAN_DEG := 8.0      # rotation per step from the centre (4 cards → ±4°, ±12°)
 const FAN_DROP := 0.06    # × card width × step² that outer cards sit lower
 
-const SCREENS := ["scr-title", "scr-map", "scr-reward", "scr-upgrade", "scr-party", "scr-end", "scr-pack", "scr-coll", "scr-shop"]
+const SCREENS := ["scr-title", "scr-team", "scr-map", "scr-reward", "scr-upgrade", "scr-party", "scr-end", "scr-pack", "scr-coll", "scr-shop"]
 
 var layer := CanvasLayer.new()
 var root := Control.new()
@@ -155,6 +155,14 @@ func _build_hud() -> void:
 		Sfx.audio())
 	el.muteBtn = mute
 	meta.add_child(mute)
+	# quit (no pause): the first tap arms it, the second ends the run (Run.quit_tap)
+	var quit := Tap.new(UiKit.flat(UiKit.PANEL, 16, 1, UiKit.LINE))
+	quit.custom_minimum_size = Vector2(32, 32)
+	quit.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	quit.add_child(UiKit.icon("exit", 16, UiKit.MUTE))
+	quit.pressed.connect(func(): Run.quit_tap(quit))
+	el.quitBtn = quit
+	meta.add_child(quit)
 
 	var foe := _plate()
 	hud_top.add_child(foe.panel)
