@@ -213,9 +213,15 @@ static func build(ui) -> void:
 	_screen(ui, "scr-title", t_logo, [head, metarow, el.startBtn, el.bestT])
 
 	# ---- team
-	var tm_head := _vbox_with(6, [_named(ui, "teamEyebrow", UiKit.eyebrow("Team")), UiKit.h2("Build your team"),
-		UiKit.sub("Pick up to three. Your team is your deck. The lead starts each fight; tap a bench slot to make it the lead.")])
+	# (no intro paragraph: the hint under the lineup says what a tap does, which keeps Done on screen)
+	var tm_head := _vbox_with(6, [_named(ui, "teamEyebrow", UiKit.eyebrow("Team")), UiKit.h2("Build your team")])
 	el.teamOrder = UiKit.grid(3, 8)
+	# under the lineup: the deck's element mix and a two-line hint (what a tap does / the replace prompt)
+	el.teamMix = UiKit.hbox(6)
+	el.teamMix.custom_minimum_size.y = 22
+	el.teamHint = UiKit.lbl("", "700", 12, UiKit.MUTE, {"wrap": true, "lh": -1})
+	el.teamHint.custom_minimum_size.y = 32
+	var tm_info := _vbox_with(6, [el.teamMix, el.teamHint])
 	var starters := UiKit.grid(3, 8)
 	el.starters = starters
 	var st_m := MarginContainer.new()
@@ -226,7 +232,7 @@ static func build(ui) -> void:
 	st_m.add_theme_constant_override("margin_bottom", 4)
 	st_m.add_child(starters)
 	el.teamDone = big("Done")
-	_screen(ui, "scr-team", null, [tm_head, el.teamOrder, CapScroll.new(st_m, 0.34), el.teamDone], 0.74)
+	_screen(ui, "scr-team", null, [tm_head, el.teamOrder, tm_info, CapScroll.new(st_m, 0.31), el.teamDone], 0.74)
 
 	# ---- map
 	el.trail = UiKit.hbox(5)

@@ -54,7 +54,10 @@ Each element owns one status:
 - **Quit:** a button in the battle HUD (beside mute) and on the map. There is no pause: the first tap arms it for 2s, the second ends the run as a loss ("Retreated"). Loot already banked is kept.
 
 ### 4.2 Lineup
-- Before a run, the **Team** screen (opened from the title's Team button, never the title itself) picks the team: **up to 3** owned creatures. Tap a creature to add or remove it; tap a lineup slot to make it the lead. The title shows the current team and Start. The party *is* this lineup for the whole run (no creatures join or leave mid-run). The last team is remembered (saved on every change).
+- Before a run, the **Team** screen (opened from the title's Team button, never the title itself) picks the team: **up to 3** owned creatures. Tap a creature to add or remove it (at least 1 stays); tap a lineup slot to make it the lead. The title shows the current team and Start. The party *is* this lineup for the whole run (no creatures join or leave mid-run). The last team is remembered (saved on every change).
+- **Selection is always readable.** Each lineup slot and its picker card share a numbered badge in the creature's element colour ("1 ★" is the lead, then "2", "3"); picked creatures glow with a bright element border, unpicked ones are dimmed.
+- **Nothing is replaced silently.** With the team full, tapping an unpicked creature makes it the *pending* pick (pulsing outline); the slots pulse with "Tap to replace" and the hint reads "Swap in X: tap a slot to replace". Tapping a slot (or an in-team picker card) puts X in that position, keeping the order (replacing the lead makes X the lead). Tapping X again cancels; tapping another unpicked creature changes the pending pick. The changed slot pops, with a select haptic.
+- Under the lineup, a **Deck** line shows the team's element mix (e.g. Ember ×2, Tide ×1).
 - The **deck** is the lineup's *equipped* cards: up to 3 creatures × 3 cards (Strike / Skill / Signature, as set in each creature's loadout, §16).
 - The party screen (choose the lead) opens from the map's **Lineup** button at any time. It is never forced (pillar 3).
 
@@ -316,7 +319,7 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godot hangs at startup without it here).
 - `godot --headless --audio-driver Dummy --path godot --quit`: load check (parse errors show here)
 - `godot --headless --audio-driver Dummy --path godot --script res://tests/test_core.gd`: core logic tests (all must pass)
-- `godot --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|team|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). Renders for real here (Vulkan llvmpipe).
+- `godot --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|team|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). `--shot=team-swap` shows the Team screen with every creature owned, a full team and Cinderpip pending (it uses a scratch save, `user://shot-team-swap.cfg`, never `save.cfg`). Renders for real here (Vulkan llvmpipe).
 - `godot --audio-driver Dummy --path godot --script res://tests/stage_preview.gd`: stage-only visual test (both biomes, effects)
 - `godot --path godot -e`: the editor
 

@@ -673,8 +673,9 @@ func _render_title() -> void:
 	UiScreens.set_meta_btn(el.collBtn, "Collection", "%d / %d%s" % [own.size(), Data.ROSTER.size(), (" · %d ✦" % sh) if sh else ""])
 	UiScreens.set_meta_btn(el.shopBtn, "Item shop", "%d gold" % Meta.wallet().gold)
 
-## A compact team member: element orb, name, "Lead" marked in gold.
-func _team_chip(k: String, lead: bool) -> Control:
+## A compact team member: element orb, name, "Lead" marked in gold. `replace_c` set (team screen,
+## a pending pick): the status line reads "Tap to replace" in the incoming creature's colour.
+func _team_chip(k: String, lead: bool, replace_c := Color(0, 0, 0, 0)) -> Control:
 	var sp: Dictionary = Data.SPECIES[k]
 	var c := UiKit.el_css(sp.el)
 	var p := UiKit.panel(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.18 if lead else 0.10), 12, 1.5,
@@ -684,28 +685,91 @@ func _team_chip(k: String, lead: bool) -> Control:
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_child(UiKit.orb(c, 26, sp.el, 13))
 	v.add_child(UiKit.lbl(sp.name + (" ✦" if Meta.is_shiny(k) else ""), "display", 13, UiKit.INK, {"align": "center", "lh": -4}))
-	v.add_child(UiKit.lbl("★ Lead" if lead else "Bench", "700", 10, UiKit.GOLD if lead else UiKit.MUTE, {"align": "center"}))
+	if replace_c.a > 0:
+		v.add_child(UiKit.lbl("Tap to replace", "800", 10, replace_c, {"align": "center"}))
+	else:
+		v.add_child(UiKit.lbl("★ Lead" if lead else "Bench", "700", 10, UiKit.GOLD if lead else UiKit.MUTE, {"align": "center"}))
 	p.add_child(v)
 	return p
 
+# ---- team screen (§4.2) ----
+## Owned creature waiting for a lineup slot (team full, tapped an unpicked one); "" = none.
+var _team_pending := ""
+## What changed on the last edit, popped after the re-render: {slot: int, pick: String}.
+var _team_pop := {}
+
 func show_team() -> void:
 	S.mode = "title"
+	_team_pending = ""
+	_team_pop = {}
 	_render_picks()
 	Ui.show("scr-team")
 	_show_title_actor(S.picks[0])
 
-## Team screen: the lineup order (tap a bench slot to make it lead) and the owned-creature picker
-## (tap to add, up to 3, or remove). The first pick is the lead. Saved on every change.
+## Lineup-slot badge, shared by the slot and its picker card so they read as a pair: "1 ★", "2", "3".
+func _slot_badge(i: int, c: Color) -> Control:
+	var p := UiKit.panel(UiKit.glow_box(UiKit.flat(c, 8, 1.5, UiKit.mix(c, Color.WHITE, 0.5), Vector4(6, 1, 6, 0)), UiKit.alpha(Color.BLACK, 0.35), 3))
+	p.add_child(UiKit.lbl(("%d ★" % (i + 1)) if i == 0 else str(i + 1), "800", 11, UiKit.DEEP, {"align": "center"}))
+	return p
+
+## Border-only ring that pulses (real time) over a card: the pending pick and the slots it can replace.
+func _pulse_ring(c: Color, radius: float) -> Control:
+	var r := Panel.new()
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sb := UiKit.glow_box(UiKit.flat(Color(0, 0, 0, 0), radius, 2.5, c), UiKit.alpha(c, 0.6), 8)
+	sb.draw_center = false
+	r.add_theme_stylebox_override("panel", sb)
+	Fx.kf(r, 0.55, [[0.0, {"a": 0.2}], [1.0, {"a": 1.0}]], {"loop": "alternate"})
+	return Box.fill(r)
+
+## Quick pop on whatever just changed (UI motion: Fx.kf runs in real time).
+func _team_pop_fx(n: Control) -> void:
+	if n is Tap:   # Tap keeps its pivot centred
+		Fx.kf(n, 0.3, [[0.0, {"s": 0.86}], [0.45, {"s": 1.08}], [1.0, {"s": 1.0}]])
+
+## The deck's element mix under the lineup: "Ember ×2 · Tide ×1" as element chips.
+func _render_team_mix() -> void:
+	var el := _el()
+	UiKit.clear(el.teamMix)
+	var n := {}
+	for k in S.picks:
+		var e: String = Data.SPECIES[k].el
+		n[e] = n.get(e, 0) + 1
+	var lab := UiKit.eyebrow("Deck")
+	lab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	el.teamMix.add_child(lab)
+	for e in Data.EL_KEYS:
+		if n.has(e):
+			el.teamMix.add_child(UiKit.ess(e, UiKit.el_css(e), "%s ×%d" % [Data.ELEM[e].name, n[e]]))
+
+## Team screen: the lineup slots and the owned-creature picker. Slot n and its picker card share a
+## numbered badge ("1 ★" = lead). Tap a slot to make it lead; tap a creature to add it (team not full)
+## or remove it (min 1). With the team full, tapping an unpicked creature makes it the pending pick and
+## the next slot (or in-team card) tapped is replaced by it, keeping order; nothing is replaced silently.
+## Saved on every change.
 func _render_picks() -> void:
 	var el := _el()
 	var box: Control = el.starters
 	UiKit.clear(box)
 	var own := Meta.owned()
 	S.picks = _valid_picks()
-	var changed := func(show_k: String):
+	var full: bool = S.picks.size() >= Data.BAL.lineup
+	if not full or not (_team_pending in own) or _team_pending in S.picks:
+		_team_pending = ""
+	var pend := _team_pending
+	var pc: Color = UiKit.el_css(Data.SPECIES[pend].el) if pend != "" else UiKit.MUTE
+	var changed := func(show_k: String, pop: Dictionary):
 		Meta.save_lineup(S.picks)
+		_team_pop = pop
 		_render_picks()
 		_show_title_actor(show_k)
+	var replace := func(i: int):
+		var nk := _team_pending
+		S.picks[i] = nk
+		_team_pending = ""
+		changed.call(nk, {"slot": i, "pick": nk})
+	var slots := {}
+	var cards := {}
 	UiKit.clear(el.teamOrder)
 	for i in Data.BAL.lineup:
 		if i >= S.picks.size():
@@ -713,47 +777,113 @@ func _render_picks() -> void:
 			empty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			empty.add_child(UiKit.lbl("Empty", "700", 11, UiKit.MUTE, {"align": "center", "valign": VERTICAL_ALIGNMENT_CENTER}))
 			el.teamOrder.add_child(empty)
+			slots[i] = empty
 			continue
 		var k: String = S.picks[i]
+		var c := UiKit.el_css(Data.SPECIES[k].el)
 		var t := Tap.new()
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		t.add_child(_team_chip(k, i == 0))
+		var b := Box.new()
+		b.add_child(Box.fill(_team_chip(k, i == 0, pc if pend != "" else Color(0, 0, 0, 0))))
+		if pend != "":   # replace mode: every slot is a target, outlined in the incoming creature's colour
+			b.add_child(_pulse_ring(pc, 12))
+		b.add_child(Box.at(_slot_badge(i, c), "tr", Vector2(4, 4)))
+		t.add_child(b)
 		_btn(t, func():
+			if _team_pending != "":
+				replace.call(i)
+				return
 			if S.picks[0] != k:
 				S.picks.erase(k)
 				S.picks.insert(0, k)
-			changed.call(k))
+			changed.call(k, {"slot": 0, "pick": k}))
 		el.teamOrder.add_child(t)
+		slots[i] = t
 	for k in Data.ROSTER:
 		if not (k in own):
 			continue
 		var sp: Dictionary = Data.SPECIES[k]
 		var shiny := Meta.is_shiny(k)
 		var i: int = S.picks.find(k)
+		var is_pend: bool = k == pend
 		var c := UiKit.el_css(sp.el)
-		var st := UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.10), 16, 1.5, UiKit.alpha(c, 0.3), Vector4(6, 12, 6, 10))
-		var st_on := UiKit.glow_box(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.26), 16, 1.5, c, Vector4(6, 12, 6, 10)), UiKit.alpha(c, 0.4), 11)
-		var t := Tap.new(st, st_on)
+		var pad := Vector4.ZERO   # content padding lives in a MarginContainer so the pulse ring can hug the border
+		var st: StyleBoxFlat
+		if i >= 0:   # in the team: bright element border + glow
+			st = UiKit.glow_box(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.30), 16, 3, c, pad), UiKit.alpha(c, 0.55), 12)
+		elif is_pend:   # waiting for a slot
+			st = UiKit.glow_box(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.20), 16, 2, UiKit.mix(c, Color.WHITE, 0.4), pad), UiKit.alpha(c, 0.4), 10)
+		else:   # owned but not picked: dim
+			st = UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.05), 16, 1, UiKit.alpha(c, 0.18), pad)
+		var t := Tap.new(st)
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		t.on = i >= 0
+		var b := Box.new()
 		var v := UiKit.vbox(6)
 		v.alignment = BoxContainer.ALIGNMENT_CENTER
 		v.add_child(UiKit.orb(c, 40, sp.el, 18))
 		v.add_child(UiKit.lbl(sp.name + (" ✦" if shiny else ""), "display", 16, UiKit.INK, {"align": "center", "lh": -4}))
-		v.add_child(UiKit.lbl("Lead" if i == 0 else ("Bench" if i > 0 else sp.get("role", "")), "700", 11, UiKit.MUTE, {"align": "center"}))
-		t.add_child(v)
+		var status: String = "Lead" if i == 0 else ("Bench" if i > 0 else ("Pick a slot" if is_pend else sp.get("role", "")))
+		var status_c: Color = UiKit.GOLD if i == 0 else (c if i > 0 else (UiKit.INK if is_pend else UiKit.MUTE))
+		v.add_child(UiKit.lbl(status, "700", 11, status_c, {"align": "center"}))
+		if i < 0 and not is_pend:
+			v.modulate = Color(0.75, 0.75, 0.8, 0.6)
+		var m := MarginContainer.new()
+		m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var mg := {"left": 6, "top": 12, "right": 6, "bottom": 10}
+		for side in mg:
+			m.add_theme_constant_override("margin_" + side, mg[side])
+		m.add_child(v)
+		b.add_child(Box.fill(m))
+		if is_pend:
+			b.add_child(_pulse_ring(Color.WHITE, 16))
+		if i >= 0:
+			b.add_child(Box.at(_slot_badge(i, c), "tr", Vector2(6, 6)))
+		t.add_child(b)
 		_btn(t, func():
 			var j: int = S.picks.find(k)
-			if j >= 0:
+			if _team_pending != "":
+				if k == _team_pending:   # tap again: cancel
+					_team_pending = ""
+					_team_pop = {}
+					_render_picks()
+					_show_title_actor(S.picks[0])
+				elif j >= 0:   # an in-team card is a target too
+					replace.call(j)
+				else:   # change the pending pick
+					_team_pending = k
+					_team_pop = {"pick": k}
+					_render_picks()
+					_show_title_actor(k)
+			elif j >= 0:
 				if S.picks.size() > 1:
 					S.picks.remove_at(j)
+					changed.call(S.picks[0], {"slot": j})
+				else:
+					Fx.toast("Your team needs at least one creature")
 			elif S.picks.size() < Data.BAL.lineup:
 				S.picks.append(k)
-			else:
-				S.picks[S.picks.size() - 1] = k
-			changed.call(k if k in S.picks else S.picks[0]))
+				changed.call(k, {"slot": S.picks.size() - 1, "pick": k})
+			else:   # full: hold it as the pending pick; the player chooses which slot it replaces
+				_team_pending = k
+				_team_pop = {"pick": k}
+				_render_picks()
+				_show_title_actor(k))
 		box.add_child(t)
+		cards[k] = t
 	el.teamEyebrow.text = "Team · %d/%d" % [S.picks.size(), Data.BAL.lineup]
+	_render_team_mix()
+	if pend != "":
+		el.teamHint.text = "Swap in %s: tap a slot to replace. Tap %s again to cancel." % [Data.SPECIES[pend].name, Data.SPECIES[pend].name]
+		el.teamHint.add_theme_color_override("font_color", pc)
+	else:
+		var spare: bool = own.any(func(o): return not (o in S.picks))
+		el.teamHint.text = "Tap a slot to make it lead. Tap a creature to %s." % (("swap it in" if spare else "remove it") if full else "add or remove it")
+		el.teamHint.add_theme_color_override("font_color", UiKit.MUTE)
+	if _team_pop.has("slot"):
+		_team_pop_fx(slots.get(_team_pop.slot))
+	if _team_pop.has("pick"):
+		_team_pop_fx(cards.get(_team_pop.pick))
+	_team_pop = {}
 
 func _show_title_actor(key: String, silhouette := false) -> void:
 	if S.title_actor != null and is_instance_valid(S.title_actor):
@@ -1198,6 +1328,15 @@ func debug_show(id: String) -> void:
 	match id:
 		"title": to_title()
 		"team": show_team()
+		"team-swap":   # every creature owned, team full, Cinderpip pending (scratch save, not user://save.cfg)
+			Platform.use_save_path("user://shot-team-swap.cfg")
+			Platform.store_set("owned", Array(Data.ROSTER))
+			Platform.store_set("lineup", ["emberwick", "bellspring", "truffmole"])
+			S.picks = Meta.last_lineup()
+			show_team()
+			_team_pending = "cinderpip"
+			_render_picks()
+			_show_title_actor("cinderpip")
 		"coll": _show_collection()
 		"shop": _show_shop(to_title)
 		"pack": _show_pack({"key": "sparkit", "shiny": false}, "Daily pack", "One new friend a day", to_title)
