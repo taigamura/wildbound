@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "Wildbound",
+    "slug": "wildbound",
+    "owner": "taigamura",
+    "version": "0.3.0",
+    "ios": { "bundleIdentifier": "com.taiga.wildbound" },
+    "extra": { "eas": { "projectId": "a12b0444-a9e0-4f39-bda7-ba8fce473872" } }
+  }
+}

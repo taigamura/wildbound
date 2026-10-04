@@ -29,7 +29,7 @@ ISLAND = 0.01         # drop opaque pieces smaller than this share of the larges
 DARK_SHARE = 1 / 3    # a dark colour covering this much of a cell beats the majority (keeps outlines and eyes)
 DARK_GAP = 48         # ...if it is at least this much darker (luma, 0-255) than the majority colour
 # Always in the palette, so every sprite can use them: the element accents (ELEM in
-# game/src/core/data.ts) and a trim gold.
+# godot/core/data.gd) and a trim gold.
 RESERVED = [(0xFF, 0x6A, 0x3D), (0x34, 0xA8, 0xFF), (0x4F, 0xCF, 0x5C), (0xFF, 0xCF, 0x2E), (0xD4, 0xA7, 0x3A)]
 
 
@@ -172,7 +172,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('src'); ap.add_argument('out')
     ap.add_argument('--kind', choices=['humanoid', 'monster'], default='humanoid', help='sets the in-game height (default humanoid)')
-    ap.add_argument('--size', type=float, default=1.0, help='monster species size (SPECIES[key].size in data.ts)')
+    ap.add_argument('--size', type=float, default=1.0, help='monster species size (SPECIES[key].size in godot/core/data.gd)')
     ap.add_argument('--height', type=int, help='force the figure to this many sprite pixels instead of snapping to the source grid')
     ap.add_argument('--palette-from', help='lock to this anchor PNG\'s colours (optional)')
     ap.add_argument('--colors', type=int, default=64, help='adaptive palette size when no --palette-from (default 64)')

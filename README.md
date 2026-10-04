@@ -7,7 +7,7 @@ A quickfire HD-2D creature roguelite for iPhone: real-time card combat where you
 | Folder | What it is | Stack |
 | --- | --- | --- |
 | `godot/` | The game. | Godot 4.7.2, GDScript, Mobile renderer |
-| `game/`, `app/` | Legacy web version (PixiJS in an Expo WebView), kept as the port's reference. | TypeScript, Expo SDK 57 |
+| `eas/` | EAS project link for `eas submit`, plus the downloaded signing credentials (gitignored). No app code. | eas-cli |
 
 ## Quick start
 
@@ -21,7 +21,7 @@ godot --headless --path godot --script res://tests/test_core.gd   # logic tests
 
 ## Shipping to TestFlight
 
-Builds run on a Mac build server over SSH and are submitted from this machine with `eas submit`. One-time: download the signing credentials with `cd app && npx eas-cli@24.10.0 credentials -p ios` (production → credentials.json → Download). Then:
+Builds run on a Mac build server over SSH and are submitted from this machine with `eas submit`. One-time, in a terminal: download the signing credentials with `cd eas && npx eas-cli@24.10.0 credentials -p ios` (production → credentials.json → Download). Then:
 
 ```bash
 scripts/ship-ios-godot.sh --no-submit   # signed ipa, no upload

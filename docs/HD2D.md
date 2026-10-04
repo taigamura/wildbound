@@ -2,7 +2,7 @@
 
 The art direction is **HD-2D**, in the spirit of Octopath Traveler: low-resolution pixel-art sprites placed in a lit, painterly diorama with depth of field and bloom. The cast is **monsters and humanoid characters**. Humanoids are generated in ChatGPT with this template; monsters use the same Style Block so the two never look like they come from different games.
 
-The rules this follows live in [CLAUDE.md](../CLAUDE.md) §13 (art direction) and Part 2 "Art space". Pack mechanics (manifest, anchors) are in [ART.md](ART.md).
+The rules this follows live in [CLAUDE.md](../CLAUDE.md) §13 (art direction) and Part 2 "Art space". In the game, sprites are listed in `godot/art/hd2d/manifest.gd` (species → image, feet anchor, head point, emitters, recolour).
 
 ## Why sprites drift, and what stops it
 
@@ -26,14 +26,14 @@ These are the style. Changing one means regenerating every sprite, so change the
 |---|---|
 | In-game height | Humanoid figures are **128 art units** tall, size-1 monsters **100**. The normalizer's manifest `height` enforces this, whatever the sprite's pixel count. Pixel size stays close across sprites because the prompts ask for matching pixel heights |
 | Humanoid height | about **128 px** (head to feet), **chibi**: **3 heads tall** (the head, crown to chin, is about 43 px; torso about one head; legs shorter than one head), like Octopath Traveler's field sprites. Big head and eyes, compact body, short limbs, but always an adult character |
-| Monster height | about **100 px × species size** (`SPECIES[key].size` in `data.ts`): a size-1 creature is 100 px, Kilnback (1.22) is 122 px |
+| Monster height | about **100 px × species size** (`SPECIES[key].size` in `godot/core/data.gd`): a size-1 creature is 100 px, Kilnback (1.22) is 122 px |
 | View and facing | Three-quarter view, **facing right** (the game mirrors enemies) |
 | Pose | Standing idle, feet on one baseline. Humanoids: weight on the back leg. Monsters: weight centred |
 | Light | Single warm key light from the **upper left**; cool fill from the right |
 | Shading | Per material: 1 highlight, 1 base, 2 shadow tones. Shadows hue-shift toward violet-blue, highlights toward warm yellow |
 | Outline | 1 px, a darker shade of the neighbouring colour ("selective outline"). **Never pure black.** |
 | Palette | At most **32 colours** asked for in the prompt (the normalizer keeps up to 64 to avoid dropping accents), slightly desaturated, warm-leaning |
-| Element accents | Ember `#FF6A3D`, Tide `#34A8FF`, Thorn `#4FCF5C`, Volt `#FFCF2E` (the game's element colours, `ELEM` in `data.ts`) |
+| Element accents | Ember `#FF6A3D`, Tide `#34A8FF`, Thorn `#4FCF5C`, Volt `#FFCF2E` (the game's element colours, `ELEM` in `godot/core/data.gd`) |
 | Background | Transparent. No ground shadow (the game draws one), no scenery, no text |
 
 What the sprite does **not** include: depth of field, bloom, glow, light shafts, particles. In HD-2D those come from the engine around the sprite (pillar 5: motion and effects come from code). A sprite with baked-in glow looks wrong once the engine adds its own.
@@ -105,7 +105,7 @@ Colours: (primary / secondary / accent)
 Expression: (one: curious, fierce, sleepy, proud, mischievous)
 ```
 
-Use the species' `feats` in `data.ts` for Features, so the image matches the procedural Sticker fallback.
+Use the species' `feats` in `godot/core/data.gd` for Features, so the image matches the creature's design.
 
 ### Fixing one thing
 
@@ -209,7 +209,7 @@ python3 scripts/hd2d-sprite.py raw.png out.png --kind monster --size 1.22   # Ki
 
 It removes the background (or uses the existing transparency), crops, and measures the source's own pixel size from the periodic colour edges. Then each source pixel becomes exactly one sprite pixel, taking the cell's most common colour (not an average, so edges and small accents stay crisp; a clearly darker colour wins with a third of the cell, so 1 px outlines and eyes survive). It reduces to 64 colours (always including the four element accents and a trim gold, `RESERVED` in the script), makes alpha hard, drops small detached specks (baked-in particles; `--keep-islands` keeps them), adds a margin, and scales back up by a whole number with nearest-neighbour to about 512 px. Nothing is merged away, so the result keeps the source's detail.
 
-It prints the grid it found and the manifest numbers (`anchor`, `height`, `head`) to paste into the pack's `manifest.ts` (see [ART.md](ART.md)). `height` is set from `--kind`/`--size`, so the figure shows at the right size in game whatever its pixel count. `head` is an estimate; nudge it in the browser.
+It prints the grid it found and the manifest numbers (`anchor`, `height`, `head`) to paste into its entry in `godot/art/hd2d/manifest.gd`. `height` is set from `--kind`/`--size`, so the figure shows at the right size in game whatever its pixel count. `head` is an estimate; nudge it in the browser.
 
 Options: `--palette-from anchor.png` locks the colours to an anchor's; `--height N` forces a fixed pixel height instead of snapping (this merges detail if N is below the source grid's height).
 
@@ -230,5 +230,5 @@ Reject and regenerate if any is true:
 ## Where things go
 
 - Approved anchors: `docs/hd2d/anchors/`, one per body type (table in Step 1). They are the style's source of truth; replacing one is a style change.
-- Finished creature sprites: an art pack, `game/src/art/packs/<id>/`, keyed by species key ([ART.md](ART.md)).
+- Finished creature sprites: `godot/art/hd2d/<species>.png`, with an entry in `godot/art/hd2d/manifest.gd` keyed by species key (set `recolor` to null so its painted colours are kept).
 - Humanoids have no in-game slot yet (CLAUDE.md §15). Keep normalized sprites that aren't anchors in `docs/hd2d/characters/` until they do.

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**This file is the single source of truth for Wildbound:** what the game is (design spec), how the code is laid out, and the rules for changing it. If code and this file disagree, one of them is a bug; fix whichever is wrong and keep them in sync in the same change. `README.md` covers setup and shipping only. `docs/ART.md` describes the legacy web art packs, and `docs/HD2D.md` is the ChatGPT template for HD-2D sprites; both follow the art rules here.
+**This file is the single source of truth for Wildbound:** what the game is (design spec), how the code is laid out, and the rules for changing it. If code and this file disagree, one of them is a bug; fix whichever is wrong and keep them in sync in the same change. `README.md` covers setup and shipping only. `docs/HD2D.md` is the ChatGPT template and normalizer guide for HD-2D sprites; it follows the art rules here. `godot/CONTRACT.md` is the module contract from the Godot port.
 
 All numbers below are **starting values**. They live in `godot/core/data.gd` (`BAL` and the roster) and are tuned by playing. When you change a number there, change it here too.
 
@@ -207,7 +207,7 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. Strike has one o
 - **End of run:** shows floor reached, gold earned, Perfect Swaps, time, and the run's Essence and loot. Loot was banked as it dropped; a win adds **+50** gold. The screen links to the item shop.
 - **Collection screen:** 12 slots; unowned are silhouettes. Tap any slot to see its cards and Trait. It is also the **loadout editor** (§16) and the **upgrade screen** (§5.2) for owned creatures.
 - **"Run again"** on the results screen restarts immediately with the same team.
-- **Persisted** (through `core/platform.ts` `store`): `owned`, `shiny`, `packDay`, `best`, `wins`, `lineup` (last team; replaces `starter`, which is read once as a fallback), `art`, `muted`, `essence`, `learned`, `loadout`, `loot` (gold and materials), `upgrades` (per-species track levels).
+- **Persisted** (through `Platform.store_get`/`store_set` in `core/platform.gd`, saved to `user://save.cfg`): `owned`, `shiny`, `packDay`, `best`, `wins`, `lineup` (last team; `starter` is read once as a fallback), `muted`, `essence`, `learned`, `loadout`, `loot` (gold and materials), `upgrades` (per-species track levels).
 
 ## 12. Feel
 - **Haptics:** light on card play, medium on a hit landing, heavy on a Perfect Swap or a pack reveal.
@@ -288,7 +288,7 @@ Unlocks are permanent.
 ## Session start: catching up
 A SessionStart hook (`.claude/hooks/session-context.sh`, registered in `.claude/settings.json`) prints the last 10 commits and any uncommitted changes into context automatically.
 1. **Recent work:** that hook output. The commit messages say what changed and why. If it's missing, run `.claude/hooks/session-context.sh` yourself.
-2. **Current state:** read "Releasing" below for what has shipped and how builds work. That section is the authority for anything git can't see (TestFlight uploads, credentials, the build server).
+2. **Current state:** read "Current state" and "Releasing" below for what works, what is placeholder, what has shipped and how builds work. That section is the authority for anything git can't see (TestFlight uploads, credentials, the build server).
 3. **Uncommitted work:** also in the hook output.
 
 Keep both up to date: write commit bodies that explain *why*, and edit "Releasing" in the same change whenever release state changes (a new upload, a credentials change, a pipeline change).
@@ -296,9 +296,20 @@ Keep both up to date: write commit bodies that explain *why*, and edit "Releasin
 ## What this is
 A **Godot 4.7.2** game (`godot/`, GDScript, Mobile renderer), exported to iOS on the Mac build server and submitted from this machine.
 
-`game/` (PixiJS web app) and `app/` (Expo WebView shell) are the **legacy web version**, kept only as the reference the Godot port was made from. Don't add features there; delete them once the Godot build is confirmed on device.
+It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 0.2.0 (5)); that code was deleted after the port and lives on only in git history (the last commit with them is `d1109ef`).
+
+`eas/` is not app code: it only links the repo to the EAS project `@taigamura/wildbound` so `eas submit` can upload ipas with the App Store Connect key stored on EAS, and it holds the downloaded signing credentials (gitignored).
 
 `godot/CONTRACT.md` is the module contract from the port: which autoload owns what, the cross-module APIs, and the naming rule (TS names → snake_case). Keep it in sync when an API changes.
+
+## Current state (2026-10-04)
+- **Shipped:** v0.3.0 build 6 on TestFlight, the first Godot build. Everything in Part 1 is implemented: real-time card combat with the fanned hand, statuses, Perfect Swap, chain, 12 creatures with alternate cards and Traits, the 8-floor run with Warden and Noctyrm, loot, permanent upgrades, item shop, daily and bought packs, Collection with the loadout editor.
+- **Art is placeholder:** the 3 HD-2D anchors (Sable, ember fox, dragon) stand in for all 14 creatures, recoloured per element (§13). Generating the real roster with `docs/HD2D.md` is the next art task.
+- **Unverified on device:** frame rate on a real iPhone (the 3D stage was only measured on a software renderer; first lever if it drops below 60 fps: render the 3D scene at ~0.75 resolution), haptics, safe-area insets.
+- **Known gaps from the port:** no background blur on panels; a knocked-out creature's cards swap out instead of flying off; the HUD band isn't re-measured when status tags change its height.
+- **Balance is untuned** for the loot economy and 3-creature teams from floor 1 (§15).
+- **Saves:** the Godot app's save file (`user://save.cfg`) starts fresh; progress from the web builds (≤ 0.2.0) does not carry over.
+- **Device floor:** iPhone XS or newer (A12), required by Godot's Mobile renderer.
 
 ## Commands
 Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godot hangs at startup without it here).
@@ -334,9 +345,8 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 ## Releasing (iOS / TestFlight)
 - **Identity:** bundle ID `com.taiga.wildbound`, App Store Connect app ID `6818680785`, Apple team `6R43H3SA48`. Version: `application/short_version` in `godot/export_presets.cfg` (0.3.0). Build number: `godot/ios/build-number.txt` holds the last build uploaded to App Store Connect; the script builds with +1 and writes it back only after a confirmed submit. Commit it with the History entry.
 - **Normal path: `scripts/ship-ios-godot.sh`** (also what `/ship-ios` runs, via `.claude/ship.json`), from this box after the change is merged to `main`. It pulls `origin/main` on the Mac build server (`taigamura-MBP`, 192.168.50.175, repo `~/dev/wildbound`), copies the signing credentials to a temp dir there, imports them into a throwaway keychain (never the login keychain, so no GUI unlock is needed), has Godot 4.7.2 (`/usr/local/bin/godot` → `~/Applications/Godot-4.7.2.app`, templates in `~/Library/Application Support/Godot/export_templates/4.7.2.stable`) write the Xcode project from the `iOS` preset, runs `xcodebuild archive` + `-exportArchive` itself (`godot/ios/mac-build.sh`), copies the ipa to `dist/ios/`, and runs `eas submit`. Mac log: `~/wildbound-godot-build.log`; staged project and import cache: `~/wildbound-build/godot`. Flags: `--no-submit`, `--unsigned` (no credentials; proves Godot + Xcode compile), `--sync-local` (build the uncommitted `godot/` tree; test only), `--build-number N`.
-- **Signing credentials** stay on EAS (distribution certificate, App Store provisioning profile, ASC API key). The build needs a local copy: `cd app && npx eas-cli@24.10.0 credentials -p ios` → production → credentials.json → Download. That writes `app/credentials.json` and `app/credentials/ios/` (gitignored, never commit). Re-download when the certificate or profile is renewed. Submission uses `eas submit` with the ASC key stored on EAS; if it returns `401 NOT_AUTHORIZED`, replace the key via `eas credentials -p ios`.
+- **Signing credentials** stay on EAS (distribution certificate, App Store provisioning profile, ASC API key). The build needs a local copy: in a real terminal (it's interactive, so not via Claude Code's `!`), `cd eas && npx eas-cli@24.10.0 credentials -p ios` → production → credentials.json → Download. That writes `eas/credentials.json` and `eas/credentials/ios/` (gitignored, never commit). Re-download when the certificate or profile is renewed. Submission uses `eas submit` with the ASC key stored on EAS; if it returns `401 NOT_AUTHORIZED`, replace the key via `eas credentials -p ios`.
 - **Godot iOS requirements:** `project.godot` must set `rendering/textures/vram_compression/import_etc2_astc=true` (iOS export refuses otherwise). The Mobile renderer makes Godot require an A12 chip or newer (iPhone XS+); Apple restricts adding device requirements once an app is live, so settle this before the first App Store release.
-- **Legacy Expo app (`app/`):** the local EAS build on the Mac is broken by an Xcode 26.3 / Expo SDK 57 mismatch (`expo-modules-jsi`); `npm run build:ios` (EAS cloud) + `npm run submit:ios` still work for it.
 - **History** (newest first; `/ship-ios` adds a line per upload via `releaseLog` in `.claude/ship.json`; add one by hand for any other upload):
   - 2026-10-04: v0.3.0 build 6 (Godot port, local Mac build via `scripts/ship-ios-godot.sh`, commit `6465123`, submission `7e14b8f4`) uploaded to TestFlight. First Godot build: real 3D HD-2D diorama; same rules and screens as 0.2.0 (5).
   - 2026-10-04: v0.2.0 build 5 (EAS cloud build `e578f5af`, commit `b723ad9`, submission `4edf2407`) uploaded to TestFlight. HD-2D art style, loot/shop economy replacing capture, fanned card hand. Built in the cloud because the local Mac build is still blocked (see above).
