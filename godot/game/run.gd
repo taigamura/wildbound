@@ -41,7 +41,8 @@ func _node_btn(g: String, title: String, sub: String, c: Color, f: Callable, raw
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	v.add_child(UiKit.lbl(title, "display", 18, UiKit.INK, {"wrap": true, "lh": -4}))
-	v.add_child(UiKit.lbl(sub, "700", 12, UiKit.MUTE, {"wrap": true, "lh": 0}))
+	if sub != "":
+		v.add_child(UiKit.lbl(sub, "700", 12, UiKit.MUTE, {"wrap": true, "lh": 0}))
 	h.add_child(v)
 	if raw:
 		t.pressed.connect(f)
@@ -258,8 +259,8 @@ func _node_view(n: MapNode) -> Dictionary:
 	if n.type == "spring":
 		return {"c": UiKit.HP, "g": "moon", "t": "Moon Spring", "s": "Heal the party to full"}
 	if n.type == "warden":
-		return {"c": UiKit.EL.thorn, "g": "crown", "t": "Gravewood", "s": "Warden · heavies alternate Thorn and Ember · %d gold + %d materials" % [Data.BAL.warden_gold, Data.BAL.warden_mats]}
-	return {"c": UiKit.FOE, "g": "crown", "t": "Noctyrm", "s": "Boss · changes element every %ss · %d gold + one of each material" % [Data.num(Data.BAL.boss_shift), Data.BAL.boss_gold]}
+		return {"c": UiKit.EL.thorn, "g": "crown", "t": "Gravewood", "s": ""}
+	return {"c": UiKit.FOE, "g": "crown", "t": "Noctyrm", "s": ""}
 
 ## `reroll` = false keeps this floor's nodes (coming back from the lineup screen).
 func show_map(reroll := true) -> void:
@@ -327,19 +328,21 @@ func _next_floor() -> void:
 	show_map()
 
 # ================= after a fight =================
-## Revive and tidy the party, bank the loot, then route to rewards or the end of the run.
+## Tidy the party (victories don't heal: fainted creatures stay down until a Spring or Heal),
+## bank the loot, then route to rewards or the end of the run.
 func after_fight() -> void:
 	var e = S.enemy
 	for c in S.party:
-		if not c.alive:
-			c.alive = true
-			c.hp = roundi(c.max_hp * Data.BAL.revive_hp)
 		c.shield = 0.0
 		c.status = null
 		c.reflect = 0.0
 		c.next_strike = 1.0
 	if not (S.active in S.lineup):
 		S.active = S.lineup[0]
+	if S.act() == null or not S.act().alive:
+		var h := S.healthiest()
+		if h != null:
+			S.active = h.uid
 	var loot = null
 	if e != null:
 		_fight_essence(e)
@@ -555,8 +558,41 @@ func _render_party() -> void:
 			row.add_child(star)
 		list.add_child(row)
 
+# ================= quitting =================
+## Quit button (battle HUD and map): the first tap arms it for 2s, the second ends the run. No pause.
+func quit_tap(t: Tap) -> void:
+	Sfx.audio()
+	if not (S.mode in ["map", "battle", "anim", "intro", "reward"]):
+		return
+	var now := Time.get_ticks_msec()
+	if t.has_meta("armed") and now - int(t.get_meta("armed")) < 2000:
+		t.remove_meta("armed")
+		t.modulate = Color.WHITE
+		quit_run()
+		return
+	t.set_meta("armed", now)
+	t.modulate = Color(1, 0.55, 0.6)
+	if t.has_meta("lbl"):
+		t.get_meta("lbl").text = "Sure?"
+	Sfx.pick()
+	Platform.haptic("warning")
+	Fx.toast("Tap again to quit the run")
+	get_tree().create_timer(2.0, true, false, true).timeout.connect(func():
+		if is_instance_valid(t) and t.has_meta("armed") and Time.get_ticks_msec() - int(t.get_meta("armed")) >= 1990:
+			t.remove_meta("armed")
+			t.modulate = Color.WHITE
+			if t.has_meta("lbl"):
+				t.get_meta("lbl").text = "Quit")
+
+## End the run now as a loss. end_run bumps S.tok, so in-flight battle callbacks bail.
+func quit_run() -> void:
+	S.mode = "over"
+	S.tok += 1
+	end_run(false, true)
+
 # ================= end of run =================
-func end_run(won: bool) -> void:
+## `quit` = the player retreated with the quit button (a loss; banked loot stays).
+func end_run(won: bool, quit := false) -> void:
 	var el := _el()
 	S.mode = "over"
 	S.tok += 1
@@ -565,8 +601,9 @@ func end_run(won: bool) -> void:
 	var secs := roundi((Time.get_ticks_msec() - float(S.stats.start)) / 1000.0)
 	var reached: int = Data.BAL.floors if won else S.floor
 	Meta.record_run(won, reached)
-	el.endH.text = "Expedition won" if won else "Run over"
+	el.endH.text = "Expedition won" if won else ("Retreated" if quit else "Run over")
 	el.endP.text = ("Noctyrm is sealed. Your party walks out of the wild (+%d gold)." % Data.BAL.win_gold) if won \
+		else ("You left on floor %d. Your loot is safe." % S.floor) if quit \
 		else ("Your party fell on floor %d. Your loot is safe." % S.floor)
 	UiKit.clear(el.endStats)
 	for s in [[str(reached), "Floor"], [str(run_loot.get("gold", 0)), "Gold"], [str(S.stats.perfects), "Perfect"], ["%d:%02d" % [secs / 60, secs % 60], "Time"]]:
@@ -617,13 +654,76 @@ func _back_to_end() -> void:
 	Ui.show("scr-end")
 
 # ================= title =================
-## Team picker: tap to add (up to 3) or remove. The first pick is the lead.
+## Home screen: the current team as a summary, Start, and the meta buttons. The team is edited on scr-team.
+func _render_title() -> void:
+	var el := _el()
+	S.picks = _valid_picks()
+	var own := Meta.owned()
+	UiKit.clear(el.teamRow)
+	for i in S.picks.size():
+		el.teamRow.add_child(_team_chip(S.picks[i], i == 0))
+	el.pickEyebrow.text = "Your team · %d/%d" % [S.picks.size(), Data.BAL.lineup]
+	var best := Meta.best()
+	var wins := Meta.wins()
+	el.bestT.text = ("Expeditions won: %d · best floor %d" % [wins, best]) if wins else (("Best run: floor %d" % best) if best else "Runs take about five minutes")
+	var ready := Meta.pack_ready()
+	UiScreens.set_meta_btn(el.packBtn, "Daily pack", "Ready to open" if ready else "Next in " + Meta.next_pack_in(), ready)
+	el.packBtn.disabled = not ready
+	var sh := Meta.shinies().size()
+	UiScreens.set_meta_btn(el.collBtn, "Collection", "%d / %d%s" % [own.size(), Data.ROSTER.size(), (" · %d ✦" % sh) if sh else ""])
+	UiScreens.set_meta_btn(el.shopBtn, "Item shop", "%d gold" % Meta.wallet().gold)
+
+## A compact team member: element orb, name, "Lead" marked in gold.
+func _team_chip(k: String, lead: bool) -> Control:
+	var sp: Dictionary = Data.SPECIES[k]
+	var c := UiKit.el_css(sp.el)
+	var p := UiKit.panel(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.18 if lead else 0.10), 12, 1.5,
+		c if lead else UiKit.alpha(c, 0.3), Vector4(6, 6, 6, 6)))
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var v := UiKit.vbox(2)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_child(UiKit.orb(c, 26, sp.el, 13))
+	v.add_child(UiKit.lbl(sp.name + (" ✦" if Meta.is_shiny(k) else ""), "display", 13, UiKit.INK, {"align": "center", "lh": -4}))
+	v.add_child(UiKit.lbl("★ Lead" if lead else "Bench", "700", 10, UiKit.GOLD if lead else UiKit.MUTE, {"align": "center"}))
+	p.add_child(v)
+	return p
+
+func show_team() -> void:
+	S.mode = "title"
+	_render_picks()
+	Ui.show("scr-team")
+	_show_title_actor(S.picks[0])
+
+## Team screen: the lineup order (tap a bench slot to make it lead) and the owned-creature picker
+## (tap to add, up to 3, or remove). The first pick is the lead. Saved on every change.
 func _render_picks() -> void:
 	var el := _el()
 	var box: Control = el.starters
 	UiKit.clear(box)
 	var own := Meta.owned()
 	S.picks = _valid_picks()
+	var changed := func(show_k: String):
+		Meta.save_lineup(S.picks)
+		_render_picks()
+		_show_title_actor(show_k)
+	UiKit.clear(el.teamOrder)
+	for i in Data.BAL.lineup:
+		if i >= S.picks.size():
+			var empty := UiKit.panel(UiKit.flat(Color(1, 1, 1, 0.02), 12, 1.5, UiKit.LINE, Vector4(6, 6, 6, 6)))
+			empty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			empty.add_child(UiKit.lbl("Empty", "700", 11, UiKit.MUTE, {"align": "center", "valign": VERTICAL_ALIGNMENT_CENTER}))
+			el.teamOrder.add_child(empty)
+			continue
+		var k: String = S.picks[i]
+		var t := Tap.new()
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t.add_child(_team_chip(k, i == 0))
+		_btn(t, func():
+			if S.picks[0] != k:
+				S.picks.erase(k)
+				S.picks.insert(0, k)
+			changed.call(k))
+		el.teamOrder.add_child(t)
 	for k in Data.ROSTER:
 		if not (k in own):
 			continue
@@ -651,19 +751,9 @@ func _render_picks() -> void:
 				S.picks.append(k)
 			else:
 				S.picks[S.picks.size() - 1] = k
-			_render_picks()
-			_show_title_actor(k if k in S.picks else S.picks[0]))
+			changed.call(k if k in S.picks else S.picks[0]))
 		box.add_child(t)
-	el.pickEyebrow.text = "Choose your team · %d/%d" % [S.picks.size(), Data.BAL.lineup]
-	var best := Meta.best()
-	var wins := Meta.wins()
-	el.bestT.text = ("Expeditions won: %d · best floor %d" % [wins, best]) if wins else (("Best run: floor %d" % best) if best else "Runs take about five minutes")
-	var ready := Meta.pack_ready()
-	UiScreens.set_meta_btn(el.packBtn, "Daily pack", "Ready to open" if ready else "Next in " + Meta.next_pack_in(), ready)
-	el.packBtn.disabled = not ready
-	var sh := Meta.shinies().size()
-	UiScreens.set_meta_btn(el.collBtn, "Collection", "%d / %d%s" % [own.size(), Data.ROSTER.size(), (" · %d ✦" % sh) if sh else ""])
-	UiScreens.set_meta_btn(el.shopBtn, "Item shop", "%d gold" % Meta.wallet().gold)
+	el.teamEyebrow.text = "Team · %d/%d" % [S.picks.size(), Data.BAL.lineup]
 
 func _show_title_actor(key: String, silhouette := false) -> void:
 	if S.title_actor != null and is_instance_valid(S.title_actor):
@@ -693,7 +783,7 @@ func to_title() -> void:
 	S.mode = "title"
 	S.clear_actors()
 	Stage.set_biome(0)
-	_render_picks()
+	_render_title()
 	Ui.show("scr-title")
 	Ui.measure(true)
 	_show_title_actor(S.picks[0])
@@ -1093,12 +1183,21 @@ func init_run_ui() -> void:
 	el.endShopBtn.pressed.connect(func():
 		Sfx.pick()
 		_show_shop(_back_to_end))
+	el.teamBtn.pressed.connect(func():
+		Sfx.audio()
+		Sfx.pick()
+		show_team())
+	el.teamDone.pressed.connect(func():
+		Sfx.pick()
+		to_title())
+	el.mapQuit.pressed.connect(func(): quit_tap(el.mapQuit))
 	S.picks = Meta.last_lineup()
 
 ## Debug/screenshot helpers: open a screen directly.
 func debug_show(id: String) -> void:
 	match id:
 		"title": to_title()
+		"team": show_team()
 		"coll": _show_collection()
 		"shop": _show_shop(to_title)
 		"pack": _show_pack({"key": "sparkit", "shiny": false}, "Daily pack", "One new friend a day", to_title)

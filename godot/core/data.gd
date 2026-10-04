@@ -24,7 +24,7 @@ var BAL := {
 	# energy & hand
 	"energy_rate": 1.0, "energy_max": 10.0, "energy_start": 3.0, "hand": 4,
 	# swapping
-	"swap_cost": 1, "swap_cd": 1.0,
+	"swap_cost": 0, "swap_cd": 6.0, "shock_swap_cd": 1.0, "discard_cost": 1,
 	# auto-attack
 	"auto_iv": 1.5, "auto_dmg": 2,
 	# enemy
@@ -41,7 +41,7 @@ var BAL := {
 	# shields
 	"shield_delay": 3.0, "shield_decay": 0.2,
 	# party & run
-	"lineup": 3, "revive_hp": 0.25, "heal_reward": 0.4,
+	"lineup": 3, "heal_reward": 0.4,
 	# in-run card upgrades (§7)
 	"up_power": 1.3,
 	# loot (§5.1): gold, and materials sword/orb/jewel
@@ -198,7 +198,7 @@ const TRAITS := {
 	"deeproots": {"name": "Deep Roots", "from": "truffmole", "text": "Root it applies lasts +1.5s"},
 	"thirst": {"name": "Thirst", "from": "brambat", "text": "Its Strikes heal it for 30% of their damage"},
 	"overshade": {"name": "Overshade", "from": "mossling", "text": "When it shields itself, the weakest teammate gets half"},
-	"relay": {"name": "Relay", "from": "skiray", "text": "After a card swaps it in, your next card costs 1 less"},
+	"relay": {"name": "Relay", "from": "skiray", "text": "After you swap to it, your next card costs 1 less"},
 	"livewire": {"name": "Live Wire", "from": "sparkit", "text": "The first time its card reaches chain 3+, +1 energy"},
 	"grounded": {"name": "Grounded", "from": "coilsnail", "text": "Can't be Shocked; a Shock on it gives +1 energy instead"},
 }

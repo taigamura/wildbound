@@ -21,6 +21,7 @@ var nm: Label
 var tx: Label
 var decos: Array = []   # [Control, corner "tl" "tr" "bl" "br", offset Vector2]
 var key := ""           # what's painted (TS dataset.k)
+const DEAD_C := Color("#8c8c9c")   # a fainted owner's card is drained of its element colour
 
 # visual states (CSS classes)
 var lift := false
@@ -28,6 +29,7 @@ var armed := false
 var sel := false
 var pressed_state := 0   # aria-pressed: 0 none, 1 true, -1 false
 var bench := false
+var dead := false
 var locked := false
 var empty := true
 
@@ -40,23 +42,24 @@ func _init(variant := "hand") -> void:
 	resized.connect(update_minimum_size)
 	restyle()
 
-## TS cardFace(c, el, o). o: cost, owner (Mon), owner_key, bench, strong, upgraded, pow.
+## TS cardFace(c, el, o). o: cost, owner (Mon), owner_key, bench, dead, strong, upgraded, pow.
 func face(def: Dictionary, el, o := {}) -> CardView:
-	c = UiKit.el_css(el)
+	dead = o.get("dead", false)
+	c = DEAD_C if dead else UiKit.el_css(el)
 	var k = o.get("owner").key if o.get("owner") else o.get("owner_key", "")
 	var ini: String = Data.SPECIES[k].name.substr(0, 1) if k else ""
 	_reset()
 	_deco(_cost_bubble(str(o.get("cost", def.cost))), "tl", Vector2(-6, -7))
 	if ini != "":
 		_deco(_own_chip(ini), "tr", Vector2(-5, -6))
-	if o.get("bench", false):
+	if o.get("bench", false) and not dead:   # its owner must be swapped in first
 		var s := UiKit.icon("swap", 14, UiKit.alpha(UiKit.INK, 0.8))
 		_deco(s, "tr", Vector2(5, 22))
-	if o.get("strong", false):
+	if o.get("strong", false) and not dead:
 		_deco(_badge("STRONG", Vector4(4, 3, 4, 2), 4), "bl", Vector2(5, 5))
-	if str(o.get("upgraded", "")) != "":
+	if str(o.get("upgraded", "")) != "" and not dead:
 		_deco(_badge(str(o.upgraded), Vector4(3, 2, 3, 2), 3), "br", Vector2(5, 5))
-	_body(UiKit.glyph_for(def, el), def.name, Data.card_text(def, o.get("pow", 1.0)))
+	_body(UiKit.glyph_for(def, el), def.name, "Fainted: swipe to discard" if dead else Data.card_text(def, o.get("pow", 1.0)))
 	bench = o.get("bench", false)
 	empty = false
 	restyle()

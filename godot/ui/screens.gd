@@ -199,8 +199,23 @@ static func build(ui) -> void:
 	var el: Dictionary = ui.el
 	# ---- title
 	var t_logo := logo(ui, "titleH1", "Wildbound", 62, "", "Collect · Deal · Survive")
-	var head := _vbox_with(6, [_named(ui, "pickEyebrow", UiKit.eyebrow("Choose your team")),
-		UiKit.sub("Pick up to three. Your team is your deck. The first pick leads; swap to dodge heavy hits. Win fights for gold and materials.")])
+	# the current team (summary only; editing is on scr-team)
+	el.teamRow = UiKit.hbox(6)
+	el.teamRow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	el.teamBtn = ghost("Team")
+	var head := _vbox_with(8, [_named(ui, "pickEyebrow", UiKit.eyebrow("Your team")), row(el.teamRow, el.teamBtn)])
+	var metarow := UiKit.grid(3, 8)
+	for k in ["packBtn", "collBtn", "shopBtn"]:
+		el[k] = meta_btn()
+		metarow.add_child(el[k])
+	el.startBtn = big("Start expedition")
+	el.bestT = UiKit.best("")
+	_screen(ui, "scr-title", t_logo, [head, metarow, el.startBtn, el.bestT])
+
+	# ---- team
+	var tm_head := _vbox_with(6, [_named(ui, "teamEyebrow", UiKit.eyebrow("Team")), UiKit.h2("Build your team"),
+		UiKit.sub("Pick up to three. Your team is your deck. The lead starts each fight; tap a bench slot to make it the lead.")])
+	el.teamOrder = UiKit.grid(3, 8)
 	var starters := UiKit.grid(3, 8)
 	el.starters = starters
 	var st_m := MarginContainer.new()
@@ -210,13 +225,8 @@ static func build(ui) -> void:
 	st_m.add_theme_constant_override("margin_top", 6)
 	st_m.add_theme_constant_override("margin_bottom", 4)
 	st_m.add_child(starters)
-	var metarow := UiKit.grid(3, 8)
-	for k in ["packBtn", "collBtn", "shopBtn"]:
-		el[k] = meta_btn()
-		metarow.add_child(el[k])
-	el.startBtn = big("Start expedition")
-	el.bestT = UiKit.best("")
-	_screen(ui, "scr-title", t_logo, [head, CapScroll.new(st_m, 0.34), metarow, el.startBtn, el.bestT])
+	el.teamDone = big("Done")
+	_screen(ui, "scr-team", null, [tm_head, el.teamOrder, CapScroll.new(st_m, 0.34), el.teamDone], 0.74)
 
 	# ---- map
 	el.trail = UiKit.hbox(5)
@@ -229,7 +239,10 @@ static func build(ui) -> void:
 	el.mapGold.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gold.add_child(el.mapGold)
 	el.lineupBtn = ghost("Lineup")
-	_screen(ui, "scr-map", null, [el.trail, mhead, el.nodes, el.mapParty, row(gold, el.lineupBtn)])
+	el.mapQuit = ghost("Quit")
+	var mrow := row(gold, el.lineupBtn)
+	mrow.add_child(el.mapQuit)
+	_screen(ui, "scr-map", null, [el.trail, mhead, el.nodes, el.mapParty, mrow])
 
 	# ---- reward
 	el.rwSubLoot = UiKit.flow(6)

@@ -95,15 +95,31 @@ func card_cost(r: CardRef) -> int:
 		return 0   # Quickfuse: first card free
 	return maxi(0, co.def.cost - discount)
 
-## Why a card can't be played right now ("" = playable, "energy", "swap", "busy").
+## The card's owner has fainted: playing it discards it for BAL.discard_cost.
+func card_dead(r: CardRef) -> bool:
+	var c := mon(r.uid)
+	return c == null or not c.alive
+
+## Why a card can't be played right now ("" = playable, "energy", "bench", "busy").
+## Only the lead's cards play; a living bench creature's cards wait for a swap.
 func card_block(r: CardRef) -> String:
 	if mode != "battle":
 		return "busy"
+	if card_dead(r):
+		return "energy" if energy < Data.BAL.discard_cost else ""
+	if r.uid != active:
+		return "bench"
 	if energy < card_cost(r):
 		return "energy"
-	if r.uid != active and swap_cd > 0:
-		return "swap"
 	return ""
+
+## Living lineup member with the highest HP fraction (null if all fainted).
+func healthiest() -> Mon:
+	var best: Mon = null
+	for c in team():
+		if c.alive and (best == null or c.hp / c.max_hp > best.hp / best.max_hp):
+			best = c
+	return best
 
 # ---------- derived enemy state ----------
 func is_heavy(e: Enemy) -> bool:

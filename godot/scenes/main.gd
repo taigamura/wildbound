@@ -3,7 +3,7 @@ extends Node
 ## UI, opens the title screen and drives the per-frame update in TS order.
 ##
 ## Debug screenshots: `godot --path godot --resolution 390x844 -- --shot=<screen>` shows a screen
-## (title map reward upgrade party end pack coll shop battle), waits a few frames, saves
+## (title team map reward upgrade party end pack coll shop battle), waits a few frames, saves
 ## /tmp/claude-1000/wb-<screen>.png and quits. Add `--shot-dir=<dir>` to save elsewhere.
 
 var T := 0.0
@@ -108,23 +108,28 @@ func _shot_tick() -> void:
 		print("shot saved: ", path)
 		get_tree().quit()
 
-## Synthetic pointer input on card 1 (verifies tap-to-inspect and flick-to-play end to end).
+## Synthetic pointer input: press card 1, scrub right onto card 2, then (flick) swipe it up to play,
+## or (inspect) keep holding so the shot shows the magnified card.
+var _c1 := Vector2.ZERO
+var _c2 := Vector2.ZERO
 func _drive_input() -> void:
-	var b: Control = Ui.slots[1]
-	var c: Vector2 = b.get_global_transform() * (b.size / 2.0)
 	var f := _shot_frames
-	if f == 60:
-		print("before: energy=", S.energy, " mode=", S.mode, " hand1=", S.hand[1])
-		_mouse(c, true)
+	if f == 62:
+		_c1 = Ui.slots[1].get_global_transform() * (Ui.slots[1].size / 2.0)
+		_c2 = Ui.slots[2].get_global_transform() * (Ui.slots[2].size / 2.0)
+		print("before: energy=", S.energy, " mode=", S.mode, " hand2=", S.hand[2])
+		_mouse(_c1, true)
+	elif f > 52 and f < 62:   # scrub sideways along the fan
+		_move(_c1.lerp(_c2, (62 - f) / 9.0))
+	elif f == 52:
+		print("scrubbed: sel=", Ui._sel)
 	elif _shot == "inspect":
-		if f == 56:
-			_mouse(c, false)
 		return
-	elif f < 60 and f > 50:
-		_move(Vector2(c.x + 4, c.y - (60 - f) * 14))
-	elif f == 50:
-		_mouse(Vector2(c.x + 4, c.y - 140), false)
-		print("after: energy=", S.energy, " playing=", Ui.slots[1].playing, " chain=", S.chain)
+	elif f < 52 and f > 44:
+		_move(Vector2(_c2.x + 4, _c2.y - (52 - f) * 18))
+	elif f == 44:
+		_mouse(Vector2(_c2.x + 4, _c2.y - 140), false)
+		print("after: energy=", S.energy, " playing=", Ui.slots[2].playing, " chain=", S.chain)
 	elif f == 30:
 		_shot_frames = 8
 

@@ -14,7 +14,7 @@ var playing := false              # TS .play: flying off, waiting for drawInto's
 var flown := false                # flicked off the top: the next card snaps to its fan spot
 var dragging := false             # TS .drag: transitions off
 var poor := false
-var swapcd := false
+var dim_kind := ""
 
 var cur := {"x": 0.0, "y": 0.0, "r": 0.0, "s": 1.0}
 var _from := {}
@@ -72,17 +72,19 @@ func _apply() -> void:
 	rotation = deg_to_rad(cur.r)
 	scale = Vector2(cur.s, cur.s)
 
-## Filters: .poor saturate(.25) brightness(.55); .swapcd saturate(.4) brightness(.7).
-func set_dim(is_poor: bool, is_swapcd: bool) -> void:
-	if is_poor == poor and is_swapcd == swapcd:
+## Dimming: poor = can't afford it; kind "bench" = its owner is on the bench, "dead" = its owner fainted.
+func set_dim(is_poor: bool, kind := "") -> void:
+	if is_poor == poor and kind == dim_kind:
 		return
 	poor = is_poor
-	swapcd = is_swapcd
+	dim_kind = kind
 	var c := Color.WHITE
-	if poor:
+	if kind == "dead":
+		c = Color(0.42, 0.42, 0.46) if poor else Color(0.62, 0.62, 0.66)
+	elif poor:
 		c = Color(0.5, 0.5, 0.56)
-	elif swapcd:
-		c = Color(0.66, 0.66, 0.72)
+	elif kind == "bench":
+		c = Color(0.6, 0.6, 0.68)
 	create_tween().set_ignore_time_scale(true).tween_property(self, "modulate", c, 0.2)
 
 func has_global(p: Vector2) -> bool:
