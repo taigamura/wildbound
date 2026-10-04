@@ -8,23 +8,19 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: 4.7.2
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: |
-            game/package-lock.json
-            app/package-lock.json
-      - name: Install
+      - name: Install Godot
         run: |
-          npm --prefix game ci
-          npm --prefix app ci
-      - name: Build game and embed into app
-        run: npm --prefix game run build:app
-      - name: Typecheck app
-        run: npm --prefix app run typecheck
-      - name: Bundle app for iOS (Metro)
-        working-directory: app
-        run: npx expo export --platform ios --output-dir /tmp/ios-export
+          curl -fsSL -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip && mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+      - name: Import and load check
+        run: |
+          godot --headless --audio-driver Dummy --path godot --import 2>&1 | tee import.log
+          ! grep -E "SCRIPT ERROR|Parse Error|Failed to load script" import.log
+      - name: Core logic tests
+        run: |
+          godot --headless --audio-driver Dummy --path godot --script res://tests/test_core.gd 2>&1 | tee test.log
+          grep -E "test_core: [0-9]+ passed, 0 failed" test.log

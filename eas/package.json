@@ -1,0 +1,5 @@
+{
+  "name": "wildbound-eas",
+  "private": true,
+  "description": "EAS project link for App Store Connect submission only (eas submit). No app code here."
+}

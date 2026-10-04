@@ -16,8 +16,8 @@
 # number uploaded to App Store Connect; this script uses +1 and, only after a
 # successful submit, writes the new number back. The caller commits that file.
 #
-# Credentials (never committed): app/credentials.json + app/credentials/ios/*, as
-# written by `cd app && npx eas-cli@24.10.0 credentials -p ios` (production → download).
+# Credentials (never committed): eas/credentials.json + eas/credentials/ios/*, as
+# written by `cd eas && npx eas-cli@24.10.0 credentials -p ios` (production → download).
 # They are copied to a private temp dir on the Mac each run and deleted afterwards;
 # the certificate goes into a throwaway keychain (see godot/ios/mac-build.sh).
 set -euo pipefail
@@ -64,11 +64,11 @@ say "Wildbound $VERSION ($BUILD_NUMBER) — $([ $UNSIGNED = 1 ] && echo 'unsigne
 
 # --- credentials (local) -----------------------------------------------------------
 if [ "$UNSIGNED" = 0 ]; then
-  CJ="$ROOT/app/credentials.json"
+  CJ="$ROOT/eas/credentials.json"
   [ -f "$CJ" ] || die "missing $CJ. Download the signing credentials first:
-  cd app && npx $EAS_CLI credentials -p ios
+  cd eas && npx $EAS_CLI credentials -p ios
   (choose: production → credentials.json: Upload/Download → Download credentials from EAS to credentials.json)"
-  CREDS="$(python3 - "$CJ" "$ROOT/app" <<'PY'
+  CREDS="$(python3 - "$CJ" "$ROOT/eas" <<'PY'
 import json, os, sys
 c = json.load(open(sys.argv[1]))["ios"]
 if "distributionCertificate" not in c:   # multi-target form: {"Target": {...}}
@@ -187,7 +187,7 @@ fi
 say "Submitting to App Store Connect via EAS"
 SUBMIT_LOG="$ROOT/dist/ios/submit-$BUILD_NUMBER.log"
 set +e
-( cd "$ROOT/app" && npx "$EAS_CLI" submit -p ios --profile production --path "$LOCAL_IPA" --non-interactive ) 2>&1 | tee "$SUBMIT_LOG"
+( cd "$ROOT/eas" && npx "$EAS_CLI" submit -p ios --profile production --path "$LOCAL_IPA" --non-interactive ) 2>&1 | tee "$SUBMIT_LOG"
 SUBMIT_RC=${PIPESTATUS[0]}
 set -e
 [ "$SUBMIT_RC" -eq 0 ] || die "eas submit failed (see $SUBMIT_LOG). If it says 401 NOT_AUTHORIZED, the ASC API key stored on EAS needs replacing."

@@ -1,23 +1,12 @@
-node_modules/
+# Godot import cache lives in godot/.godot (see godot/.gitignore)
 dist/
-.expo/
-web-build/
-ios/
-android/
+*.ipa
 *.log
 .DS_Store
-.env
-.env.local
-
-# generated from game/dist by scripts/embed-game.mjs
-app/src/game-html.generated.ts
-
-# iOS build artifacts (ship-ios copies them here)
-*.ipa
 .playwright-mcp/
+node_modules/
+.expo/
 
-# Godot iOS: the `ios/` rule above is for Expo prebuild output; godot/ios/ is source
-!/godot/ios/
 # Signing credentials downloaded from EAS (scripts/ship-ios-godot.sh): never commit
-app/credentials.json
-app/credentials/
+eas/credentials.json
+eas/credentials/
