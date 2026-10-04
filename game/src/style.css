@@ -70,11 +70,6 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .bmon .cd{position:absolute;inset:0;background:conic-gradient(rgba(10,15,31,.72) var(--p,0%),transparent 0);pointer-events:none}
 .bmon.down{filter:grayscale(1) brightness(.6)}
 .bmon .adv{position:absolute;top:3px;right:5px;font:800 9px/1 var(--f-body);color:var(--gold)}
-#capBtn{flex:none;border:0;border-radius:14px;padding:0 14px;font:400 15px/1 var(--f-display);letter-spacing:.02em;color:#2a1a00;
-  background:linear-gradient(180deg,#fff0b8,var(--gold));box-shadow:0 4px 0 #a8742a,0 0 24px rgba(255,207,107,.55);animation:capPulse 1s ease-in-out infinite}
-#capBtn small{display:block;font:800 10px/1 var(--f-body);letter-spacing:.08em;margin-top:3px;opacity:.75}
-#capBtn:disabled{filter:grayscale(.8) brightness(.6);animation:none}
-@keyframes capPulse{50%{transform:translateY(-2px) scale(1.04)}}
 .energy{display:flex;align-items:center;gap:10px}
 .segs{flex:1;display:grid;grid-template-columns:repeat(10,1fr);gap:3px}
 .seg{height:12px;border-radius:3px;background:rgba(0,0,0,.5);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(170,186,255,.12)}
@@ -82,7 +77,17 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .seg.full i{width:100%}
 #enT{font:400 22px/1 var(--f-display);min-width:42px;text-align:right;font-variant-numeric:tabular-nums;color:#d9ccff}
 #enT small{font:700 11px var(--f-body);color:var(--mute)}
-.hand{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+/* hand: a fan of overlapping cards (poses set by ui.ts layoutHand via translate/rotate/scale) */
+.hand{--cw:clamp(70px,calc(min(100vw - 28px,460px) * .235),88px);position:relative;z-index:3;height:calc(var(--cw) * 1.48);touch-action:none}
+.hand .card{position:absolute;top:0;left:calc(50% - var(--cw) / 2);width:var(--cw);transform-origin:50% 100%;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  box-shadow:0 5px 0 rgba(0,0,0,.4),0 6px 14px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.18);
+  transition:translate .24s cubic-bezier(.2,.9,.3,1.12),rotate .24s cubic-bezier(.2,.9,.3,1),scale .24s cubic-bezier(.2,.9,.3,1.12),
+    filter .2s ease,opacity .2s ease,box-shadow .2s ease}
+.hand .card:active{transform:none}
+.hand .card.lift{box-shadow:0 5px 0 rgba(0,0,0,.4),0 14px 28px rgba(0,0,0,.55),0 0 0 2px color-mix(in srgb,var(--c) 75%,transparent),inset 0 1px 0 rgba(255,255,255,.18)}
+.hand .card.drag{transition:filter .2s ease,opacity .2s ease,box-shadow .12s ease}
+.hand .card.armed{box-shadow:0 5px 0 rgba(0,0,0,.4),0 0 26px 6px color-mix(in srgb,var(--c) 80%,transparent),0 0 0 2px #fff,inset 0 1px 0 rgba(255,255,255,.3)}
 
 /* ---------- cards ---------- */
 .card{--c:var(--neutral);position:relative;aspect-ratio:3/4;border-radius:13px;padding:22px 5px 7px;min-width:0;
@@ -192,7 +197,7 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
   border-radius:12px;padding:10px 14px;font:700 14px/1.2 var(--f-body);pointer-events:none;opacity:0;transition:opacity .3s;max-width:calc(100% - 32px);text-align:center}
 #toast.on{opacity:1}
 @media (prefers-reduced-motion:reduce){
-  .card.deal,.card.play,#capBtn,#evoBtn,.sheet,.flip .back,#heavy svg,#chain{animation:none}
+  .card.deal,.card.play,.sheet,.flip .back,#heavy svg,#chain{animation:none}
 }
 
 /* ---------- art style picker ---------- */
@@ -208,10 +213,6 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .intent.heavy i{background:linear-gradient(90deg,color-mix(in srgb,var(--c) 60%,#fff),var(--c))}
 .intent.perfect{box-shadow:0 0 0 2px #fff,0 0 16px var(--c)}
 .intent.perfect i{background:#fff}
-.evobar{height:4px;border-radius:2px;background:rgba(0,0,0,.45);overflow:hidden}
-.evobar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#c8b4ff,#ffcf6b);transition:width .2s}
-.evobar.full i{animation:evoPulse .6s ease-in-out infinite alternate}
-@keyframes evoPulse{to{filter:brightness(1.6)}}
 .pinned{position:absolute;left:0;top:0;pointer-events:none;will-change:transform}
 #heavy{display:flex;flex-direction:column;align-items:center;gap:2px;margin-left:-80px;width:160px;color:var(--c);text-align:center}
 #heavy svg{width:44px;height:44px;fill:var(--c);filter:drop-shadow(0 0 10px var(--c)) drop-shadow(0 2px 0 #000);animation:hvPulse .5s ease-in-out infinite alternate}
@@ -227,13 +228,8 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .callout{position:absolute;left:0;right:0;top:42%;text-align:center;pointer-events:none;font:400 58px/1 var(--f-display);color:#fff;
   text-shadow:0 4px 0 rgba(0,0,0,.55),0 0 30px var(--bc);animation:callout 1.1s cubic-bezier(.2,1.4,.3,1) forwards}
 @keyframes callout{0%{opacity:0;transform:scale(3) rotate(-6deg)}15%{opacity:1;transform:scale(1) rotate(-3deg)}80%{opacity:1}100%{opacity:0;transform:scale(1.1) translateY(-30px) rotate(-3deg)}}
-#evoBtn{flex:none;border:0;border-radius:14px;padding:0 12px;font:400 15px/1 var(--f-display);color:#1b1035;
-  background:linear-gradient(180deg,#fff,color-mix(in srgb,var(--c,var(--gold)) 70%,#fff));box-shadow:0 4px 0 color-mix(in srgb,var(--c,var(--gold)) 60%,#000),0 0 24px var(--c,var(--gold));animation:capPulse .8s ease-in-out infinite}
-#evoBtn small,#capBtn small{display:block;font:800 10px/1 var(--f-body);letter-spacing:.06em;margin-top:3px;opacity:.75}
-#evoBtn:disabled{filter:grayscale(.6) brightness(.7);animation:none}
 .bmon.guard{border-color:#fff;box-shadow:0 0 14px var(--c)}
 .bmon .adv svg{width:12px;height:12px;fill:#fff}
-.bmon.evo{box-shadow:0 0 16px var(--gold);border-color:var(--gold)}
 /* card owner + swap markers */
 .card .own{position:absolute;top:-6px;right:-5px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
   font:400 12px/1 var(--f-display);color:#1b1035;background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--c) 50%,#fff),var(--c));box-shadow:0 2px 0 rgba(0,0,0,.4)}
@@ -246,7 +242,7 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .card:disabled{opacity:.45}
 /* ---------- meta screens ---------- */
 .sheet.tall{max-height:82vh}
-.metarow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.metarow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .metabtn{border-radius:14px;padding:10px 12px;text-align:left;background:rgba(255,255,255,.04);border:1.5px solid var(--line);display:flex;flex-direction:column;gap:3px}
 .metabtn b{font:400 16px/1 var(--f-display)}
 .metabtn span{font:700 11px/1.2 var(--f-body);color:var(--mute)}
@@ -262,12 +258,10 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .upname{display:flex;align-items:center;gap:6px;font:400 16px/1 var(--f-display);color:var(--c)}
 .upname svg{width:14px;height:14px;fill:currentColor}
 .upcards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-top:6px}
-.upcards:has(.evo){grid-template-columns:repeat(4,1fr)}
 .card.mini{padding-top:20px}
 .card.mini .nm{font-size:13px}
 .card.mini .tx{font-size:10px}
 .card.sel{outline:2px solid var(--gold);outline-offset:2px}
-.card .evotag{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);font:800 8.5px/1 var(--f-body);letter-spacing:.06em;text-transform:uppercase;background:var(--gold);color:#241600;padding:3px 5px 2px;border-radius:4px;white-space:nowrap}
 .upchoice{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:14px;background:rgba(255,207,107,.08);border:1px solid rgba(255,207,107,.3)}
 .ptrow{display:flex;gap:8px;align-items:stretch}
 .ptmain{flex:1;display:flex;align-items:center;gap:12px;text-align:left;padding:10px;border-radius:14px;background:color-mix(in srgb,var(--c) 6%,var(--deep));border:1.5px solid var(--line)}
@@ -279,14 +273,6 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .ptmain span span{display:block;font:600 11.5px/1.3 var(--f-body);color:var(--mute);margin-top:3px}
 .ptmain .pill{flex:none}
 .ptlead{flex:none;width:46px;border-radius:14px;border:1.5px solid var(--line);background:rgba(255,255,255,.04);font-size:20px;color:var(--gold)}
-#endKeep{display:flex;flex-direction:column;gap:8px}
-#endKeep:empty{display:none}
-.keeprow{display:flex;gap:8px;flex-wrap:wrap}
-.keep{flex:1 1 30%;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 6px;border-radius:14px;background:color-mix(in srgb,var(--c) 8%,var(--deep));border:1.5px solid var(--line)}
-.keep svg{width:18px;height:18px;fill:var(--c)}
-.keep b{font:400 14px/1 var(--f-display)}
-.keep span{font:700 10.5px/1 var(--f-body);color:var(--mute);text-transform:uppercase;letter-spacing:.08em}
-.keep[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb,var(--c) 22%,var(--deep));box-shadow:0 0 16px color-mix(in srgb,var(--c) 40%,transparent)}
 .flip{position:relative;width:150px;aspect-ratio:3/4;margin:4px auto;perspective:800px;cursor:pointer}
 .flip .face{position:absolute;inset:0;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
   backface-visibility:hidden;transition:transform .6s cubic-bezier(.3,1.4,.5,1);text-align:center;padding:12px}
@@ -332,7 +318,6 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .card.locked > :not(.lock){filter:saturate(.2) brightness(.6)}
 .card .lock{position:absolute;top:5px;right:5px;display:inline-flex;align-items:center;gap:2px;white-space:nowrap;
   font:800 10px/1 var(--f-body);color:var(--c);background:rgba(0,0,0,.6);padding:3px 6px 2px;border-radius:5px;border:1px solid color-mix(in srgb,var(--c) 50%,transparent)}
-.card.evo.off{opacity:.45}
 .note{font:600 11px/1.35 var(--f-body);color:var(--mute);margin:6px 0 0}
 .trait-on{--c:var(--neutral);display:flex;flex-direction:column;gap:3px;padding:8px 10px;border-radius:12px;background:color-mix(in srgb,var(--c) 12%,var(--deep));border:1.5px solid color-mix(in srgb,var(--c) 55%,transparent)}
 .trait-on b{font:400 16px/1 var(--f-display);color:var(--c)}
@@ -348,3 +333,13 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .trait.sel{border-color:var(--gold);opacity:1}
 #endEss .eyebrow{margin-right:2px}
 .prow .lv .tr{color:var(--gold)}
+/* ---------- loot, upgrades & shop (§5) ---------- */
+.uptrack{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:14px;background:color-mix(in srgb,var(--c) 8%,var(--deep));border:1.5px solid var(--line)}
+.uptrack .prow b{font:400 16px/1 var(--f-display);color:var(--c)}
+.uptrack .prow>svg{width:20px;height:20px;flex:none;fill:var(--c);color:var(--c)}
+.uptrack .prow .lv{white-space:nowrap}
+.uptrack .pips{display:flex;gap:4px}
+.uptrack .pips i{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.1)}
+.uptrack .pips i.on{background:var(--c)}
+#scr-shop .sheet{max-height:70vh}
+.node:disabled{opacity:.5}

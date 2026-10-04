@@ -53,9 +53,6 @@ export interface ArtStyle {
   /** Load textures etc. Called before the style becomes active. */
   preload(): Promise<void>;
   creature(species: string, el: El): CreatureArt;
-  /** True if the style has its own art for this species. Default: true. Used to pick the
-   *  evolution fallback (base art, scaled up with a glow) when an evolved form has no art. */
-  has?(species: string): boolean;
   /** The background for a biome (0 = floors 1–4, 1 = floors 5–8). */
   scene(biome: number): SceneArt;
   pedestal(): PedestalArt;

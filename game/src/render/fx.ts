@@ -24,7 +24,7 @@ export const shake = (v: number) => { if (!REDUCED) feel.trauma = Math.min(1, fe
 export const hitStop = (t: number) => { if (!REDUCED) feel.hitStop = Math.max(feel.hitStop, t); };
 /** Run the whole world (sim, particles, tweens) at `scale` speed for `t` real seconds. */
 export const slowMo = (t: number, scale: number) => { feel.slow = Math.max(feel.slow, t); feel.slowScale = scale; };
-/** Big centred word (PERFECT, EVOLVED…). */
+/** Big centred word (PERFECT…). */
 export function callout(text: string, color = '#ffcf6b') {
   const d = document.createElement('div'); d.className = 'callout'; d.style.setProperty('--bc', color); d.textContent = text;
   $('#fx').appendChild(d); setTimeout(() => d.remove(), 1100);

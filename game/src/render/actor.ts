@@ -23,8 +23,6 @@ export class Actor {
   /** Lunge/knockback offset in world units (tweened). */
   off = { x: 0, y: 0 };
   extra = 1;   // extra scale (alphas, title screen)
-  evoScale = 1; // evolution fallback (no evolved art in this style): bigger + glow
-  private halo = new Sprite(TEX.soft);
   private look: ColorMatrixFilter | null = null;
   private shiny = false; private silhouette = false;
   k = 1;       // art-space → px
@@ -37,21 +35,18 @@ export class Actor {
     this.el = el || SPECIES[key].el;
     this.aura.anchor.set(0.5); this.aura.blendMode = 'add'; this.aura.alpha = 0;
     this.shadow.ellipse(0, 0, 46, 11).fill({ color: 0x000000, alpha: 0.4 });
-    this.halo.anchor.set(0.5); this.halo.blendMode = 'add'; this.halo.visible = false;
-    this.root.addChild(this.shadow, this.aura, this.halo, this.flip); this.flip.addChild(this.rig); this.rig.addChild(this.sq);
+    this.root.addChild(this.shadow, this.aura, this.flip); this.flip.addChild(this.rig); this.rig.addChild(this.sq);
     this.art = getStyle().creature(key, this.el); this.sq.addChild(this.art.view);
     L.actors.addChild(this.root);
   }
 
-  /** Total scale on top of species size (alpha/title extra × evolution fallback). */
-  get scaleMul() { return this.extra * this.evoScale; }
+  /** Total scale on top of species size (alphas, title screen). */
+  get scaleMul() { return this.extra; }
 
   /** Shiny: a hue shift on whatever art the style provides. */
   setShiny(v: boolean) { this.shiny = v; this.applyLook(); }
   /** Unowned creatures in the collection: solid dark shape. */
   setSilhouette(v: boolean) { this.silhouette = v; this.applyLook(); }
-  /** Evolved, but the style has no evolved art: draw the base art bigger with a glow. */
-  setEvoFallback(v: boolean) { this.evoScale = v ? 1.2 : 1; this.halo.visible = v; }
   private applyLook() {
     if (!this.shiny && !this.silhouette) { if (this.look) { this.sq.filters = null; this.look.destroy(); this.look = null; } return; }
     if (!this.look) { this.look = new ColorMatrixFilter(); this.sq.filters = [this.look]; }
@@ -70,7 +65,6 @@ export class Actor {
     this.flip.scale.set(face * this.k, this.k);
     this.shadow.y = -this.off.y * U; this.shadow.scale.set(this.k * clamp(1 + this.off.y * 0.2, 0.3, 1.2));
     this.aura.scale.set(this.k * 160 / TS.soft); this.aura.y = -48 * this.k;
-    if (this.halo.visible) { this.halo.tint = ELEM[this.el].hex; this.halo.scale.set(this.k * 230 / TS.soft); this.halo.y = -50 * this.k; }
   }
 
   /** Head position in px (projectile target, damage numbers). */
@@ -95,7 +89,6 @@ export class Actor {
     this.rig.y = -Math.abs(Math.sin(t * 3.2)) * 5; this.rig.rotation = Math.sin(t * 1.6) * 0.03;
     this.rig.scale.set(1 + Math.sin(t * 6.4) * 0.015, 1 - Math.sin(t * 6.4) * 0.015);
     this.art.update?.(dt, t);
-    if (this.halo.visible) this.halo.alpha = 0.45 + Math.sin(t * 3) * 0.15;
     const em = this.art.emitters;
     if (this.root.visible && em.length && Math.random() < dt * 10) {
       const p = pick(em);

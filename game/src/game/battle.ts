@@ -1,5 +1,5 @@
 // Real-time combat: lineup deck, bench-card swaps, auto attacks, enemy intents and heavies,
-// statuses, Perfect Swap, chain meter, capture, evolution. Spec: CLAUDE.md §3–§5, §9.
+// statuses, Perfect Swap, chain meter. Spec: CLAUDE.md §3–§4.
 import { Container, Graphics, Sprite } from 'pixi.js';
 import gsap from 'gsap';
 import { L, TEX, TS } from '../render/app';
@@ -8,14 +8,13 @@ import { emit, burst, ring, lightFlash } from '../render/particles';
 import { popNum, banner, flash, vignette, toast, shake, hitStop, slowMo, callout } from '../render/fx';
 import { Actor, shieldPulse } from '../render/actor';
 import { tintArena, setBiome } from '../render/stage';
-import { getStyle } from '../art/registry';
-import { S, act, mon, team, newMon, activeActor, actorFor, dropActor, cardOf, cardCost, cardBlock, isHeavy, heavyOf, inPerfectWindow, canCapture, captureOdds, evoCandidate,
+import { S, act, mon, team, newMon, activeActor, actorFor, cardOf, cardCost, cardBlock, isHeavy, heavyOf, inPerfectWindow,
   type Mon, type MapNode, type Enemy, type CardRef } from './state';
 import { slots, show, paintCard, refreshHand, renderBench, renderPlayerPlate, renderEnemyPlate } from './ui';
-import { placePlayer, afterFight, onCaught, endRun } from './run';
+import { placePlayer, afterFight, endRun } from './run';
 import { BAL, ELEM, EL_KEYS, SPECIES, SLOTS, STATUS_OF, STATUS_DUR, STATUS_NAME, STATUS_EL, STATUS_PAST, TRAITS, adv, resists, biomeOf, elHexCss,
   type CardDef, type El, type Slot, type Status, type TraitKey } from '../core/data';
-import { earn } from './meta';
+import { earn, addLoot } from './meta';
 import { rand, pick, shuffle } from '../core/util';
 import { SFX, audio } from '../core/audio';
 import { haptic } from '../core/platform';
@@ -43,7 +42,7 @@ export function startBattle(n: MapNode) {
   const iv = BAL.intent / (sp.spd ?? 1);
   const e: Enemy = {
     key: n.sp!, name: (alpha ? 'Alpha ' : '') + sp.name, el: kind === 'boss' ? pick(EL_KEYS) : sp.el, kind, alive: true, max, hp: max, dmg, iv,
-    t: 0, windup: iv, count: 0, enraged: false, status: null, statusSrc: 0, shockCd: 0, shiftT: BAL.bossShift, fleeT: null, perfect: false, heavyIdx: 0,
+    t: 0, windup: iv, count: 0, status: null, statusSrc: 0, shockCd: 0, shiftT: BAL.bossShift, perfect: false, heavyIdx: 0,
   };
   S.enemy = e;
   S.energy = BAL.energyStart; S.swapCd = 0; S.autoT = 0; S.chain = 0; S.chainT = 99; S.discount = 0; S.wired = false;
@@ -61,7 +60,7 @@ export function startBattle(n: MapNode) {
   show(null); renderPlayerPlate(); renderEnemyPlate(); renderBench(); refreshHand();
   slots.forEach((b, i) => { b.classList.remove('deal'); void b.offsetWidth; b.style.animationDelay = (i * 0.06) + 's'; b.classList.add('deal'); });
   S.mode = 'intro';
-  const sub = kind === 'boss' ? 'The final guardian' : kind === 'warden' ? 'Warden of the wild' : alpha ? 'Alpha · can’t be caught' : 'Wild encounter';
+  const sub = kind === 'boss' ? 'The final guardian' : kind === 'warden' ? 'Warden of the wild' : alpha ? 'Alpha · tougher, richer loot' : 'Wild encounter';
   gsap.to(m.off, { y: 0, duration: 0.55, ease: 'power3.in', delay: 0.25, onComplete: () => {
     if (tok !== S.tok) return; const p = EPOS();
     SFX.stomp(); haptic('heavy'); shake(0.55); ring(p.x, p.y, ELEM[e.el].hex, 3, 0.7);
@@ -150,7 +149,7 @@ function resolveCard(C: CardDef, pow: number, me: Mon, slot: Slot) {
   };
 
   let dmg = C.dmg ?? 0;
-  if (C.fromShield) { dmg = Math.round(me.shield * pow); me.shield = 0; }
+  if (C.fromShield) { dmg = Math.round(me.shield * pow * me.power); me.shield = 0; }
   if (slot === 'strike' && me.nextStrike > 1 && dmg) { dmg *= me.nextStrike; me.nextStrike = 1; }
   const chainMul = 1 + BAL.chainStep * S.chain, el = me.el, big = (C.cost >= 3 || dmg >= 14), tok = S.tok, uid = me.uid;
   if (!dmg && !C.status) return;
@@ -228,12 +227,11 @@ function lightning(a: Pt, b: Pt, el: El) {
 }
 
 /* ================= damage ================= */
-/** Damage the enemy. `src` is the uid of the creature that dealt it (0 = none), for the evolution meter. */
+/** Damage the enemy. `src` is the uid of the creature that dealt it (0 = none), for Trait effects. */
 function hurtEnemy(amount: number, el: El, src: number, o: { dot?: boolean; big?: boolean; small?: boolean; bonus?: string } = {}) {
   const e = S.enemy, m = S.em; if (!e || !e.alive || !m) return 0;
   const a = adv(el, e.el), dmg = Math.max(1, Math.round(amount * a * soakMul(e.status)));
   e.hp = Math.max(0, e.hp - dmg); S.stats.dealt += dmg;
-  const sm = src ? mon(src) : null; if (sm && sm.starter && !sm.evolved) sm.evo = Math.min(BAL.evoFill, sm.evo + dmg);
   const hp = m.head();
   popNum({ x: hp.x, y: hp.y - U * 0.7 }, dmg, a > 1 ? 'crit' : a < 1 ? 'weak' : o.dot ? 'dot' : '',
     a > 1 && !o.dot ? 'Super' : a < 1 && !o.dot ? 'RESIST' : o.bonus || '', ELEM[el].css);
@@ -244,9 +242,6 @@ function hurtEnemy(amount: number, el: El, src: number, o: { dot?: boolean; big?
     if (a > 1 || o.big) { hitStop(0.06); shake(o.big ? 0.6 : 0.4); flash(o.big ? 0.3 : 0.18); SFX.crit(); }
     else { shake(o.small ? 0.12 : 0.22); SFX.hit(el); }
     if (!o.small) haptic('medium');
-  }
-  if (e.kind === 'wild' && e.fleeT == null && e.hp > 0 && e.hp / e.max <= BAL.capTh) {
-    e.fleeT = BAL.fleeTime; toast(`${e.name} is weak. Catch it before it flees!`);
   }
   if (e.hp <= 0) enemyDown();
   return dmg;
@@ -295,7 +290,7 @@ function startWindup(e: Enemy) { e.t = 0; e.perfect = false; e.windup = e.iv + (
 function autoAttack() {
   const me = act(), pm = activeActor(); if (!me || !me.alive || !pm || !S.enemy || !S.enemy.alive) return;
   const tok = S.tok, uid = me.uid; lunge(pm, 0.22);
-  projectile(pm.head(), () => S.em!.head(), me.el, { size: 0.16, arc: 0.35, dur: 0.26 }, () => { if (tok === S.tok) hurtEnemy(BAL.autoDmg, me.el, uid, { small: true }); });
+  projectile(pm.head(), () => S.em!.head(), me.el, { size: 0.16, arc: 0.35, dur: 0.26 }, () => { if (tok === S.tok) hurtEnemy(BAL.autoDmg * me.power, me.el, uid, { small: true }); });
 }
 function enemyAttack() {
   const e = S.enemy!, m = S.em!, heavy = isHeavy(e), hv = heavyOf(e), el = heavy ? hv.el : e.el;
@@ -405,100 +400,8 @@ function enemyDown() {
   });
   const boss = e.kind === 'boss';
   banner(boss ? 'Noctyrm falls' : 'Victory', boss ? 'The expedition is complete' : e.kind === 'warden' ? 'The Warden yields' : 'Choose a reward', '#ffcf6b'); SFX.win();
-  gsap.delayedCall(1.4, () => { if (tok === S.tok) { haptic('success'); afterFight('win'); } });
+  gsap.delayedCall(1.4, () => { if (tok === S.tok) { haptic('success'); afterFight(); } });
 }
-function enemyFlees() {
-  const e = S.enemy!, m = S.em!; e.alive = false; S.mode = 'end'; const tok = S.tok;
-  SFX.swap(); haptic('warning');
-  gsap.to(m.off, { x: 5, y: -1, duration: 0.6, ease: 'power2.in' });
-  gsap.to(m.sq.scale, { x: 0.6, y: 1.3, duration: 0.3, yoyo: true, repeat: 1 });
-  const E = EPOS(); emit(E.x, E.y, { n: 60, color: [0x8a90b8, 0x5a6088], spd: 3, flat: true, life: 0.7, size: 0.3, size1: 1.4, drag: 3, alpha: 0.6 });
-  banner('It fled', 'No reward this time', '#98a1c8');
-  gsap.delayedCall(1.3, () => { if (tok === S.tok) afterFight('flee'); });
-}
-
-/* ================= capture ================= */
-export function tryCapture() {
-  audio(); const e = S.enemy, m = S.em;
-  if (S.mode !== 'battle' || !e || !m || !canCapture(e)) return;
-  if (S.charges <= 0) { SFX.deny(); haptic('warning'); toast('No Capture charges left'); return; }
-  S.charges--; S.mode = 'anim'; SFX.throw(); haptic('medium'); const tok = S.tok;
-  const orb = new Container(), og = new Graphics(), halo = new Sprite(TEX.glow);
-  halo.anchor.set(0.5); halo.blendMode = 'add'; halo.tint = 0x9b7bff; halo.scale.set(2.2);
-  og.circle(0, 0, 20).fill(0xf4eeff).stroke({ width: 4, color: 0x14102a });
-  og.moveTo(-20, 0).arc(0, 0, 20, Math.PI, 0, true).fill(0x7d5cff);
-  og.moveTo(-20, 0).lineTo(20, 0).stroke({ width: 5, color: 0x14102a }); og.circle(0, 0, 7).fill(0xffcf6b).stroke({ width: 3, color: 0x14102a });
-  orb.addChild(halo, og); L.glow.addChild(orb); orb.scale.set(U / 46);
-  const a = activeActor()!.head(), st = { t: 0 };
-  const success = Math.random() < captureOdds(e);
-
-  gsap.to(st, { t: 1, duration: 0.55, ease: 'power1.inOut', onUpdate() {
-    const b = m.head(); orb.x = lerp(a.x, b.x, st.t); orb.y = lerp(a.y, b.y - U * 0.2, st.t) - Math.sin(st.t * Math.PI) * 1.6 * U; orb.rotation += 0.35;
-    emit(orb.x, orb.y, { n: 3, color: [0xffcf6b, 0xd9ccff, 0xffffff], spd: 0.4, life: 0.5, size: 0.16, drag: 2 });
-  }, onComplete() {
-    if (tok !== S.tok) { orb.destroy({ children: true }); return; }
-    const b = m.head(); lightFlash(0xffffff, b, 8); flash(0.35); shake(0.3); haptic('medium');
-    emit(b.x, b.y, { n: 90, color: ELEM[e.el].glow, spd: 3, life: 0.6, size: 0.24, drag: 1, swirlDir: 10 });
-    gsap.to(m.sq.scale, { x: 0.01, y: 0.01, duration: 0.3, ease: 'power2.in' });
-    const E = EPOS(); gsap.to(orb, { x: E.x, y: E.y - U * 0.25, rotation: 0, duration: 0.45, delay: 0.3, ease: 'bounce.out', onComplete: wobble });
-  } });
-
-  function wobble() {
-    let k = 0; const breakAt = 1 + Math.floor(Math.random() * 2);
-    const step = () => {
-      if (tok !== S.tok) { orb.destroy({ children: true }); return; }
-      if (k === 3 || (!success && k === breakAt)) return finish();
-      k++; SFX.tick(); haptic('light');
-      emit(orb.x, orb.y, { n: 14, color: [0xffcf6b, 0xffffff], spd: 2, up: 1, life: 0.45, size: 0.18, drag: 3, tex: 'star', spin: 6 });
-      gsap.fromTo(orb, { rotation: 0 }, { rotation: (k % 2 ? 1 : -1) * 0.5, duration: 0.12, yoyo: true, repeat: 1, ease: 'power1.inOut', onComplete: () => { gsap.delayedCall(0.28, step); } });
-    };
-    gsap.delayedCall(0.25, step);
-  }
-  function finish() {
-    const E = EPOS();
-    if (success) {
-      e!.alive = false; S.mode = 'end'; SFX.caught(); haptic('heavy'); shake(0.3);
-      for (let j = 0; j < 4; j++) gsap.delayedCall(j * 0.12, () => {
-        emit(orb.x, orb.y, { n: 40, color: [0xffcf6b, 0xfff1b0, 0xffffff, ELEM[e!.el].hex], spd: 5, up: 1.3, life: 1.2, size: 0.22, grav: 4, drag: 0.8, floor: E.y });
-        emit(orb.x, orb.y, { n: 8, color: [0xffcf6b, 0xffffff], spd: 4, up: 1, life: 1, size: 0.4, grav: 3, drag: 1, tex: 'star', spin: 8 });
-        ring(orb.x, E.y, 0xffcf6b, 2 + j);
-      });
-      gsap.to(orb.scale, { x: 0.01, y: 0.01, duration: 0.4, delay: 0.7, onComplete: () => { orb.destroy({ children: true }); } });
-      banner('Caught!', SPECIES[e!.key].name + ' joins you', '#ffcf6b'); S.stats.caught++;
-      gsap.delayedCall(1.5, () => { if (tok === S.tok) onCaught(e!); });
-    } else {
-      SFX.broke(); haptic('error'); shake(0.45); flash(0.3);
-      emit(orb.x, orb.y, { n: 80, color: [0xffffff, 0xd9ccff, 0xffcf6b], spd: 6, life: 0.5, size: 0.2, drag: 3, tex: 'spark', streak: true });
-      orb.destroy({ children: true }); e!.enraged = true; e!.t = Math.max(e!.t, e!.windup * 0.5);
-      gsap.to(m!.sq.scale, { x: 1, y: 1, duration: 0.5, ease: 'back.out(3)' }); banner('Broke free', 'It is enraged', '#ff5a6e');
-      gsap.delayedCall(0.4, () => { if (tok === S.tok) S.mode = 'battle'; });
-    }
-  }
-}
-
-/* ================= evolution ================= */
-export function tryEvolve() {
-  audio(); const c = evoCandidate(); if (S.mode !== 'battle' || !c) return;
-  if (S.energy < BAL.evoCost) { SFX.deny(); haptic('warning'); toast(`Evolving costs ${BAL.evoCost} energy`); return; }
-  S.energy -= BAL.evoCost;
-  const sp = SPECIES[c.key], evoKey = sp.evo?.key, hasArt = !!evoKey && (getStyle().has?.(evoKey) ?? true);
-  c.evolved = true; c.art = hasArt ? evoKey! : c.key; c.name = evoKey ? SPECIES[evoKey].name : 'Prime ' + sp.name;
-  c.maxHp = Math.round(c.maxHp * BAL.evoHp); c.hp = c.maxHp;
-  slowMo(BAL.slowDur, BAL.slowScale); flash(0.7, elHexCss(c.el)); haptic('heavy'); shake(0.5); SFX.win();
-  callout('EVOLVED', elHexCss(c.el));
-  const lead = c.uid === S.active;
-  dropActor(c.uid);
-  if (lead) {
-    placePlayer(true);
-    const p = PPOS(), a = activeActor()!;
-    for (let k = 0; k < 3; k++) gsap.delayedCall(k * 0.1, () => burst(a.head(), c.el, 1.4));
-    emit(p.x, p.y, { n: 120, color: ELEM[c.el].glow, spd: 5, up: 1.2, life: 1.2, size: 0.26, grav: -1, drag: 1.2, swirl: 3 });
-    ring(p.x, p.y, ELEM[c.el].hex, 4, 0.8);
-  }
-  banner(c.name, 'Max HP +50% · Signature upgraded', elHexCss(c.el));
-  renderPlayerPlate(); renderBench(); refreshHand();
-}
-
 /* ================= per-frame simulation ================= */
 function tickStatusOnMon(c: Mon, dt: number) {
   const s = c.status; if (!s) return;
@@ -527,7 +430,7 @@ export function tickBattle(dt: number, t: number) {
   }
   if (!e || !e.alive || !m) return;
   if (e.shockCd > 0) e.shockCd = Math.max(0, e.shockCd - dt);
-  const rate = (e.status?.k === 'root' ? 1 - BAL.rootSlow : 1) * (e.enraged ? BAL.enrageSpeed : 1);
+  const rate = (e.status?.k === 'root' ? 1 - BAL.rootSlow : 1);
   e.t += dt * rate; if (e.t >= e.windup) enemyAttack();
   if (!e.alive || S.mode !== 'battle') return;
   const p = m.head();
@@ -549,17 +452,17 @@ export function tickBattle(dt: number, t: number) {
   }
   if (!e.alive) return;
   if (e.kind === 'boss') { e.shiftT -= dt; if (e.shiftT <= 0) { e.shiftT = BAL.bossShift; shiftBoss(); } }
-  if (e.fleeT != null) { e.fleeT -= dt; if (e.fleeT <= 0) enemyFlees(); }
 }
 
 /** Dev helpers (window.__wb.debug in dev builds). */
 export const debug = {
   hurt: (f = 0.65) => { const e = S.enemy; if (e && e.alive) hurtEnemy(e.max * f, e.el, 0, { small: true }); },
   energy: () => { S.energy = BAL.energyMax; },
-  evo: () => { const c = S.party.find(m => m.starter); if (c) c.evo = BAL.evoFill; },
   /** Add a creature to the party (and lineup if there's room). Use on the map, before a fight. */
   add: (key: string) => { const c = newMon(key); S.party.push(c); if (S.lineup.length < BAL.lineup) S.lineup.push(c.uid); return c.uid; },
   essence: (n = 20) => EL_KEYS.forEach(el => earn(el, n)),
+  /** Bank gold and n of each material. */
+  loot: (gold = 200, n = 5) => addLoot({ gold, sword: n, orb: n, jewel: n }),
   trait: (t: TraitKey) => { const c = act(); if (c) c.trait = t; },
   heavy: () => { const e = S.enemy; if (e) { while (!isHeavy(e)) e.count++; e.windup = e.iv + BAL.heavyExtra; e.t = e.windup - 1; } },
 };

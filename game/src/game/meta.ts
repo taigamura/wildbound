@@ -1,6 +1,6 @@
-// Persistent progress outside a run: owned creatures, shinies, the daily pack, records.
+// Persistent progress outside a run: owned creatures, shinies, packs, records, loot, upgrades, Essence.
 // Everything goes through core/platform.ts `store` (localStorage in a browser, AsyncStorage in the app).
-import { BAL, ROSTER, STARTERS, SPECIES, TRAITS, EL_KEYS, type El, type Slot, type TraitKey } from '../core/data';
+import { BAL, ROSTER, STARTERS, SPECIES, TRAITS, EL_KEYS, MATS, NO_LOOT, type El, type Slot, type TraitKey, type Mat, type Loot } from '../core/data';
 import { store } from '../core/platform';
 import { pick } from '../core/util';
 
@@ -33,15 +33,26 @@ export function nextPackIn() {
 }
 
 export type PackResult = { key: string; shiny: boolean } | { key: null; shiny: false };
-/** Open today's pack: a creature you don't own, else a shiny of one you do. */
-export function openPack(): PackResult | null {
-  if (!packReady()) return null;
-  store.set('packDay', packDay());
+/** True once every creature is owned and shiny: a pack would have nothing to give. */
+export const packEmpty = () => ROSTER.every(k => isOwned(k) && isShiny(k));
+/** A pack's contents: a creature you don't own, else a shiny of one you do. */
+function rollPack(): PackResult {
   const have = owned(), missing = ROSTER.filter(k => !have.includes(k) && !STARTERS.includes(k));
   if (missing.length) { const key = pick(missing); addOwned([key]); return { key, shiny: false }; }
   const plain = have.filter(k => !isShiny(k));
   if (!plain.length) return { key: null, shiny: false };
   const key = pick(plain); store.set('shiny', shinies().concat(key)); return { key, shiny: true };
+}
+/** Open today's free pack. Null if it's already been opened today. */
+export function openPack(): PackResult | null {
+  if (!packReady()) return null;
+  store.set('packDay', packDay());
+  return rollPack();
+}
+/** Buy a pack in the shop. Null if too poor or there is nothing left to find (nothing is charged). */
+export function buyPack(): PackResult | null {
+  if (packEmpty() || !spendLoot({ gold: BAL.shopPack })) return null;
+  return rollPack();
 }
 
 export function recordRun(won: boolean, floor: number) {
@@ -51,8 +62,50 @@ export function recordRun(won: boolean, floor: number) {
 export const best = () => store.get('best', 0);
 export const wins = () => store.get('wins', 0);
 
-export const lastStarter = () => { const k = store.get('starter', STARTERS[0]); return isOwned(k) ? k : STARTERS[0]; };
-export const saveStarter = (k: string) => store.set('starter', k);
+/** The last lineup taken on a run (owned species only, ≤3, first = lead). */
+export function lastLineup(): string[] {
+  const legacy = store.get<string>('starter', STARTERS[0]);
+  const l = [...new Set(store.get<string[]>('lineup', [legacy]))].filter(isOwned).slice(0, BAL.lineup);
+  return l.length ? l : [STARTERS[0]];
+}
+export const saveLineup = (keys: string[]) => store.set('lineup', keys.slice(0, BAL.lineup));
+
+/* ================= loot, upgrades, shop (§5) ================= */
+/** Banked gold and materials. */
+export const wallet = (): Loot => ({ ...NO_LOOT(), ...store.get<Partial<Loot>>('loot', {}) });
+/** Bank loot (kept whether the run is won or lost). Returns the new totals. */
+export function addLoot(l: Partial<Loot>): Loot {
+  const w = wallet(); for (const k of Object.keys(l) as (keyof Loot)[]) w[k] += l[k] ?? 0;
+  store.set('loot', w); return w;
+}
+/** Pay for something. False (and nothing spent) if any part is short. */
+export function spendLoot(l: Partial<Loot>): boolean {
+  const w = wallet(); if ((Object.keys(l) as (keyof Loot)[]).some(k => w[k] < (l[k] ?? 0))) return false;
+  for (const k of Object.keys(l) as (keyof Loot)[]) w[k] -= l[k] ?? 0;
+  store.set('loot', w); return true;
+}
+export const buyMat = (m: Mat) => spendLoot({ gold: BAL.shopMat }) && (addLoot({ [m]: 1 }), true);
+export const sellMat = (m: Mat) => spendLoot({ [m]: 1 }) && (addLoot({ gold: BAL.shopSell }), true);
+
+/** Upgrade levels per species, one track per material (sword = Power, orb = Spirit, jewel = Vitality). */
+export type Ups = Record<Mat, number>;
+type AllUps = Record<string, Partial<Ups>>;
+export const upgrades = (k: string): Ups => ({ sword: 0, orb: 0, jewel: 0, ...store.get<AllUps>('upgrades', {})[k] });
+/** Cost of the next level on a track, or null at max. */
+export function upgradeCost(k: string, m: Mat): Loot | null {
+  const n = upgrades(k)[m]; if (n >= BAL.upMax) return null;
+  return { ...NO_LOOT(), [m]: n + 1, gold: BAL.upGold * (n + 1) };
+}
+export function buyUpgrade(k: string, m: Mat): boolean {
+  const c = upgradeCost(k, m); if (!isOwned(k) || !c || !spendLoot(c)) return false;
+  const all = store.get<AllUps>('upgrades', {}); all[k] = { ...upgrades(k), [m]: upgrades(k)[m] + 1 }; store.set('upgrades', all); return true;
+}
+/** Multipliers a creature's upgrades give: card/auto damage, shield/heal amounts, max HP. */
+export function boosts(k: string) {
+  const u = upgrades(k);
+  return { power: 1 + BAL.upDmg * u.sword, spirit: 1 + BAL.upSpirit * u.orb, vital: 1 + BAL.upHp * u.jewel };
+}
+export const randomMat = (): Mat => pick(MATS);
 
 /* ================= essence, unlocks, loadouts (§16) ================= */
 export type Essence = Record<El, number>;

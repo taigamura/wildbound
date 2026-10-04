@@ -5,8 +5,7 @@
 // the game expects. Replace any PNG with your own art (AI-generated or drawn),
 // keep it facing RIGHT, and adjust that creature's anchor/head/height below.
 // Creatures you leave out fall back to the Sticker style (Cinderpip, Puddlet,
-// Brambat, Sparkit and the Warden currently do). Evolutions with no image are
-// drawn as the base art, scaled up with a glow.
+// Brambat, Sparkit and the Warden currently do).
 import type { PackManifest } from '../../sprite';
 
 const manifest: PackManifest = {
