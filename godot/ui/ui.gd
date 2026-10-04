@@ -366,19 +366,19 @@ func _paint(i: int) -> void:
 		return
 	var co = S.card_of(r)
 	var def: Dictionary = co.def
-	var owner = co.owner
+	var src: Mon = co.src
 	var e = S.enemy
 	var dead: bool = S.card_dead(r)
-	var bench: bool = r.uid != S.active and not dead
-	var strong: bool = not dead and e != null and (def.get("dmg", 0) or def.get("from_shield", false)) and Data.adv(owner.el, e.el) > 1
-	var up = owner.ups.get(r.slot, "") if owner.ups is Dictionary else owner.ups.get(r.slot)
+	var bench: bool = S.card_benched(r)
+	var strong: bool = not dead and e != null and (def.get("dmg", 0) or def.get("from_shield", false)) and Data.adv(co.el, e.el) > 1
+	var up = src.ups.get(r.slot, "")
 	if up == null:
 		up = ""
 	var cost = Data.BAL.discard_cost if dead else S.card_cost(r)
-	var k := "%s|%s|%s|%s|%s|%s|%s|%s" % [r.uid, r.slot, def.cost, cost, bench, strong, up, dead]
+	var k := "%s|%s|%s|%s|%s|%s|%s|%s|%s" % [r.uid, r.slot, co.by.uid, def.cost, cost, bench, strong, up, dead]
 	if b.face.key == k and not b.face.empty:
 		return
-	b.face.face(def, owner.el, {"cost": cost, "owner": owner, "bench": bench, "dead": dead, "strong": strong, "pow": co.pow,
+	b.face.face(def, co.el, {"cost": cost, "chip": true, "bench": bench, "dead": dead, "strong": strong, "pow": co.pow,
 		"upgraded": "+30%" if up == "power" else ("−1" if up == "cost" else "")})
 	b.face.key = k
 
@@ -709,6 +709,9 @@ func _bmon(c, extra := "", interactive := false) -> PanelContainer:
 		var adv := Box.new()
 		bx.add_child(Box.at(adv, "tr", Vector2(5, 3)))
 		p.set_meta("adv", adv)
+		var pips := Box.new()   # how many hand cards this creature would unlock if swapped in
+		bx.add_child(Box.at(pips, "br", Vector2(4, 3)))
+		p.set_meta("pips", pips)
 		p.gui_input.connect(func(e: InputEvent):
 			if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
 				p.accept_event()
@@ -742,6 +745,16 @@ func _bench_cd(b: PanelContainer, alive: bool) -> void:
 		Fx.kf(b, 0.3, [[0.0, {"s": 1.0}], [0.4, {"s": 1.12}], [1.0, {"s": 1.0}]], {"ease": [0.2, 1.4, 0.4, 1.0]})
 		Sfx.tick()
 	b.set_meta("cooling", cd)
+
+## Hand cards that are waiting for a swap and that `c` (a bench creature) could play once it leads.
+func _bench_playable(c) -> int:
+	if not c.alive:
+		return 0
+	var n := 0
+	for r in S.hand:
+		if r != null and S.card_benched(r) and S.card_el(r) == c.el:
+			n += 1
+	return n
 
 ## TS monChip: a non-interactive .bmon for the map/end party rows.
 func mon_chip(c, extra := "") -> Control:
@@ -822,7 +835,7 @@ func sync_hud() -> void:
 		if r == null:
 			continue
 		var why: String = S.card_block(r)
-		var kind := "dead" if S.card_dead(r) else ("bench" if r.uid != S.active else "")
+		var kind := "dead" if S.card_dead(r) else ("bench" if S.card_benched(r) else "")
 		slots[i].set_dim(why == "energy" or why == "busy", kind)
 
 	var es: Array = []
@@ -873,6 +886,16 @@ func sync_hud() -> void:
 				adv.add_child(UiKit.icon("shield", 12, Color.WHITE))
 			elif ak == "a":
 				adv.add_child(UiKit.lbl("▲", "800", 9, UiKit.GOLD))
+		var pips: Box = b.get_meta("pips")
+		var n := _bench_playable(c) if battle else 0
+		if pips.get_meta("n", -1) != n:
+			pips.set_meta("n", n)
+			UiKit.clear(pips)
+			if n > 0:   # a tiny card in its element colour with the count
+				var col: Color = b.get_meta("col")
+				var chip := UiKit.panel(UiKit.flat(col, 3, 1, UiKit.mix(col, Color.WHITE, 0.5), Vector4(4, 1, 4, 0)))
+				chip.add_child(UiKit.lbl(str(n), "800", 9, Color("#1b1035"), {"align": "center", "lh": -6}))
+				pips.add_child(chip)
 
 	# chain counter beside the lead
 	var show_ch: bool = battle and S.chain > 0

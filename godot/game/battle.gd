@@ -9,7 +9,7 @@ extends Node
 signal card_played(i: int)
 ## A card in slot i was refused: why = "energy" | "bench" | "busy".
 signal card_denied(i: int, why: String)
-## A fainted creature's card in slot i was thrown away for BAL.discard_cost (the UI animates it away).
+## A dead card (every creature of its element fainted) in slot i was thrown away for BAL.discard_cost (the UI animates it away).
 signal card_discarded(i: int)
 
 var debug := {}
@@ -221,19 +221,19 @@ func play_card(i: int) -> void:
 		Sfx.deny()
 		Platform.haptic("warning")
 		if block == "bench":
-			Fx.toast("Swap to %s to play this" % S.mon(r.uid).name)
+			Fx.toast("Swap to a %s creature to play this" % Data.ELEM[S.card_el(r)].name)
 		card_denied.emit(i, block)
 		return
 	if S.card_dead(r):
 		_discard(i)
 		return
-	var co := S.card_of(r)
+	var co := S.card_of(r)   # fires as the lead: its Power/Spirit and Traits, "self" = the lead
 	var def: Dictionary = co.def
 	var pow: float = co.pow
-	var owner: Mon = co.owner
+	var by: Mon = co.by
 	S.energy -= S.card_cost(r)
 	S.discount = 0
-	owner.played += 1
+	by.played += 1
 	S.hand[i] = null
 	S.disc.append(r)
 	Sfx.card()
@@ -245,15 +245,15 @@ func play_card(i: int) -> void:
 	S.chain_t = 0
 	if not S.chain:
 		S.wired = false   # a fresh chain re-arms Live Wire
-	_resolve_card(def, pow, owner, r.slot)
+	_resolve_card(def, pow, by, r.slot)
 	if def.get("chain"):
 		S.chain = mini(Data.BAL.chain_max, S.chain + def.chain)
-	if _has(owner, "livewire") and not S.wired and S.chain >= Data.BAL.livewire_chain:
+	if _has(by, "livewire") and not S.wired and S.chain >= Data.BAL.livewire_chain:
 		S.wired = true
 		_trait_energy("livewire")
 	Ui.refresh_hand()
 
-## A fainted creature's card: pay to throw it away and draw. No chain, no Traits, discount kept.
+## A dead card (no living creature of its element): pay to throw it away and draw. No chain, no Traits, discount kept.
 func _discard(i: int) -> void:
 	var r: CardRef = S.hand[i]
 	S.energy -= Data.BAL.discard_cost
@@ -261,7 +261,7 @@ func _discard(i: int) -> void:
 	S.disc.append(r)
 	Sfx.card()
 	Platform.haptic("light")
-	Fx.toast("Discarded %s's card" % S.mon(r.uid).name)
+	Fx.toast("Discarded a %s card" % Data.ELEM[S.card_el(r)].name)
 	card_discarded.emit(i)
 	_draw_into(i)
 	Ui.refresh_hand()
@@ -722,7 +722,7 @@ func _perfect_swap() -> void:
 	Particles.ring(p.x, p.y, Color.WHITE, 3, 0.5, false)
 	var me := S.act()
 	if _has(me, "counterweave"):   # free Strike: no energy, no hand change, chain untouched
-		var co := S.card_of(CardRef.new(me.uid, "strike"))
+		var co := S.card_of(CardRef.new(me.uid, "strike"), me)
 		_trait_pop("counterweave", "Counter")
 		_resolve_card(co.def, co.pow, me, "strike")
 
@@ -736,7 +736,7 @@ func _mon_down(c: Mon) -> void:
 	Platform.haptic("error")
 	Feel.shake(0.5)
 	Feel.hit_stop(0.12)
-	Ui.refresh_hand()   # its cards stay in hand, now as discards
+	Ui.refresh_hand()   # cards of its element stay in hand; discards if no living creature shares it
 	Ui.render_bench()
 	if lead:
 		var pm = S.actor_for(c)
