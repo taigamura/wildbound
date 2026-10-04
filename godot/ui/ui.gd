@@ -374,7 +374,7 @@ func _paint(i: int) -> void:
 	var up = owner.ups.get(r.slot, "") if owner.ups is Dictionary else owner.ups.get(r.slot)
 	if up == null:
 		up = ""
-	var cost = Data.BAL.get("discard_cost", 1) if dead else S.card_cost(r)
+	var cost = Data.BAL.discard_cost if dead else S.card_cost(r)
 	var k := "%s|%s|%s|%s|%s|%s|%s|%s" % [r.uid, r.slot, def.cost, cost, bench, strong, up, dead]
 	if b.face.key == k and not b.face.empty:
 		return

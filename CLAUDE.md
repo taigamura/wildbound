@@ -38,7 +38,7 @@ Each element owns one status:
 | Ember | **Burn** | 2 damage/s | 2 damage/s | 4s |
 | Tide | **Soak** | takes +25% damage | takes +25% damage | 4s |
 | Thorn | **Root** | intent bar fills 40% slower | while it is lead, energy regenerates 40% slower | 3s |
-| Volt | **Shock** | resets the intent bar (cancels the wind-up). Can't re-Shock the same target for 6s | resets your chain and puts swapping on a 1s cooldown | instant |
+| Volt | **Shock** | resets the intent bar (cancels the wind-up). Can't re-Shock the same target for 6s | resets your chain and puts swapping on at least a 1s cooldown | instant |
 
 - One status per target; a new one replaces the old. Shock is instant and doesn't occupy the slot.
 - Your cards apply statuses to the enemy. **Enemy heavy attacks apply their element's status** to the creature they hit. Normal attacks don't. Perfect Swaps avoid it.
@@ -51,9 +51,10 @@ Each element owns one status:
 - **Middle:** enemy and your lead creature. The chain counter floats beside your lead.
 - **Bottom (thumb zone):** lead plate, 2 bench portraits, energy bar, a hand of 4 cards.
 - **The hand is a fan**, held like real cards: they overlap and tilt around a pivot below the screen (about ±4° and ±12° for 4 cards, outer cards slightly lower). Only cards that exist are fanned, so a short deck leaves no gaps.
+- **Quit:** a button in the battle HUD (beside mute) and on the map. There is no pause: the first tap arms it for 2s, the second ends the run as a loss ("Retreated"). Loot already banked is kept.
 
 ### 4.2 Lineup
-- Before a run, the title screen picks the team: **up to 3** owned creatures. The first pick is the lead. The party *is* this lineup for the whole run (no creatures join or leave mid-run). The last team is remembered.
+- Before a run, the **Team** screen (opened from the title's Team button, never the title itself) picks the team: **up to 3** owned creatures. Tap a creature to add or remove it; tap a lineup slot to make it the lead. The title shows the current team and Start. The party *is* this lineup for the whole run (no creatures join or leave mid-run). The last team is remembered (saved on every change).
 - The **deck** is the lineup's *equipped* cards: up to 3 creatures × 3 cards (Strike / Skill / Signature, as set in each creature's loadout, §16).
 - The party screen (choose the lead) opens from the map's **Lineup** button at any time. It is never forced (pillar 3).
 
@@ -61,16 +62,16 @@ Each element owns one status:
 - Energy regenerates **1/s**, **cap 10**. A fight starts with 3.
 - Hand of **4**. Playing a card immediately draws the next one. The deck cycles: the discard pile reshuffles when the draw pile is empty. With fewer than 4 cards in the deck (floor 1, solo starter), the extra slots stay empty.
 - Cards can be played any time, including during wind-ups. There is no global cooldown.
-- **Tap to inspect, flick to play.** Touching a card lifts it, straightens it and enlarges it so it can be read; tapping it again or tapping outside the hand puts it back, and touching another card inspects that one instead. **Flicking a card upward plays it** (dragged up more than 40% of its height, or released moving up fast after 15%). Any card can be flicked, inspected or not. A short drag snaps back. A card that can't be played (energy, swap cooldown) can still be inspected; flicking it shakes it and snaps it back.
+- **Hold to read, slide to scrub, swipe up to play.** A touch magnifies the card under the finger (lifted, straightened, enlarged; the others make room). Sliding sideways moves the magnification along the fan, like picking a card from a held hand. Swiping up plays the magnified card (up more than 40% of its height, or released moving up fast after 15%). Once the swipe passes 12% of the card's height it locks to that card and the card follows the finger; dragging back down returns to scrubbing. Releasing without a swipe puts the card back. A card that can't be played can still be magnified; swiping it shakes it and it snaps back.
 - **Cards belong to a creature.** Each card shows its owner's mini-portrait and element colour, and uses the owner's element.
   - Playing a lead card fires it normally.
-  - Playing a **bench creature's card swaps that creature in, then fires the card.** The swap costs nothing extra but starts the shared swap cooldown. **While swapping is on cooldown, bench cards can't be played** (they dim).
-  - Cards of knocked-out creatures leave the hand and the deck for the rest of the fight.
+  - **Only the lead's cards can be played.** A bench creature's cards stay in the hand, dimmed with a swap marker, until you swap that creature in. Playing a card never swaps. Deciding when to swap (and living with a hand of bench cards meanwhile) is the strategy.
+  - A knocked-out creature's cards **stay in the deck**, greyed out. Swiping one up discards it for **1** energy and draws the next card (no chain, Trait or discount effects).
 - "Self" on a card means its owner, which is always the lead when it fires. "Team" means every living lineup member.
 
 ### 4.4 Swapping
-- Tap a bench portrait to swap for **1 energy**. **1s cooldown**, shared with card swaps.
-- When the lead is knocked out, the healthiest bench creature auto-swaps in for free.
+- Swapping is **only** by tapping a bench portrait. It is free but has a **6s cooldown**. Bench portraits show the cooldown as a sweeping wedge with the seconds left, and pop when swapping is ready.
+- When the lead is knocked out, the healthiest bench creature auto-swaps in for free; this ignores and does not start the cooldown.
 - Shields and statuses stay on a creature when it is benched (shields keep decaying).
 
 ### 4.5 Auto-attack
@@ -99,7 +100,7 @@ A swap outside the window is a normal swap. During a heavy wind-up, bench portra
 ### 4.9 Win and lose
 - **Win:** enemy at 0 HP. Every win drops loot (§5.1).
 - **Lose:** all lineup creatures knocked out. **The run ends.**
-- After every fight, knocked-out creatures revive at **25%** HP. HP otherwise carries over; shields and statuses clear. Healing comes from Springs, Heal rewards and cards.
+- **Victories don't heal.** After a fight, HP carries over and knocked-out creatures stay down at 0 HP until a Spring or a Heal reward revives them; shields and statuses clear. If the lead is down, the healthiest living creature leads the next fight. Healing comes from Springs, Heal rewards and cards.
 
 ## 5. Loot, upgrades and the item shop
 Creatures come only from packs (§11). Dungeons are for **loot**: **gold** and three materials, **Sword**, **Orb** and **Jewel**. Loot is banked (persisted) the moment it drops, so it is kept whether the run is won or lost.
@@ -146,7 +147,7 @@ Reached from the title screen and the end-of-run screen. Shows gold and material
 | **Wild** | A creature from the biome's spawn pool. The node shows its gold range and material chance (§5.1) |
 | **Alpha** | +50% HP, +25% damage, double gold and a guaranteed material. Its reward gives **2 picks** |
 | **Spring** | Heal the whole party to 100% (reviving KOs) |
-| **Warden** | Mid-run boss (§8) |
+| **Warden** | Mid-run boss (§8). The Warden and Boss nodes show only their icon and name; what they do is learned in the fight |
 | **Boss** | Noctyrm (§8) |
 
 **Enemy scaling:** wild HP = `90 × (0.6 + 0.4 × speciesHP / 55) × (1 + 0.15 × (floor − 1))`. Damage ×`(1 + 0.10 × (floor − 1))`. Biome B wilds drawn from the Biome A pool scale as if 2 floors higher.
@@ -203,7 +204,7 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. Strike has one o
 ## 11. Collection and packs
 - **New install:** you own the 3 starters.
 - **Packs are the only way to get creatures.** **Daily pack:** one free per day, resetting at **04:00 device-local time**. A card-flip reveal grants **1 creature you don't own**, random from the 9 non-starters. Once you own all 12, it grants a **shiny** of a random owned creature that isn't shiny yet (a hue-shift with a sparkle on entry). With everything shiny, it says so. A **creature pack** bought in the item shop (§5.3) gives the same result.
-- **Starting a run:** pick a team of up to 3 owned creatures (§4.2). Each starts at its §10 stats plus its permanent upgrades (§5.2), with its saved loadout (§16).
+- **Starting a run:** pick a team of up to 3 owned creatures on the Team screen (§4.2). Each starts at its §10 stats plus its permanent upgrades (§5.2), with its saved loadout (§16).
 - **End of run:** shows floor reached, gold earned, Perfect Swaps, time, and the run's Essence and loot. Loot was banked as it dropped; a win adds **+50** gold. The screen links to the item shop.
 - **Collection screen:** 12 slots; unowned are silhouettes. Tap any slot to see its cards and Trait. It is also the **loadout editor** (§16) and the **upgrade screen** (§5.2) for owned creatures.
 - **"Run again"** on the results screen restarts immediately with the same team.
@@ -225,7 +226,7 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. Strike has one o
 Events, rival tamers, tamer cards, eggs, Warden part-breaking, crafting beyond Essence unlocks and material upgrades (§5, §16), equipment items, more than one alternate per card slot, sightings-based packs, evolution (§9), a second Warden, ranked mode and leaderboards, a daily seeded run, cosmetic card frames, monetization.
 
 ## 15. Open tuning questions (decide by playing)
-- Does bench-card swapping churn the lead so much that Perfect Swaps happen by accident? Fallback: bench cards fire from the bench without swapping, and only portrait taps swap.
+- Swap pace: is a 6s swap cooldown with no auto-swapping bench cards too clunky, or are hands clogged with bench and fainted cards too often? Levers: `BAL.swap_cd`, `discard_cost`. With no post-fight revive, also watch whether runs snowball after the first KO (levers: Spring frequency, Heal reward size).
 - Pack pace: with the daily pack plus bought packs (150 gold), how fast do players own all 12? Levers: `BAL.shopPack`, loot gold.
 - Loot and upgrade pace: target about **1 permanent upgrade per run**. Levers: `BAL.wildGold`/`goldPerFloor`/`wildMatChance`/`alphaGoldMul`/`alphaMats`/`wardenGold`/`wardenMats`/`bossGold`/`winGold`, `upGold`, `upMax`, `upDmg`/`upSpirit`/`upHp`, and shop prices `shopMat`/`shopPack`/`shopSell`.
 - Essence earn rate: target **1–2 unlocks per run**. Levers: `BAL.essWild`/`essAlpha`/`essWarden`/`essBoss`, `moveCost`, `traitCost`.
@@ -260,7 +261,7 @@ Loadouts give options, not power: every alternate is a sidegrade. Raising a crea
 | **Deep Roots** | Truffmole | Root it applies lasts **+1.5s** |
 | **Thirst** | Brambat | Its Strikes heal it for **30%** of their damage |
 | **Overshade** | Mossling | When it shields itself, the weakest teammate gets **half** |
-| **Relay** | Skiray | After a card swaps it in, your next card costs 1 less |
+| **Relay** | Skiray | After you swap to it, your next card costs 1 less |
 | **Live Wire** | Sparkit | The first time its card reaches chain **3+**, +1 energy |
 | **Grounded** | Coilsnail | Can't be Shocked; a Shock on it gives +1 energy instead |
 
@@ -315,7 +316,7 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godot hangs at startup without it here).
 - `godot --headless --audio-driver Dummy --path godot --quit`: load check (parse errors show here)
 - `godot --headless --audio-driver Dummy --path godot --script res://tests/test_core.gd`: core logic tests (all must pass)
-- `godot --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). Renders for real here (Vulkan llvmpipe).
+- `godot --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|team|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). Renders for real here (Vulkan llvmpipe).
 - `godot --audio-driver Dummy --path godot --script res://tests/stage_preview.gd`: stage-only visual test (both biomes, effects)
 - `godot --path godot -e`: the editor
 
@@ -325,7 +326,7 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 - Run state and card resolution: `game/state.gd` (`S`), entity classes `game/mon.gd`, `enemy.gd`, `card_ref.gd`, `map_node.gd`.
 - Collection, packs, loot wallet, permanent upgrades, shop trades, Essence, unlocks, loadouts, the last lineup: `game/meta.gd` (`Meta`).
 - Persistence and haptics: `core/platform.gd` (`Platform`, `user://save.cfg`). Sound: `core/audio.gd` (`Sfx`, synthesized at startup).
-- Map, nodes, loot drops, rewards, card upgrades, lineup, end of run, title (team picker), pack reveal, item shop, Collection with loadout editor and upgrades: `game/run.gd` (`Run`).
+- Map, nodes, loot drops, rewards, card upgrades, lineup, end of run, title, team builder (`scr-team`), quit (`quit_tap`/`quit_run`), pack reveal, item shop, Collection with loadout editor and upgrades: `game/run.gd` (`Run`).
 - HUD and the card fan: `ui/ui.gd` (`Ui`); screen frames `ui/screens.gd`; shared look (palette, fonts, Theme) `ui/kit.gd`; card face `ui/card_view.gd`; popups, banners, toasts `ui/fx.gd` (`Fx`). Frame loop and `--shot`: `scenes/main.gd`.
 - HD-2D stage: `render/stage.gd` (`Stage`: 3D world, camera, lights, WorldEnvironment, pedestals, shield, `projectile`, `lightning`), `render/actor.gd` (`Actor`), `render/particles.gd`, `render/feel.gd` (hit-stop, slow-mo, shake), `render/layout.gd` (screen band, `U`, spots). Art: `art/hd2d/` (`manifest.gd` species→sprite, `recolor.gd` per-element recolour, `diorama.gd` the two biomes, `tex.gd` procedural pixel textures, `pedestal.gd`, `shaders/`).
 - HD-2D sprite template: `docs/HD2D.md`; anchors in `docs/hd2d/anchors/`; normalizer `scripts/hd2d-sprite.py`.
@@ -337,7 +338,7 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 - **Species keys** are the lowercase creature names (`emberwick`, `kilnback`, `warden`, `noctyrm`). The HD-2D manifest keys sprites by them.
 - **Stale callbacks:** `S.tok` is bumped when a battle or run ends. Every delayed callback (tween callbacks, `create_timer`) captures `tok` and bails if it changed.
 - **Timing:** game-time effects use tweens/timers in scaled time so they obey hit-stop and slow-mo (`Feel` drives `Engine.time_scale` from real time). UI motion (the card fan, screens) runs in real time.
-- **Input:** the hand uses touch/mouse press-drag-release: press inspects instantly; release decides tap (toggle inspect) versus flick (play). Thresholds are the `FLICK_*` constants in `ui/ui.gd`.
+- **Input:** the hand uses touch/mouse press-drag-release. Press magnifies instantly; horizontal movement scrubs the magnification between cards (hysteresis `SCRUB_HYST`); upward travel past `LIFT_LOCK` commits a swipe on that card; release plays it if the `FLICK_*` thresholds are met, otherwise the card returns to the fan. Constants are in `ui/ui.gd`.
 - **Storage and native calls** only in `core/platform.gd`.
 - **Reserved word:** `trait` is reserved in GDScript; the field is `Mon.trait_key`, and dictionary keys `"trait"` are read with brackets.
 - **Assets:** pixel art uses nearest filtering; the only image files are the 3 HD-2D sprites (everything else is procedural). Keep it that way unless a real asset is approved.
