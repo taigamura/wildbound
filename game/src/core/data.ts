@@ -36,17 +36,21 @@ export const BAL = {
   burnDps: 2, burnDur: 4, soakMult: 1.25, soakDur: 4, rootSlow: 0.4, rootDur: 3, shockImmune: 6,
   // shields
   shieldDelay: 3, shieldDecay: 0.2,
-  // capture
-  capTh: 0.4, capBase: 0.5, capStatus: 0.15, capEnraged: 0.2, capMax: 0.95,
-  startCharges: 2, fleeTime: 15, enrageSpeed: 1.3, caughtHp: 0.6,
   // party & run
-  partyMax: 6, lineup: 3, reviveHp: 0.25, healReward: 0.4,
-  // upgrades & evolution
-  upPower: 1.3, evoFill: 150, evoCost: 3, evoHp: 1.5, primePower: 1.4,
+  lineup: 3, reviveHp: 0.25, healReward: 0.4,
+  // in-run card upgrades (§7)
+  upPower: 1.3,
+  // loot (§5.1): gold, and materials sword/orb/jewel
+  wildGold: [8, 12] as [number, number], goldPerFloor: 0.15, wildMatChance: 0.35,
+  alphaGoldMul: 2, alphaMats: 1, wardenGold: 40, wardenMats: 2, bossGold: 80, winGold: 50,
+  // permanent creature upgrades (§5.2): +per level; level n→n+1 costs (n+1) material + upGold×(n+1) gold
+  upMax: 5, upDmg: 0.08, upSpirit: 0.10, upHp: 0.08, upGold: 20,
+  // item shop (§5.3)
+  shopMat: 30, shopPack: 150, shopSell: 15,
   // daily pack
   packResetHour: 4,
   // loadouts & essence (§16)
-  essWild: 1, essAlpha: 2, essCatch: 2, essDupe: 3, essWarden: 3, essBoss: 2, moveCost: 5, traitCost: 8,
+  essWild: 1, essAlpha: 2, essWarden: 3, essBoss: 2, moveCost: 5, traitCost: 8,
   // trait numbers
   bulwarkDelay: 3, ebbHeal: 4, deepRoots: 1.5, thirst: 0.3, overshade: 0.5, livewireChain: 3,
 };
@@ -89,7 +93,7 @@ export interface CardDef {
   cleanse?: boolean;       // remove statuses from the team
 }
 
-/** Scales every number a "+30% effect" upgrade (or evolution) touches. */
+/** Scales every number a "+30% effect" upgrade touches. */
 export function scaleCard(c: CardDef, k: number): CardDef {
   if (k === 1) return c;
   const r = (v?: number) => v == null ? v : Math.round(v * k);
@@ -97,6 +101,24 @@ export function scaleCard(c: CardDef, k: number): CardDef {
     healTeam: r(c.healTeam), energy: r(c.energy), lifesteal: c.lifesteal && Math.min(1, +(c.lifesteal * k).toFixed(2)),
     reflect: c.reflect && Math.min(1, +(c.reflect * k).toFixed(2)), nextStrike: c.nextStrike && +(c.nextStrike * k).toFixed(1) };
 }
+/** Permanent upgrades (§5.2): damage ×power, shield and heal amounts ×spirit. */
+export function boostCard(c: CardDef, power: number, spirit: number): CardDef {
+  if (power === 1 && spirit === 1) return c;
+  const d = (v?: number) => v == null ? v : Math.round(v * power), h = (v?: number) => v == null ? v : Math.round(v * spirit);
+  return { ...c, dmg: d(c.dmg), bonusIf: c.bonusIf && { ...c.bonusIf, dmg: d(c.bonusIf.dmg)! }, shield: h(c.shield), shieldTeam: h(c.shieldTeam), heal: h(c.heal), healTeam: h(c.healTeam) };
+}
+/* ================= loot (§5) ================= */
+export type Mat = 'sword' | 'orb' | 'jewel';
+export const MATS: Mat[] = ['sword', 'orb', 'jewel'];
+/** Each material feeds one upgrade track. */
+export const MAT_DEF: Record<Mat, { name: string; track: string; color: string; text: string }> = {
+  sword: { name: 'Sword', track: 'Power',    color: 'var(--ember)', text: `+${Math.round(BAL.upDmg * 100)}% card and auto-attack damage per level` },
+  orb:   { name: 'Orb',   track: 'Spirit',   color: 'var(--tide)',  text: `+${Math.round(BAL.upSpirit * 100)}% shield and heal amounts per level` },
+  jewel: { name: 'Jewel', track: 'Vitality', color: 'var(--thorn)', text: `+${Math.round(BAL.upHp * 100)}% max HP per level` },
+};
+export interface Loot { gold: number; sword: number; orb: number; jewel: number }
+export const NO_LOOT = (): Loot => ({ gold: 0, sword: 0, orb: 0, jewel: 0 });
+
 /** True if "+30% effect" changes anything (otherwise only −1 cost is offered). */
 export const scalable = (c: CardDef) => !!(c.dmg || c.bonusIf || c.fromShield || c.shield || c.shieldTeam || c.heal || c.healTeam
   || c.energy || c.lifesteal || c.reflect || c.nextStrike || (c.status && c.status !== 'shock'));
@@ -150,8 +172,6 @@ export interface SpeciesDef {
   atk?: number; spd?: number;                    // only used when it's an enemy (default 1)
   cards?: Record<Slot, CardDef[]>;               // per slot: [default, ...alternates] (§16)
   trait?: TraitKey;                              // built-in Trait (§16)
-  evo?: { key: string; sig: CardDef };           // named evolution (starters)
-  evoOf?: string;                                // art-only species: the evolved form of …
   heavy?: string;                                // heavy attack name override
   warden?: boolean; boss?: boolean;
 }
@@ -160,27 +180,21 @@ const C = (name: string, cost: number, fx: Omit<CardDef, 'name' | 'cost'>): Card
 export const SPECIES: Record<string, SpeciesDef> = {
   // ---------- Ember
   emberwick: { name: 'Emberwick', el: 'ember', hp: 50, trait: 'afterglow', size: 1, feats: ['ears', 'flame', 'tail'], role: 'Balanced',
-    cards: { strike: [C('Peck', 1, { dmg: 6 })], skill: [C('Kindle', 2, { status: 'burn' }), C('Flare Step', 1, { energy: 1, chain: 1 })], sig: [C('Wickflare', 3, { dmg: 14, bonusIf: { status: 'burn', dmg: 8 } }), C('Wildfire', 3, { dmg: 8, status: 'burn', chain: 1 })] },
-    evo: { key: 'pyrowl', sig: C('Crownflare', 3, { dmg: 20, bonusIf: { status: 'burn', dmg: 12 }, status: 'burn' }) } },
-  pyrowl: { name: 'Pyrowl', el: 'ember', hp: 50, size: 1.2, feats: ['ears', 'flame', 'wings', 'tail'], evoOf: 'emberwick' },
+    cards: { strike: [C('Peck', 1, { dmg: 6 })], skill: [C('Kindle', 2, { status: 'burn' }), C('Flare Step', 1, { energy: 1, chain: 1 })], sig: [C('Wickflare', 3, { dmg: 14, bonusIf: { status: 'burn', dmg: 8 } }), C('Wildfire', 3, { dmg: 8, status: 'burn', chain: 1 })] } },
   cinderpip: { name: 'Cinderpip', el: 'ember', hp: 35, trait: 'quickfuse', size: 0.85, feats: ['ears', 'flame'], role: 'Glass cannon', atk: 1.2, spd: 1.1,
     cards: { strike: [C('Scorch', 1, { dmg: 7 })], skill: [C('Flicker', 1, { discount: 1 }), C('Flare Up', 1, { chain: 1, selfDmg: 2 })], sig: [C('Flashfire', 4, { dmg: 24 }), C('Ember Barrage', 3, { dmg: 5, hits: 3 })] } },
   kilnback: { name: 'Kilnback', el: 'ember', hp: 75, trait: 'bulwark', size: 1.22, feats: ['horns', 'spikes', 'flame'], role: 'Tank', atk: 0.85, spd: 0.9,
     cards: { strike: [C('Bash', 1, { dmg: 5 })], skill: [C('Hearth Shell', 2, { shield: 12 }), C('Forge', 2, { shield: 6, nextStrike: 2 })], sig: [C('Slow Burn', 3, { status: 'burn', shield: 8 }), C('Magma Ram', 3, { dmg: 16, selfDmg: 4 })] } },
   // ---------- Tide
   bellspring: { name: 'Bellspring', el: 'tide', hp: 55, trait: 'ebb', size: 0.95, feats: ['fin', 'tail', 'whisk'], role: 'Sustain',
-    cards: { strike: [C('Splash', 1, { dmg: 5 })], skill: [C('Drench', 2, { status: 'soak' }), C('Tidecall', 2, { shieldTeam: 5 })], sig: [C('Lantern Tide', 3, { dmg: 10, healTeam: 8 }), C('Undertide', 3, { dmg: 14, bonusIf: { status: 'soak', dmg: 6 } })] },
-    evo: { key: 'lanternmere', sig: C('Beacon Tide', 3, { dmg: 14, healTeam: 14 }) } },
-  lanternmere: { name: 'Lanternmere', el: 'tide', hp: 55, size: 1.15, feats: ['fin', 'tail', 'whisk', 'antenna'], evoOf: 'bellspring' },
+    cards: { strike: [C('Splash', 1, { dmg: 5 })], skill: [C('Drench', 2, { status: 'soak' }), C('Tidecall', 2, { shieldTeam: 5 })], sig: [C('Lantern Tide', 3, { dmg: 10, healTeam: 8 }), C('Undertide', 3, { dmg: 14, bonusIf: { status: 'soak', dmg: 6 } })] } },
   puddlet: { name: 'Puddlet', el: 'tide', hp: 40, trait: 'undercurrent', size: 0.85, feats: ['fin', 'whisk'], role: 'Healer', atk: 0.9,
     cards: { strike: [C('Drip', 1, { dmg: 4 })], skill: [C('Mend', 2, { heal: 15 }), C('Bubble', 1, { shield: 7 })], sig: [C('Spring Rain', 4, { healTeam: 12, cleanse: true }), C('Wellspring', 3, { healTeam: 6, energy: 2 })] } },
   brinecrab: { name: 'Brinecrab', el: 'tide', hp: 80, trait: 'counterweave', size: 1.18, feats: ['horns', 'fin', 'whisk'], role: 'Tank', atk: 0.9, spd: 0.9,
     cards: { strike: [C('Pinch', 1, { dmg: 6 })], skill: [C('Barnacle', 2, { shield: 14 }), C('Brace', 1, { reflect: 0.3 })], sig: [C('Undertow', 3, { dmg: 12, status: 'soak' }), C('Tidal Clamp', 3, { dmg: 10, shield: 10 })] } },
   // ---------- Thorn
   truffmole: { name: 'Truffmole', el: 'thorn', hp: 55, trait: 'deeproots', size: 1, feats: ['leaf', 'ears'], role: 'Control',
-    cards: { strike: [C('Dig', 1, { dmg: 6 })], skill: [C('Tangle', 2, { status: 'root' }), C('Burrow', 2, { shield: 8, nextStrike: 2 })], sig: [C('Sporeburst', 3, { dmg: 12, heal: 6 }), C('Rootquake', 4, { dmg: 16, status: 'root' })] },
-    evo: { key: 'morelord', sig: C('Spore Bloom', 3, { dmg: 18, healTeam: 8 }) } },
-  morelord: { name: 'Morelord', el: 'thorn', hp: 55, size: 1.2, feats: ['leaf', 'ears', 'spikes', 'crown'], evoOf: 'truffmole' },
+    cards: { strike: [C('Dig', 1, { dmg: 6 })], skill: [C('Tangle', 2, { status: 'root' }), C('Burrow', 2, { shield: 8, nextStrike: 2 })], sig: [C('Sporeburst', 3, { dmg: 12, heal: 6 }), C('Rootquake', 4, { dmg: 16, status: 'root' })] } },
   brambat: { name: 'Brambat', el: 'thorn', hp: 40, trait: 'thirst', size: 0.9, feats: ['wings', 'ears', 'spikes'], role: 'Drain', atk: 1.1, spd: 1.1,
     cards: { strike: [C('Nip', 1, { dmg: 5, heal: 2 })], skill: [C('Thornveil', 2, { reflect: 0.5 }), C('Hemlock', 2, { status: 'root', heal: 6 })], sig: [C('Leech Dive', 3, { dmg: 12, lifesteal: 0.5 }), C('Thorn Storm', 4, { dmg: 8, hits: 2, reflect: 0.3 })] } },
   mossling: { name: 'Mossling', el: 'thorn', hp: 50, trait: 'overshade', size: 1.1, feats: ['spikes', 'leaf'], role: 'Support', atk: 0.9,
@@ -227,6 +241,9 @@ export const GLYPH = {
   swap: '<path d="M7 4L3 8l4 4V9h10V7H7zm10 8v3H7v2h10v3l4-4z"/>',
   up: '<path d="M12 3l8 9h-5v9H9v-9H4z"/>',
   sound: '<path d="M3 9h4l5-5v16l-5-5H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/>',
+  coin: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 4v1.1c1.6.3 2.8 1.3 2.9 2.9h-2c-.1-.7-.7-1.1-1.9-1.1-1.1 0-1.7.4-1.7 1s.5.9 2.1 1.3c2.2.5 3.6 1.2 3.6 3.1 0 1.6-1.2 2.6-3 2.9V18h-2v-1.1c-1.8-.3-3.1-1.4-3.1-3.1h2c.1.8.8 1.3 2.1 1.3 1.2 0 1.9-.4 1.9-1.1 0-.6-.5-1-2.2-1.4-2-.4-3.5-1.1-3.5-3 0-1.5 1.1-2.5 2.8-2.8V6z"/>',
+  sword: '<path d="M20 2l-1 5-9 9-2-2 9-9zM7 15l2 2-2 2 1.5 1.5-1.5 1.5L5.5 20.5 4 22l-2-2 1.5-1.5L2 17l1.5-1.5L5 17z"/>',
+  jewel: '<path d="M7 3h10l5 6-10 13L2 9zm1.2 2L5.4 8.4h4.1L11 5zm7.6 0H13l1.5 3.4h4.1zM12 6.2l-1.3 2.2h2.6zM5.6 10.4l5.4 7.1-2.5-7.1zm5 0L12 15l1.4-4.6zm4.9 0L13 17.5l5.4-7.1z"/>',
   mute: '<path d="M3 9h4l5-5v16l-5-5H3zm13.6-.6L19 10.8l2.4-2.4 1.4 1.4-2.4 2.4 2.4 2.4-1.4 1.4-2.4-2.4-2.4 2.4-1.4-1.4 2.4-2.4-2.4-2.4z"/>',
 };
 export type GlyphKey = keyof typeof GLYPH;

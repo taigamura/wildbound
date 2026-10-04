@@ -19,7 +19,6 @@
     <div class="top" data-band-top>
       <div class="meta">
         <span class="pill">Floor <b id="floorT">1</b>/8</span>
-        <span class="pill">Charges <b id="chargeT">0</b></span>
         <span class="grow"></span>
         <button class="iconbtn" id="muteBtn" aria-label="Toggle sound"></button>
       </div>
@@ -34,13 +33,10 @@
       <div class="plate mine">
         <div class="prow"><span class="elchip" id="pEl"></span><span class="nm" id="pName"></span><span class="sp"></span><span class="lv" id="pLv"></span></div>
         <div class="bar"><i class="ghost" id="pGhost"></i><i class="hpfill" id="pHp"></i><i class="shf" id="pSh"></i><b id="pHpT"></b></div>
-        <div class="evobar" id="pEvo" hidden><i></i></div>
         <div class="status" id="pStat"></div>
       </div>
       <div class="actrow">
         <div class="bench" id="bench"></div>
-        <button id="evoBtn" hidden>Evolve<small>3 energy</small></button>
-        <button id="capBtn" hidden>Capture<small id="capOdds"></small></button>
       </div>
       <div class="energy"><div class="segs" id="segs"></div><span id="enT">3</span></div>
       <div class="hand" id="hand"></div>
@@ -53,15 +49,15 @@
   <section class="screen" id="scr-title">
     <div class="logo" data-band-top>
       <h1>Wildbound</h1>
-      <p>Catch · Deal · Survive</p>
+      <p>Collect · Deal · Survive</p>
     </div>
     <div class="sheet" data-band-bottom>
       <div>
-        <div class="eyebrow">Choose your starter</div>
-        <p class="sub" style="margin-top:6px">Your team is your deck. Catch creatures below 40% health to add their cards, and swap to dodge heavy hits.</p>
+        <div class="eyebrow" id="pickEyebrow">Choose your team</div>
+        <p class="sub" style="margin-top:6px">Pick up to three. Your team is your deck. The first pick leads; swap to dodge heavy hits. Win fights for gold and materials.</p>
       </div>
       <div class="starters" id="starters"></div>
-      <div class="metarow"><button class="metabtn" id="packBtn"></button><button class="metabtn" id="collBtn"></button></div>
+      <div class="metarow"><button class="metabtn" id="packBtn"></button><button class="metabtn" id="collBtn"></button><button class="metabtn" id="shopBtn"></button></div>
       <div class="artrow" id="artRow">
         <div class="eyebrow">Art style</div>
         <div class="artpick" id="artPicker"></div>
@@ -81,7 +77,7 @@
       </div>
       <div class="nodes" id="nodes"></div>
       <div class="party" id="mapParty"></div>
-      <div class="row"><span class="best" id="mapCharges"></span><button class="ghostbtn" id="lineupBtn">Lineup</button></div>
+      <div class="row"><span class="best" id="mapGold"></span><button class="ghostbtn" id="lineupBtn">Lineup</button></div>
     </div>
   </section>
 
@@ -104,7 +100,7 @@
       <div>
         <div class="eyebrow">Upgrade a card</div>
         <h2 class="h" style="margin-top:6px">Pick a card</h2>
-        <p class="sub" style="margin-top:6px">Each card can be upgraded once. Upgrades leave with a released creature.</p>
+        <p class="sub" style="margin-top:6px">Each card can be upgraded once. Card upgrades last for this run.</p>
       </div>
       <div class="uplist" id="upList"></div>
       <div class="upchoice" id="upChoice" hidden></div>
@@ -143,15 +139,14 @@
     </div>
   </section>
 
-  <section class="screen" id="scr-catch" hidden>
-    <div></div>
-    <div class="sheet" data-band-bottom>
-      <div>
-        <div class="eyebrow">Party full</div>
-        <h2 class="h" id="ctTitle" style="margin-top:6px">Who makes room?</h2>
-        <p class="sub" style="margin-top:6px">Your party holds six. Release one (its cards and upgrades go with it), or let the new catch go. It still counts as caught.</p>
-      </div>
-      <div class="nodes" id="ctList"></div>
+  <section class="screen" id="scr-shop" hidden>
+    <div class="logo" data-band-top><h1 style="font-size:clamp(36px,11vw,52px)">Item shop</h1><p>Spend your loot</p><div class="esschips" id="shopWallet"></div></div>
+    <div class="sheet tall" data-band-bottom>
+      <div class="eyebrow">Buy</div>
+      <div class="nodes" id="shopBuy"></div>
+      <div class="eyebrow">Sell</div>
+      <div class="nodes" id="shopSell"></div>
+      <button class="ghostbtn" id="shopBack">Back</button>
     </div>
   </section>
 
@@ -163,10 +158,10 @@
     <div class="sheet" data-band-bottom>
       <div class="stats" id="endStats"></div>
       <div class="esschips" id="endEss"></div>
-      <div id="endKeep"></div>
+      <div class="esschips" id="endLoot"></div>
       <div class="party" id="endParty"></div>
       <button class="big" id="againBtn">Run again</button>
-      <button class="ghostbtn" id="titleBtn">Title</button>
+      <div class="row2"><button class="ghostbtn" id="endShopBtn" style="flex:1">Item shop</button><button class="ghostbtn" id="titleBtn" style="flex:1">Title</button></div>
     </div>
   </section>
 </div>

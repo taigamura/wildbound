@@ -10,7 +10,7 @@ import { buildStage, resizeStage, updateScene, pedE, pedP, arenaTint } from './r
 import { getStyle, useStyle, initialStyleId } from './art/registry';
 import { S, act, activeActor } from './game/state';
 import { initHud, syncHUD } from './game/ui';
-import { playCard, swapTap, tryCapture, tryEvolve, tickBattle, debug } from './game/battle';
+import { playCard, swapTap, tickBattle, debug } from './game/battle';
 import { initRunUi, toTitle } from './game/run';
 import { SPECIES } from './core/data';
 import { $ } from './core/util';
@@ -21,7 +21,7 @@ let T = 0;
 function frame(tk: { deltaMS: number }) {
   const real = Math.min(tk.deltaMS / 1000, 0.05); let dt = real;
   // hit-stop: slow the whole world (sim, particles, tweens) for a few frames on big hits
-  // slow-mo (Perfect Swap, evolution): the same, gentler and longer
+  // slow-mo (Perfect Swap): the same, gentler and longer
   let ts = 1;
   if (feel.hitStop > 0) { feel.hitStop -= real; ts = 0.06; }
   else if (feel.slow > 0) { feel.slow -= real; ts = feel.slowScale; }
@@ -57,7 +57,7 @@ async function boot() {
   measureBand(true);
   await useStyle(initialStyleId());
   buildStage();
-  initHud({ play: playCard, swap: swapTap, capture: tryCapture, evolve: tryEvolve });
+  initHud({ play: playCard, swap: swapTap });
   initRunUi();
   if (new URLSearchParams(location.search).has('export-pack')) {
     const { exportPack } = await import('./tools/exportPack');

@@ -1,19 +1,19 @@
 // Run state. One mutable object, read and written by battle/run/ui.
-import { SPECIES, BAL, HEAVY_NAME, WARDEN_HEAVIES, scaleCard, type El, type Slot, type Status, type CardDef, type TraitKey } from '../core/data';
-import { loadout } from './meta';
+import { SPECIES, BAL, HEAVY_NAME, WARDEN_HEAVIES, scaleCard, boostCard, type El, type Slot, type Status, type CardDef, type TraitKey } from '../core/data';
+import { loadout, boosts } from './meta';
 import { Actor } from '../render/actor';
 
 export interface StatusState { k: Status; t: number; acc?: number }
 export interface Mon {
   uid: number;
-  key: string;          // base species (cards, stats)
-  art: string;          // species drawn on screen (changes on evolution)
+  key: string;          // species (cards, stats, art)
   name: string; el: El;
   maxHp: number; hp: number; alive: boolean;
   shield: number; shieldT: number;        // shieldT: seconds since the shield was last added to
   status: StatusState | null;
   ups: Partial<Record<Slot, 'power' | 'cost'>>;
-  starter: boolean; evo: number; evolved: boolean; shiny: boolean;
+  shiny: boolean;
+  power: number; spirit: number;   // permanent upgrades (§5.2): damage ×power, shield/heal amounts ×spirit (max HP is baked into maxHp)
   reflect: number;      // Thornveil: next hit taken reflects this fraction
   nextStrike: number;   // Capacitor: next Strike multiplier
   moves: Record<Slot, number>;  // equipped card per slot (index into SPECIES[key].cards[slot]), fixed when it joins
@@ -29,10 +29,8 @@ export interface Enemy {
   t: number;            // progress through the current wind-up (s)
   windup: number;       // length of the current wind-up (s)
   count: number;        // attacks made so far
-  enraged: boolean;
   status: StatusState | null; statusSrc: number; shockCd: number;
   shiftT: number;       // boss: seconds to next element shift
-  fleeT: number | null; // wild: seconds until it flees (starts below the capture threshold)
   perfect: boolean;     // a Perfect Swap was made during this heavy's window
   heavyIdx: number;     // warden: which heavy comes next
 }
@@ -44,15 +42,14 @@ export const S = {
   mode: 'title' as Mode,
   party: [] as Mon[], lineup: [] as number[], active: 0,   // lineup: uids (≤3), active: uid of the lead
   draw: [] as CardRef[], disc: [] as CardRef[], hand: [] as (CardRef | null)[],
-  energy: 0, charges: 0, floor: 1, enemy: null as Enemy | null,
+  energy: 0, floor: 1, enemy: null as Enemy | null,
   swapCd: 0, autoT: 0,
   chain: 0, chainT: 99, discount: 0,
   wired: false,                          // Live Wire already paid out for the current chain
   /** Bumped whenever a battle/run ends; delayed callbacks compare against it and bail if stale. */
   tok: 0,
-  starter: 'emberwick',
-  caught: [] as string[],                // species caught this run
-  stats: { caught: 0, start: 0, dealt: 0, perfects: 0 },
+  picks: [] as string[],                 // lineup chosen on the title screen (species keys, first = lead)
+  stats: { start: 0, dealt: 0, perfects: 0 },
   nodes: [] as MapNode[],
   actors: {} as Record<number, Actor>,   // party members by uid
   em: null as Actor | null,              // enemy
@@ -66,25 +63,21 @@ export const team = () => S.lineup.map(mon).filter(Boolean) as Mon[];
 export const bench = () => team().filter(c => c.uid !== S.active);
 export const activeActor = () => { const c = act(); return c ? S.actors[c.uid] ?? null : null; };
 
-/** A fresh party member. Its moves and Trait come from the saved loadout for its species (§16). */
+/** A fresh party member. Its moves and Trait come from the saved loadout (§16), its numbers from its upgrades (§5.2). */
 export function newMon(key: string, shiny = false): Mon {
-  const sp = SPECIES[key], lo = loadout(key);
-  return { uid: S.uid++, key, art: key, name: sp.name, el: sp.el, maxHp: sp.hp, hp: sp.hp, alive: true, shield: 0, shieldT: 0,
-    status: null, ups: {}, starter: false, evo: 0, evolved: false, shiny, reflect: 0, nextStrike: 1,
+  const sp = SPECIES[key], lo = loadout(key), b = boosts(key), hp = Math.round(sp.hp * b.vital);
+  return { uid: S.uid++, key, name: sp.name, el: sp.el, maxHp: hp, hp, alive: true, shield: 0, shieldT: 0,
+    status: null, ups: {}, shiny, power: b.power, spirit: b.spirit, reflect: 0, nextStrike: 1,
     moves: { strike: 0, skill: lo.skill, sig: lo.sig }, trait: lo.trait, played: 0 };
 }
-/** The base card a creature has equipped in a slot (before upgrades and evolution). */
+/** The base card a creature has equipped in a slot (before upgrades). */
 export const baseCard = (c: Mon, slot: Slot): CardDef => { const l = SPECIES[c.key].cards![slot]; return l[c.moves[slot]] ?? l[0]; };
 
-/** The card a ref points at, with upgrades and evolution applied. `pow` scales status durations and Discharge. */
+/** The card a ref points at, with in-run and permanent upgrades applied. `pow` scales status durations and Discharge. */
 export function cardOf(r: CardRef): { def: CardDef; pow: number; owner: Mon } {
-  const owner = mon(r.uid)!, sp = SPECIES[owner.key];
-  let base = baseCard(owner, r.slot), pow = 1;
-  // a named evolution replaces only the default Signature; an alternate Signature gets the Prime boost
-  if (r.slot === 'sig' && owner.evolved) { if (sp.evo && owner.moves.sig === 0) base = sp.evo.sig; else pow *= BAL.primePower; }
-  const up = owner.ups[r.slot];
-  if (up === 'power') pow *= BAL.upPower;
-  const def = { ...scaleCard(base, pow), cost: Math.max(0, base.cost - (up === 'cost' ? 1 : 0)) };
+  const owner = mon(r.uid)!, base = baseCard(owner, r.slot), up = owner.ups[r.slot];
+  const pow = up === 'power' ? BAL.upPower : 1;
+  const def = { ...boostCard(scaleCard(base, pow), owner.power, owner.spirit), cost: Math.max(0, base.cost - (up === 'cost' ? 1 : 0)) };
   return { def, pow, owner };
 }
 export const cardCost = (r: CardRef) => {
@@ -109,20 +102,9 @@ export function heavyOf(e: Enemy): { el: El; name: string } {
 }
 /** True during the last moments of a heavy wind-up, when a resisting swap is Perfect. */
 export const inPerfectWindow = (e: Enemy) => isHeavy(e) && e.windup - e.t <= BAL.perfectWin;
-export const canCapture = (e: Enemy | null) => !!e && e.kind === 'wild' && e.alive && e.hp / e.max <= BAL.capTh;
-export function captureOdds(e: Enemy) {
-  const v = BAL.capBase + (BAL.capTh - e.hp / e.max) + (e.status ? BAL.capStatus : 0) + (e.enraged ? BAL.capEnraged : 0);
-  return Math.min(BAL.capMax, v);
-}
-/** The run's starter, if its meter is full and it can evolve right now. */
-export function evoCandidate(): Mon | null {
-  const c = S.party.find(m => m.starter);
-  return c && !c.evolved && c.alive && c.evo >= BAL.evoFill && S.lineup.includes(c.uid) ? c : null;
-}
-
 export function actorFor(c: Mon) {
   let a = S.actors[c.uid];
-  if (!a) { a = S.actors[c.uid] = new Actor(c.art); a.setShiny(c.shiny); if (c.evolved && c.art === c.key) a.setEvoFallback(true); }
+  if (!a) { a = S.actors[c.uid] = new Actor(c.key); a.setShiny(c.shiny); }
   return a;
 }
 export function dropActor(uid: number) { S.actors[uid]?.destroy(); delete S.actors[uid]; }

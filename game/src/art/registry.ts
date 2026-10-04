@@ -4,15 +4,18 @@ import { stickerStyle } from './sticker';
 import { packStyles } from './packs';
 import { store } from '../core/platform';
 
-export const STYLES: ArtStyle[] = [stickerStyle, ...packStyles];
+/** The style a new install starts with (CLAUDE.md §13). Listed first in the picker. */
+export const DEFAULT_STYLE = 'hd2d';
+const all = [stickerStyle, ...packStyles];
+export const STYLES: ArtStyle[] = [...all.filter(s => s.id === DEFAULT_STYLE), ...all.filter(s => s.id !== DEFAULT_STYLE)];
 let current: ArtStyle = stickerStyle;
 
 export const getStyle = () => current;
 
-/** Requested style: ?art=<id> in the URL wins, then the saved choice. */
+/** Requested style: ?art=<id> in the URL wins, then the saved choice, then DEFAULT_STYLE. */
 export function initialStyleId() {
   const q = new URLSearchParams(location.search).get('art');
-  return q || store.get('art', stickerStyle.id);
+  return q || store.get('art', DEFAULT_STYLE);
 }
 
 export async function useStyle(id: string) {

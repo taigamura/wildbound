@@ -14,3 +14,4 @@ app/src/game-html.generated.ts
 
 # iOS build artifacts (ship-ios copies them here)
 *.ipa
+.playwright-mcp/
