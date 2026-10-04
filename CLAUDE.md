@@ -1,8 +1,8 @@
 # CLAUDE.md
 
-**This file is the single source of truth for Wildbound:** what the game is (design spec), how the code is laid out, and the rules for changing it. If code and this file disagree, one of them is a bug; fix whichever is wrong and keep them in sync in the same change. `README.md` covers setup and shipping only. `docs/ART.md` is the how-to for making art packs, and `docs/HD2D.md` is the ChatGPT template for HD-2D sprites; both follow the art rules here.
+**This file is the single source of truth for Wildbound:** what the game is (design spec), how the code is laid out, and the rules for changing it. If code and this file disagree, one of them is a bug; fix whichever is wrong and keep them in sync in the same change. `README.md` covers setup and shipping only. `docs/ART.md` describes the legacy web art packs, and `docs/HD2D.md` is the ChatGPT template for HD-2D sprites; both follow the art rules here.
 
-All numbers below are **starting values**. They live in `game/src/core/data.ts` (`BAL` and the roster) and are tuned by playing. When you change a number there, change it here too.
+All numbers below are **starting values**. They live in `godot/core/data.gd` (`BAL` and the roster) and are tuned by playing. When you change a number there, change it here too.
 
 ---
 
@@ -218,8 +218,8 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. Strike has one o
 - **Direction: HD-2D**, in the spirit of Octopath Traveler. Low-resolution pixel-art sprites in a lit, painterly diorama. Depth of field, bloom, lighting and particles come from the engine, never from the sprite.
 - **Cast:** monsters (the roster, Warden, boss) and **humanoid characters**. Humanoids are generated in ChatGPT with the template in `docs/HD2D.md`; monsters use the same Style Block so both read as one game.
 - **Locked style constants** (full list in `docs/HD2D.md`): humanoids about 128 px tall and chibi (about 3 heads, like Octopath Traveler's field sprites, always adult characters); monsters about 100 px × species size (in-game height set by the manifest, so the pixel count can vary slightly); three-quarter view facing right; key light from the upper left; 1 px selective outline, never pure black; at most 32 colours asked for in the prompt. `scripts/hd2d-sprite.py` snaps ChatGPT's output onto its own pixel grid without merging detail.
-- **Budget:** 12 creature stills, 1 Warden, 1 boss, 2 biome backgrounds = **16 images**, plus humanoids once they have a role (§15). Element icons and card frames are drawn in code. Shinies are a filter. Missing images fall back to the procedural Sticker look.
-- **Current HD-2D pack** (`art/packs/hd2d/`, the default style): placeholders until the roster is generated. The 3 anchors stand in for every creature, hue-remapped per element (`recolor`), and the background diorama and pedestal are procedural, so the pack ships no background images. See `docs/ART.md`.
+- **Budget:** 12 creature stills, 1 Warden, 1 boss, 2 biome backgrounds = **16 images**, plus humanoids once they have a role (§15). Element icons and card frames are drawn in code. Shinies are a filter. 
+- **Current art** (`godot/art/hd2d/`): placeholders until the roster is generated. The 3 anchors stand in for every creature, hue-remapped per element (`recolor.gd`; mapping in `manifest.gd`). The diorama is real 3D (Godot): procedural meshes and pixel textures, a warm key light from the upper left with shadows, depth of field, glow, light shafts, fog. Biome 0 is sunlit forest ruins, biome 1 moonlit castle ruins with lanterns. No background images.
 
 ## 14. Out of scope (later)
 Events, rival tamers, tamer cards, eggs, Warden part-breaking, crafting beyond Essence unlocks and material upgrades (§5, §16), equipment items, more than one alternate per card slot, sightings-based packs, evolution (§9), a second Warden, ranked mode and leaderboards, a daily seeded run, cosmetic card frames, monetization.
@@ -294,48 +294,49 @@ A SessionStart hook (`.claude/hooks/session-context.sh`, registered in `.claude/
 Keep both up to date: write commit bodies that explain *why*, and edit "Releasing" in the same change whenever release state changes (a new upload, a credentials change, a pipeline change).
 
 ## What this is
-A PixiJS web app (`game/`) shipped inside an Expo WebView shell (`app/`). iOS builds run on EAS, so no Mac is needed.
+A **Godot 4.7.2** game (`godot/`, GDScript, Mobile renderer), exported to iOS on the Mac build server and submitted from this machine.
 
-**The art style is expected to change.** All visuals that define the look go through `game/src/art/` (see `docs/ART.md`). Gameplay code must stay art-agnostic.
+`game/` (PixiJS web app) and `app/` (Expo WebView shell) are the **legacy web version**, kept only as the reference the Godot port was made from. Don't add features there; delete them once the Godot build is confirmed on device.
+
+`godot/CONTRACT.md` is the module contract from the port: which autoload owns what, the cross-module APIs, and the naming rule (TS names → snake_case). Keep it in sync when an API changes.
 
 ## Commands
-- `npm run dev`: game at http://localhost:5173 (`?art=<id>` picks a style; `?export-pack` bakes creature PNGs)
-- `npm run typecheck`: game + app
-- `npm run build`: build the game and embed it into the app (`app/src/game-html.generated.ts`, gitignored)
-- `npm run app`: Expo dev server (Expo Go works)
-- `cd app && npx expo export --platform ios`: proves the iOS bundle compiles (CI runs this)
+Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godot hangs at startup without it here).
+- `godot --headless --audio-driver Dummy --path godot --quit`: load check (parse errors show here)
+- `godot --headless --audio-driver Dummy --path godot --script res://tests/test_core.gd`: core logic tests (all must pass)
+- `godot --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). Renders for real here (Vulkan llvmpipe).
+- `godot --audio-driver Dummy --path godot --script res://tests/stage_preview.gd`: stage-only visual test (both biomes, effects)
+- `godot --path godot -e`: the editor
 
-## Where things live
-- Balance and content: `game/src/core/data.ts`. `BAL` holds every tuning number; `SPECIES` holds the roster and cards (each slot is a list: `[default, ...alternates]`); `TRAITS` holds the Trait definitions.
-- Combat, statuses, Perfect Swap, chain, Trait effects: `game/src/game/battle.ts`.
-- Map, nodes, loot drops, rewards, card upgrades, party/lineup, end of run, title (team picker), packs, the item shop, Collection, the loadout editor and permanent upgrades: `game/src/game/run.ts`.
-- Collection, packs (daily and bought), loot wallet, permanent upgrades, shop trades, Essence, unlocks, saved loadouts, the last lineup and persisted progress: `game/src/game/meta.ts`.
-- Run state and card resolution helpers (deck building, equipped and upgraded card stats): `game/src/game/state.ts`.
-- DOM HUD and card rendering: `game/src/game/ui.ts`.
-- On-screen creatures: `render/actor.ts` (the `Actor` class). Gameplay only ever uses Actors.
-- Art: `art/types.ts` (contracts), `art/registry.ts` (active style and `DEFAULT_STYLE`), `art/sticker/`, `art/sprite/` (image packs; `recolor.ts` bakes per-element recolours), `art/packs/<id>/` (`packs/hd2d/scene.ts` is the procedural HD-2D diorama and pedestal). HD-2D sprite template: `docs/HD2D.md`; anchors in `docs/hd2d/anchors/`; normalizer `scripts/hd2d-sprite.py`.
-- Host bridge: `core/platform.ts` ↔ `app/src/bridge.ts`. Keep the message types in sync.
+## Where things live (all under `godot/`)
+- Balance and content: `core/data.gd` (`Data`). `BAL` holds every tuning number; `SPECIES` the roster and cards (each slot a list: `[default, ...alternates]`); `TRAITS` the Trait definitions.
+- Combat, statuses, Perfect Swap, chain, Trait effects: `game/battle.gd` (`Battle`). It emits `card_played(i)` / `card_denied(i, why)`; it never touches card Controls.
+- Run state and card resolution: `game/state.gd` (`S`), entity classes `game/mon.gd`, `enemy.gd`, `card_ref.gd`, `map_node.gd`.
+- Collection, packs, loot wallet, permanent upgrades, shop trades, Essence, unlocks, loadouts, the last lineup: `game/meta.gd` (`Meta`).
+- Persistence and haptics: `core/platform.gd` (`Platform`, `user://save.cfg`). Sound: `core/audio.gd` (`Sfx`, synthesized at startup).
+- Map, nodes, loot drops, rewards, card upgrades, lineup, end of run, title (team picker), pack reveal, item shop, Collection with loadout editor and upgrades: `game/run.gd` (`Run`).
+- HUD and the card fan: `ui/ui.gd` (`Ui`); screen frames `ui/screens.gd`; shared look (palette, fonts, Theme) `ui/kit.gd`; card face `ui/card_view.gd`; popups, banners, toasts `ui/fx.gd` (`Fx`). Frame loop and `--shot`: `scenes/main.gd`.
+- HD-2D stage: `render/stage.gd` (`Stage`: 3D world, camera, lights, WorldEnvironment, pedestals, shield, `projectile`, `lightning`), `render/actor.gd` (`Actor`), `render/particles.gd`, `render/feel.gd` (hit-stop, slow-mo, shake), `render/layout.gd` (screen band, `U`, spots). Art: `art/hd2d/` (`manifest.gd` species→sprite, `recolor.gd` per-element recolour, `diorama.gd` the two biomes, `tex.gd` procedural pixel textures, `pedestal.gd`, `shaders/`).
+- HD-2D sprite template: `docs/HD2D.md`; anchors in `docs/hd2d/anchors/`; normalizer `scripts/hd2d-sprite.py`.
+- iOS: `godot/export_presets.cfg` (`iOS` preset), `godot/ios/` (icon, launch images, `build-number.txt`, `mac-build.sh`), `scripts/ship-ios-godot.sh`.
 
 ## Rules
-- **Art boundary:**
-  - `game/*` and `render/particles.ts`/`fx.ts` must not import from `art/sticker` or `art/sprite`.
-  - Go through `getStyle()` or an `Actor`.
-  - A new visual concept that should vary by style becomes a new optional member of `ArtStyle`, with a style-independent default. Existing one: `scene(biome)`.
-- **Species keys** are the lowercase creature names (`emberwick`, `kilnback`, `warden`, `noctyrm`). Art packs key images by them.
-- **Art space:** facing right, feet at (0,0), about 100 units tall for a size-1 creature, head around y = -56. `Actor` scales art space by `U / 56 * species.size`.
-- **Stale callbacks:** `S.tok` is bumped when a battle or run ends. Every delayed callback (gsap `delayedCall`/`onComplete`, `setTimeout`) captures `tok` and bails if it changed.
-- **Timing:** use gsap for time-based effects so they respect hit-stop and slow-mo (`gsap.globalTimeline.timeScale`).
-- **Units:** layout is in units of `U` (px, from `render/layout.ts`). `emit()` speeds, sizes and gravity are in U.
-- **Input:** use pointer events, never `click`, for game input. Hand cards: `pointerdown` inspects instantly and captures the pointer; release decides tap (toggle inspect) versus flick (play). Flick thresholds are the `FLICK_*` constants in `game/ui.ts`.
-- **Storage and native calls:** never touch `localStorage` or `window.ReactNativeWebView` outside `core/platform.ts`.
-- **Native modules:** Expo SDK 57. Install with `npx expo install` so versions match the SDK.
-- **Bundle size:** pack images are inlined into the single-file build, so keep them small (WebP, about 512 px).
+- **Coordinates:** modules pass **screen px** on the 390×844 base canvas (stretch `canvas_items`/`expand`). Only the stage converts to 3D (`Actor.place(x, y, face)` puts the feet at that screen point; `head()` returns screen px). `Layout.U` is the world unit in px; actor `off` is in U.
+- **Gameplay stays art-agnostic:** game code talks to `Actor`, `Stage`, `Particles`, `Feel`, `Fx` and `Ui` APIs only, never to stage nodes or materials.
+- **Species keys** are the lowercase creature names (`emberwick`, `kilnback`, `warden`, `noctyrm`). The HD-2D manifest keys sprites by them.
+- **Stale callbacks:** `S.tok` is bumped when a battle or run ends. Every delayed callback (tween callbacks, `create_timer`) captures `tok` and bails if it changed.
+- **Timing:** game-time effects use tweens/timers in scaled time so they obey hit-stop and slow-mo (`Feel` drives `Engine.time_scale` from real time). UI motion (the card fan, screens) runs in real time.
+- **Input:** the hand uses touch/mouse press-drag-release: press inspects instantly; release decides tap (toggle inspect) versus flick (play). Thresholds are the `FLICK_*` constants in `ui/ui.gd`.
+- **Storage and native calls** only in `core/platform.gd`.
+- **Reserved word:** `trait` is reserved in GDScript; the field is `Mon.trait_key`, and dictionary keys `"trait"` are read with brackets.
+- **Assets:** pixel art uses nearest filtering; the only image files are the 3 HD-2D sprites (everything else is procedural). Keep it that way unless a real asset is approved.
 
 ## Releasing (iOS / TestFlight)
-- **Identity:** bundle ID `com.taiga.wildbound`, App Store Connect app ID `6818680785`, EAS project `@taigamura/wildbound` (ID in `app/app.json`). The version is `expo.version` in `app/app.json`; EAS manages build numbers remotely (`appVersionSource: remote`, auto-increment), so `ios.buildNumber` in `app.json` is ignored.
-- **Credentials live on EAS:** distribution certificate, provisioning profile and the App Store Connect API key. No Apple login is needed for routine builds and submits, so they can run with `--non-interactive`. If submit returns `401 NOT_AUTHORIZED`, the stored ASC key is bad: remove it via `eas credentials -p ios` (App Store Connect: Manage your API Key) and let the next interactive `eas submit` generate a new one.
-- **Normal path: `/ship-ios`** (config in `.claude/ship.json`). Commit, PR and merge, then a local EAS build on the Mac build server (`taigamura-MBP`, 192.168.50.175, repo at `~/dev/wildbound`, builds from `app/`), copy the `.ipa` back, and submit from this machine. If a local build fails with keychain `error code: 36`, unlock the Mac's login keychain in a terminal there. **Currently blocked:** the Mac's Xcode 26.3 fails to compile `expo-modules-jsi` (`RuntimeScheduler.h`: "cannot be annotated with SWIFT_RETURNS_RETAINED"), an Expo SDK 57 / Xcode mismatch unrelated to game code. Use the cloud fallback until an Expo patch or an Xcode change fixes it.
-- **Fallback: EAS cloud build** from the repo root: `npm run build:ios`, then `npm run submit:ios`. `app/eas.json` sets `ascAppId` in the production submit profile, which `--non-interactive` submits require.
+- **Identity:** bundle ID `com.taiga.wildbound`, App Store Connect app ID `6818680785`, Apple team `6R43H3SA48`. Version: `application/short_version` in `godot/export_presets.cfg` (0.3.0). Build number: `godot/ios/build-number.txt` holds the last build uploaded to App Store Connect; the script builds with +1 and writes it back only after a confirmed submit. Commit it with the History entry.
+- **Normal path: `scripts/ship-ios-godot.sh`** (also what `/ship-ios` runs, via `.claude/ship.json`), from this box after the change is merged to `main`. It pulls `origin/main` on the Mac build server (`taigamura-MBP`, 192.168.50.175, repo `~/dev/wildbound`), copies the signing credentials to a temp dir there, imports them into a throwaway keychain (never the login keychain, so no GUI unlock is needed), has Godot 4.7.2 (`/usr/local/bin/godot` → `~/Applications/Godot-4.7.2.app`, templates in `~/Library/Application Support/Godot/export_templates/4.7.2.stable`) write the Xcode project from the `iOS` preset, runs `xcodebuild archive` + `-exportArchive` itself (`godot/ios/mac-build.sh`), copies the ipa to `dist/ios/`, and runs `eas submit`. Mac log: `~/wildbound-godot-build.log`; staged project and import cache: `~/wildbound-build/godot`. Flags: `--no-submit`, `--unsigned` (no credentials; proves Godot + Xcode compile), `--sync-local` (build the uncommitted `godot/` tree; test only), `--build-number N`.
+- **Signing credentials** stay on EAS (distribution certificate, App Store provisioning profile, ASC API key). The build needs a local copy: `cd app && npx eas-cli@24.10.0 credentials -p ios` → production → credentials.json → Download. That writes `app/credentials.json` and `app/credentials/ios/` (gitignored, never commit). Re-download when the certificate or profile is renewed. Submission uses `eas submit` with the ASC key stored on EAS; if it returns `401 NOT_AUTHORIZED`, replace the key via `eas credentials -p ios`.
+- **Godot iOS requirements:** `project.godot` must set `rendering/textures/vram_compression/import_etc2_astc=true` (iOS export refuses otherwise). The Mobile renderer makes Godot require an A12 chip or newer (iPhone XS+); Apple restricts adding device requirements once an app is live, so settle this before the first App Store release.
+- **Legacy Expo app (`app/`):** the local EAS build on the Mac is broken by an Xcode 26.3 / Expo SDK 57 mismatch (`expo-modules-jsi`); `npm run build:ios` (EAS cloud) + `npm run submit:ios` still work for it.
 - **History** (newest first; `/ship-ios` adds a line per upload via `releaseLog` in `.claude/ship.json`; add one by hand for any other upload):
   - 2026-10-04: v0.2.0 build 5 (EAS cloud build `e578f5af`, commit `b723ad9`, submission `4edf2407`) uploaded to TestFlight. HD-2D art style, loot/shop economy replacing capture, fanned card hand. Built in the cloud because the local Mac build is still blocked (see above).
   - 2026-10-03: v0.2.0 build 4 (EAS cloud build `bbc5de69`, commit `ccfaec7`, submission `b282dadf`) uploaded to TestFlight. Loadouts, Traits and Essence (§16). The first `/ship-ios` run: commit, PR #2 and merge worked; the local Mac build failed (see above), so it fell back to the cloud.
@@ -343,7 +344,8 @@ A PixiJS web app (`game/`) shipped inside an Expo WebView shell (`app/`). iOS bu
   - 2026-10-03: v0.2.0 build 2 (EAS cloud build) uploaded to TestFlight. This is the MVP design build.
 
 ## Verifying changes
-- Run `npm run typecheck` and `npm run build`.
-- Play a run in the browser at 390×844 in every art style (switch on the title screen).
-- In dev, `window.__wb` is the run state; `__wb.debug` has helpers (see `main.ts`), including `__wb.debug.essence(n)` (grant Essence), `__wb.debug.loot(gold, n)` (bank gold and n of each material) and `__wb.debug.trait(key)` (socket a Trait on the lead).
-- For app-side changes, also run the iOS export.
+- Load check and `tests/test_core.gd` (see Commands): zero script errors, all tests pass.
+- Render the screens you touched with `--shot` at 390×844 (and 375×667 for layout changes) and look at them.
+- For stage or art changes, also run `tests/stage_preview.gd` and check both biomes.
+- Debug helpers: `Battle.debug` (`hurt`, `energy`, `add`, `essence`, `loot`, `trait`, `heavy`).
+- Before a release, `scripts/ship-ios-godot.sh --no-submit` proves the signed iOS build.

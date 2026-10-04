@@ -1,55 +1,31 @@
 # Wildbound
 
-A quickfire 2D creature roguelite for iPhone: real-time card combat where your team is your deck, catching creatures mid-run, and an eight-floor run (about five minutes) ending at a boss that shifts element.
+A quickfire HD-2D creature roguelite for iPhone: real-time card combat where your team is your deck, an eight-floor run (about five minutes) ending at a boss that shifts element, and loot that upgrades your collection.
 
-**[CLAUDE.md](CLAUDE.md) is the single source of truth**: the game design spec (rules, numbers, roster), the code map and the rules for changing code. This README only covers setup and shipping. Art packs: [docs/ART.md](docs/ART.md).
+**[CLAUDE.md](CLAUDE.md) is the single source of truth**: the game design spec (rules, numbers, roster), the code map, the rules for changing code and the release process. This README only covers setup.
 
 | Folder | What it is | Stack |
 | --- | --- | --- |
-| `game/` | The whole game. Runs in any browser. | Vite, TypeScript, PixiJS 8, GSAP |
-| `app/` | The iOS app: a full-screen WebView that loads the built game, plus native saves and haptics. | Expo SDK 57, react-native-webview |
-
-You build the iOS app in the cloud with EAS Build, so no Mac is required.
+| `godot/` | The game. | Godot 4.7.2, GDScript, Mobile renderer |
+| `game/`, `app/` | Legacy web version (PixiJS in an Expo WebView), kept as the port's reference. | TypeScript, Expo SDK 57 |
 
 ## Quick start
 
-```bash
-nvm use            # Node 22
-npm run setup      # installs game/ and app/
-npm run dev        # game in the browser at http://localhost:5173
-```
-
-- Switch art styles on the title screen, or with `?art=dusk` in the URL.
-- `?export-pack` bakes the procedural creatures into PNGs plus anchor data. See docs/ART.md.
-
-### On your iPhone (Expo Go, no build needed)
+Install [Godot 4.7.2](https://godotengine.org/download) (standard, not .NET) and put `godot` on your PATH.
 
 ```bash
-npm run app        # builds the game, embeds it, starts Expo. Scan the QR code.
-```
-
-### Live-reload the game on your phone while you edit
-
-```bash
-npm run dev                                                               # terminal 1
-cd app && EXPO_PUBLIC_GAME_URL=http://<your-LAN-IP>:5173 npx expo start   # terminal 2
+godot --path godot -e                     # open the editor
+godot --path godot                        # run the game (portrait 390×844)
+godot --headless --path godot --script res://tests/test_core.gd   # logic tests
 ```
 
 ## Shipping to TestFlight
 
-The project is already linked to EAS and its signing credentials are stored there. Current release state, credentials notes and the build history are in the "Releasing" section of [CLAUDE.md](CLAUDE.md).
+Builds run on a Mac build server over SSH and are submitted from this machine with `eas submit`. One-time: download the signing credentials with `cd app && npx eas-cli@24.10.0 credentials -p ios` (production → credentials.json → Download). Then:
 
 ```bash
-npm run build:ios    # EAS cloud build (from the repo root)
-npm run submit:ios   # upload the latest build to TestFlight
+scripts/ship-ios-godot.sh --no-submit   # signed ipa, no upload
+scripts/ship-ios-godot.sh               # build, submit, bump godot/ios/build-number.txt
 ```
 
-In Claude Code, `/ship-ios` runs the whole pipeline with a local build on the Mac build server (config: `.claude/ship.json`).
-
-EAS uploads the whole repo. The `eas-build-post-install` hook builds `game/` and embeds it, so the generated file is never committed.
-
-## How the code is organised
-
-See "Part 2: Engineering" in [CLAUDE.md](CLAUDE.md).
-
-**Build output:** `npm run build` produces one self-contained `index.html` (about 1.2 MB), with fonts and pack images inlined, so the app works offline.
+Details: CLAUDE.md, "Releasing".

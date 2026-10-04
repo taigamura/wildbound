@@ -15,3 +15,9 @@ app/src/game-html.generated.ts
 # iOS build artifacts (ship-ios copies them here)
 *.ipa
 .playwright-mcp/
+
+# Godot iOS: the `ios/` rule above is for Expo prebuild output; godot/ios/ is source
+!/godot/ios/
+# Signing credentials downloaded from EAS (scripts/ship-ios-godot.sh): never commit
+app/credentials.json
+app/credentials/
