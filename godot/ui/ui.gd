@@ -3,11 +3,12 @@ extends Node
 ## Reads state, never changes game rules. Screens' static parts are built by ui/screens.gd into `el`
 ## (TS $('#id') → Ui.el["id"]); game/run.gd fills them.
 
-# hand: tap to inspect, flick up to play (TS constants)
-const FLICK_DIST := 0.4   # dragged up more than this × card height → plays on release
+# hand: touch magnifies, slide sideways to scrub the fan, swipe up to play
+const FLICK_DIST := 0.4   # swiped up more than this × card height → plays on release
 const FLICK_VEL := 0.6    # or released moving up faster than this (px/ms)...
 const FLICK_MIN := 0.15   # ...after at least this × card height of travel
-const SLOP := 6.0         # px of movement before a press counts as a drag
+const LIFT_LOCK := 0.12   # upward travel (× card height, and more up than sideways) that commits the swipe and locks the card
+const SCRUB_HYST := 0.22  # × card width a neighbour must be closer than the magnified card before the magnifier moves
 const FAN_DEG := 8.0      # rotation per step from the centre (4 cards → ±4°, ±12°)
 const FAN_DROP := 0.06    # × card width × step² that outer cards sit lower
 
@@ -289,6 +290,8 @@ func init_hud(h: Dictionary) -> void:
 		Battle.card_played.connect(_on_card_played)
 	if Battle.has_signal("card_denied"):
 		Battle.card_denied.connect(_on_card_denied)
+	if Battle.has_signal("card_discarded"):
+		Battle.card_discarded.connect(_on_card_discarded)
 	paint_mute()
 
 ## Show a screen by id ("scr-title"...), or the battle HUD with null.
@@ -365,16 +368,17 @@ func _paint(i: int) -> void:
 	var def: Dictionary = co.def
 	var owner = co.owner
 	var e = S.enemy
-	var bench: bool = r.uid != S.active
-	var strong: bool = e != null and (def.get("dmg", 0) or def.get("from_shield", false)) and Data.adv(owner.el, e.el) > 1
+	var dead: bool = S.card_dead(r)
+	var bench: bool = r.uid != S.active and not dead
+	var strong: bool = not dead and e != null and (def.get("dmg", 0) or def.get("from_shield", false)) and Data.adv(owner.el, e.el) > 1
 	var up = owner.ups.get(r.slot, "") if owner.ups is Dictionary else owner.ups.get(r.slot)
 	if up == null:
 		up = ""
-	var cost = S.card_cost(r)
-	var k := "%s|%s|%s|%s|%s|%s|%s" % [r.uid, r.slot, def.cost, cost, bench, strong, up]
+	var cost = Data.BAL.get("discard_cost", 1) if dead else S.card_cost(r)
+	var k := "%s|%s|%s|%s|%s|%s|%s|%s" % [r.uid, r.slot, def.cost, cost, bench, strong, up, dead]
 	if b.face.key == k and not b.face.empty:
 		return
-	b.face.face(def, owner.el, {"cost": cost, "owner": owner, "bench": bench, "strong": strong, "pow": co.pow,
+	b.face.face(def, owner.el, {"cost": cost, "owner": owner, "bench": bench, "dead": dead, "strong": strong, "pow": co.pow,
 		"upgraded": "+30%" if up == "power" else ("−1" if up == "cost" else "")})
 	b.face.key = k
 
@@ -390,6 +394,14 @@ func _on_card_played(i: int) -> void:
 		{"ease": [0.42, 0.0, 1.0, 1.0]})
 	_queue_layout()
 
+## A fainted creature's card was thrown away: it drops out of the hand instead of flying up.
+func _on_card_discarded(i: int) -> void:
+	var b: HandSlot = slots[i]
+	b.playing = true
+	Fx.kf(b.face, 0.32, [[0.0, {"y": 0.0, "s": 1.0, "r": 0.0, "a": 1.0}], [1.0, {"y": 80.0, "s": 0.8, "r": 14.0, "a": 0.0}]],
+		{"ease": [0.55, 0.0, 0.9, 0.6]})
+	_queue_layout()
+
 func _on_card_denied(i: int, why := "") -> void:
 	if why == "busy":   # TS returned silently outside mode "battle"
 		return
@@ -398,7 +410,7 @@ func _on_card_denied(i: int, why := "") -> void:
 		return
 	Fx.kf(b.face, 0.3, [[0.0, {"x": 0.0}], [0.25, {"x": -5.0}], [0.75, {"x": 5.0}], [1.0, {"x": 0.0}]], {"ease": [0.25, 0.1, 0.25, 1.0]})
 
-# ---- hand: fan, tap to inspect, flick up to play
+# ---- hand: fan; touch magnifies, slide to scrub, swipe up to play
 
 func _hand_resized() -> void:
 	for b in slots:
@@ -454,9 +466,9 @@ func _layout_hand() -> void:
 			b.face.lift = lift
 			b.face.restyle()
 		var p = ps[i]
-		var z: int = 30 if (_drag and _drag.b == b) else (p.z if p else 0)
+		var z: int = 30 if (_drag and _drag.b == b and _drag.lifted) else (p.z if p else 0)
 		order.append([z, i])
-		if p == null or b.playing or (_drag and _drag.b == b):
+		if p == null or b.playing or (_drag and _drag.b == b and _drag.lifted):
 			continue
 		if b.flown:
 			b.flown = false
@@ -487,13 +499,52 @@ func _hand_down(i: int, pos: Vector2) -> void:
 	if _drag != null or b.face.empty or b.playing:
 		return
 	Sfx.audio()
-	var was_sel := _sel == i
-	if not was_sel:
-		_sel = i
-		_sel_ref = S.hand[i]
-		_layout_hand()
-	_drag = {"b": b, "i": i, "x0": pos.x, "y0": pos.y, "moved": false, "was_sel": was_sel, "base": _poses()[i],
+	_select(i)
+	_drag = {"b": b, "i": i, "x0": pos.x, "y0": pos.y, "lifted": false, "dy0": 0.0, "base": _poses()[i],
 		"trail": [{"y": pos.y, "t": Time.get_ticks_msec()}]}
+
+func _select(i: int) -> void:
+	_sel = i
+	_sel_ref = S.hand[i] if i < S.hand.size() else null
+	_layout_hand()
+
+## Global x of each live card's centre in the plain fan (no magnified card): the scrub targets.
+func _fan_x() -> Dictionary:
+	var keep := _sel
+	_sel = -1
+	var ps := _poses()
+	_sel = keep
+	var xf := hand.get_global_transform()
+	var out := {}
+	for i in slots.size():
+		if ps[i] != null and not slots[i].playing:
+			out[i] = (xf * Vector2(slots[i].base.x + ps[i].x + _cw / 2.0, 0)).x
+	return out
+
+## Move the magnifier to the card nearest the finger, with hysteresis so it doesn't flicker between two.
+func _scrub(d: Dictionary, pos: Vector2) -> void:
+	var xs := _fan_x()
+	var best := -1
+	var bd := INF
+	for i in xs:
+		var dd := absf(xs[i] - pos.x)
+		if dd < bd:
+			bd = dd
+			best = i
+	if best < 0 or best == d.i:
+		return
+	var cd: float = absf(xs[d.i] - pos.x) if xs.has(d.i) else INF
+	if cd - bd < _cw * SCRUB_HYST:
+		return
+	d.i = best
+	d.b = slots[best]
+	d.x0 = pos.x
+	d.y0 = pos.y
+	d.trail = [{"y": pos.y, "t": Time.get_ticks_msec()}]
+	_select(best)
+	d.base = _poses()[best]
+	Sfx.tick()
+	Platform.haptic("select")
 
 ## Upward travel and release speed decide the play.
 func _flicked(d: Dictionary, pos: Vector2) -> bool:
@@ -507,25 +558,41 @@ func _hand_move(pos: Vector2) -> void:
 	var d = _drag
 	if d == null:
 		return
-	var dx: float = pos.x - d.x0
-	var dy: float = pos.y - d.y0
-	if not d.moved:
-		if Vector2(dx, dy).length() < SLOP:
-			return
-		d.moved = true
-		d.b.dragging = true
-		_layout_hand()
 	var now := Time.get_ticks_msec()
 	d.trail.append({"y": pos.y, "t": now})
 	while d.trail.size() > 2 and now - d.trail[0].t > 90:
 		d.trail.pop_front()
-	var p: Dictionary = d.base   # mostly vertical; sideways moves only tilt it, downward is rubber-banded
-	d.b.set_pose({"x": p.x + dx * 0.3, "y": p.y + (dy if dy < 0 else dy * 0.25), "r": clampf(dx * 0.08, -9, 9), "s": p.s}, false)
+	var dx: float = pos.x - d.x0
+	var dy: float = pos.y - d.y0
+	var b: HandSlot = d.b
+	if not d.lifted:
+		if -dy > b.size.y * LIFT_LOCK and -dy > absf(dx):
+			d.lifted = true   # the swipe is committed: this card follows the finger, no more scrubbing
+			d.dy0 = dy
+			d.x0 = pos.x
+			d.base = _poses()[d.i]
+			b.dragging = true
+			_layout_hand()
+		else:
+			_scrub(d, pos)
+			return
+	elif dy > 0:   # dragged back below where it started: drop the swipe, scrub again
+		d.lifted = false
+		b.dragging = false
+		if b.face.armed:
+			b.face.armed = false
+			b.face.restyle()
+		_layout_hand()
+		return
+	dx = pos.x - d.x0
+	var p: Dictionary = d.base
+	b.set_pose({"x": p.x + dx * 0.3, "y": p.y + dy - d.dy0, "r": clampf(dx * 0.08, -9, 9), "s": p.s}, false)
 	var armed := _flicked(d, pos)
-	if d.b.face.armed != armed:
-		d.b.face.armed = armed
-		d.b.face.restyle()
+	if b.face.armed != armed:
+		b.face.armed = armed
+		b.face.restyle()
 
+## Release: a swipe up plays the magnified card; anything else puts it back in the fan.
 func _hand_up(pos: Vector2, use_handlers: bool) -> void:
 	var d = _drag
 	if d == null:
@@ -535,29 +602,18 @@ func _hand_up(pos: Vector2, use_handlers: bool) -> void:
 	if b.face.armed:
 		b.face.armed = false
 		b.face.restyle()
-	if not d.moved:   # tap
-		b.dragging = false
-		if d.was_sel and use_handlers:
-			_sel = -1
-		_layout_hand()
-		return
-	if use_handlers and _flicked(d, pos) and _h.has("play"):
-		_h.play.call(d.i)   # Battle emits card_played (→ .play) or card_denied (→ shake)
+	var upward: bool = d.lifted or (d.y0 - pos.y) > absf(pos.x - d.x0)
+	if use_handlers and upward and _flicked(d, pos) and _h.has("play"):
+		b.dragging = true
+		_h.play.call(d.i)   # Battle emits card_played / card_discarded (→ fly off) or card_denied (→ shake)
 		if b.playing:
 			b.flown = true
 			b.dragging = false
+			_sel = -1
 			return
 	b.dragging = false
-	_layout_hand()   # snap back to the inspected pose
-
-func _input(e: InputEvent) -> void:
-	# tapping anywhere outside the hand puts the inspected card back
-	if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT and _sel >= 0:
-		for b in slots:
-			if not b.face.empty and b.visible and hud.visible and b.has_global(e.global_position):
-				return
-		_sel = -1
-		_layout_hand()
+	_sel = -1
+	_layout_hand()   # back into the fan
 
 # ================================================================== plates
 
@@ -644,6 +700,12 @@ func _bmon(c, extra := "", interactive := false) -> PanelContainer:
 		var cd := Pie.new()
 		bx.add_child(Box.fill(cd))
 		p.set_meta("cd", cd)
+		var secs := UiKit.lbl("", "display", 18, Color.WHITE, {"align": "center", "outline": 4, "outline_c": Color(0, 0, 0, 0.6)})
+		secs.visible = false
+		var over := Box.new(Vector2(30, 30))   # the countdown sits on the element orb
+		over.add_child(secs)
+		bx.add_child(Box.at(over, "tl", Vector2(6, 6)))
+		p.set_meta("secs", secs)
 		var adv := Box.new()
 		bx.add_child(Box.at(adv, "tr", Vector2(5, 3)))
 		p.set_meta("adv", adv)
@@ -666,6 +728,20 @@ func _bmon_state(p: PanelContainer, alive: bool, guard: bool) -> void:
 		UiKit.glow_box(st, UiKit.alpha(col, 0.7), 10)
 	p.add_theme_stylebox_override("panel", st)
 	p.modulate = Color.WHITE if alive else Color(0.5, 0.5, 0.52)
+
+## Swap cooldown on a bench portrait: the wedge sweeps away, the seconds count down, and it pops when ready.
+func _bench_cd(b: PanelContainer, alive: bool) -> void:
+	var cd: bool = S.swap_cd > 0 and alive
+	b.get_meta("cd").p = clampf(S.swap_cd / Data.BAL.swap_cd, 0, 1) if cd else 0.0
+	var secs: Label = b.get_meta("secs")
+	secs.visible = cd
+	if cd:
+		secs.text = str(ceili(S.swap_cd))
+	if b.get_meta("cooling", false) and not cd and alive and S.mode == "battle":
+		b.pivot_offset = b.size / 2.0
+		Fx.kf(b, 0.3, [[0.0, {"s": 1.0}], [0.4, {"s": 1.12}], [1.0, {"s": 1.0}]], {"ease": [0.2, 1.4, 0.4, 1.0]})
+		Sfx.tick()
+	b.set_meta("cooling", cd)
 
 ## TS monChip: a non-interactive .bmon for the map/end party rows.
 func mon_chip(c, extra := "") -> Control:
@@ -746,7 +822,8 @@ func sync_hud() -> void:
 		if r == null:
 			continue
 		var why: String = S.card_block(r)
-		slots[i].set_dim(why == "energy" or why == "busy", why == "swap")
+		var kind := "dead" if S.card_dead(r) else ("bench" if r.uid != S.active else "")
+		slots[i].set_dim(why == "energy" or why == "busy", kind)
 
 	var es: Array = []
 	var ps: Array = []
@@ -783,7 +860,7 @@ func sync_hud() -> void:
 		var c = S.mon(int(b.get_meta("uid")))
 		if c == null:
 			continue
-		b.get_meta("cd").p = (S.swap_cd / Data.BAL.swap_cd) if S.swap_cd > 0 else 0.0
+		_bench_cd(b, c.alive)
 		b.get_meta("mini").size.x = 56.0 * clampf(c.hp / float(c.max_hp), 0, 1)
 		var guard: bool = c.alive and heavy_now and Data.resists(c.el, hv.el)
 		_bmon_state(b, c.alive, guard and battle)
