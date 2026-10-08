@@ -62,18 +62,18 @@ func _build_banner() -> void:
 	banner_box = UiKit.vbox(6)
 	banner_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	var stack := Box.new()
-	banner_glow = UiKit.lbl("", "display", 46, Color(1, 1, 1, 0), {"align": "center", "outline": 18})
-	banner_main = UiKit.lbl("", "display", 46, Color.WHITE, {"align": "center", "shadow": Color(0, 0, 0, 0.55), "shadow_off": Vector2(0, 4)})
+	banner_glow = UiKit.lbl("", "display", UiKit.D_L, Color(1, 1, 1, 0), {"align": "center", "outline": 18})
+	banner_main = UiKit.lbl("", "display", UiKit.D_L, UiKit.INK, {"align": "center", "shadow": Color(0, 0, 0, 0.55), "shadow_off": Vector2(0, 4)})
 	stack.add_child(banner_glow)
 	stack.add_child(banner_main)
 	banner_box.add_child(stack)
-	banner_small = UiKit.lbl("", "800", 13, Color.WHITE, {"align": "center", "upper": true, "ls": 0.24})
+	banner_small = UiKit.lbl("", "700", UiKit.T_L, Color.WHITE, {"align": "center", "shadow": Color(0, 0, 0, 0.6), "shadow_off": Vector2(0, 2)})
 	banner_box.add_child(banner_small)
 	banner_box.modulate.a = 0.0
 	root.add_child(banner_box)
 
 func _build_toast() -> void:
-	toast_box = UiKit.panel(UiKit.flat(UiKit.PANEL, 12, 1, UiKit.LINE, Vector4(14, 10, 14, 10)))
+	toast_box = UiKit.panel(UiKit.window(12, false))
 	toast_lbl = UiKit.lbl("", "700", 14, UiKit.INK, {"align": "center", "wrap": true, "lh": 0})
 	toast_box.add_child(toast_lbl)
 	toast_box.modulate.a = 0.0
@@ -127,8 +127,8 @@ func pop_num(pos: Vector2, text, cls := "", label := "", color := Color(0, 0, 0,
 	], {"base": base, "ease": [0.0, 0.0, 0.58, 1.0], "free": true})
 
 ## Big centred word with a sub line (enemy name, Victory, fainted).
-func banner(text: String, sub := "", color := Color("#9b7bff")) -> void:
-	color = UiKit.col(color, Color("#9b7bff"))
+func banner(text: String, sub := "", color := UiKit.GOLD_HI) -> void:
+	color = UiKit.col(color, UiKit.GOLD_HI)
 	banner_main.text = text
 	banner_glow.text = text
 	banner_glow.add_theme_color_override("font_outline_color", UiKit.alpha(color, 0.28))

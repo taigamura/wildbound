@@ -5,9 +5,9 @@ class_name UiScreens
 
 const LOGO_SHADER := """
 shader_type canvas_item;
-uniform vec4 g0 : source_color = vec4(1.0);
-uniform vec4 g1 : source_color = vec4(0.784, 0.706, 1.0, 1.0);
-uniform vec4 g2 : source_color = vec4(0.49, 0.36, 1.0, 1.0);
+uniform vec4 g0 : source_color = vec4(1.0, 0.973, 0.894, 1.0);
+uniform vec4 g1 : source_color = vec4(0.949, 0.839, 0.549, 1.0);
+uniform vec4 g2 : source_color = vec4(0.788, 0.635, 0.29, 1.0);
 uniform float y0 = 0.0;
 uniform float y1 = 60.0;
 varying float ly;
@@ -26,25 +26,35 @@ static var _logo_shader: Shader
 
 # ------------------------------------------------------------------ buttons
 
-## .big: the lilac primary button. `alt` = the smaller .big.alt used in rows.
+## .plaque: the primary action, a brass plaque with a pressed bottom edge. It is the only gold-filled
+## shape on a screen, so use one per screen. `alt` = the smaller plaque used in rows and panels.
 static func big(text: String, alt := false) -> Tap:
 	var t := Tap.new()
 	t.press_scale = 0.97
-	t.dis_mod = Color(0.5, 0.5, 0.55)
+	t.dis_mod = Color(0.55, 0.55, 0.58)
 	var bx := Box.new()
 	bx.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bx.custom_minimum_size.y = 40 if alt else 54
 	t.add_child(bx)
-	bx.add_child(Box.fill(RRect.new({"radius": 16.0, "c0": Color("#f1eaff"), "c1": Color("#b49bff"), "angle": 180.0,
-		"sh_off": Vector2(0, 5), "sh_c": Color("#5a3bc4"), "glow": 30.0, "glow_c": Color(155 / 255.0, 123 / 255.0, 1, 0.25)})))
+	bx.add_child(Box.fill(RRect.new({"radius": 6.0, "c0": Color("#f6dc95"), "c1": Color("#d6a849"), "s1": 0.52, "c2": Color("#b0822c"),
+		"angle": 180.0, "border_w": 1.0, "border_c": Color("#4d340c"), "sh_off": Vector2(0, 3), "sh_c": Color("#3c2908")})))
+	# inset bevel: a light line under the top edge, a darker one above the bottom edge
+	var bevel := Control.new()
+	bevel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bevel.draw.connect(func():
+		bevel.draw_rect(Rect2(3, 1, bevel.size.x - 6, 1), Color("#fff4cf"))
+		bevel.draw_rect(Rect2(2, bevel.size.y - 3, bevel.size.x - 4, 2), Color("#8a6220")))
+	bevel.resized.connect(bevel.queue_redraw)
+	bx.add_child(Box.fill(bevel))
 	var m := MarginContainer.new()
 	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var pad := Vector4(10, 13, 10, 12) if alt else Vector4(18, 15, 18, 14)
+	var pad := Vector4(10, 6, 10, 8) if alt else Vector4(16, 8, 16, 10)
 	m.add_theme_constant_override("margin_left", int(pad.x))
 	m.add_theme_constant_override("margin_top", int(pad.y))
 	m.add_theme_constant_override("margin_right", int(pad.z))
 	m.add_theme_constant_override("margin_bottom", int(pad.w))
 	bx.add_child(Box.fill(m))
-	var h := UiKit.hbox(5, BoxContainer.ALIGNMENT_CENTER)
+	var h := UiKit.hbox(6, BoxContainer.ALIGNMENT_CENTER)
 	m.add_child(h)
 	t.set_meta("row", h)
 	t.set_meta("alt", alt)
@@ -53,49 +63,53 @@ static func big(text: String, alt := false) -> Tap:
 	set_big(t, text)
 	return t
 
-## Button text, with the optional <small> part.
+## Plaque text, with the optional small part (a cost, or why it is disabled).
 static func set_big(t: Tap, text: String, small := "") -> void:
 	var h: HBoxContainer = t.get_meta("row")
 	UiKit.clear(h)
 	var alt: bool = t.get_meta("alt")
-	var ink := Color("#1b1035")
-	h.add_child(UiKit.lbl(text, "display", 17 if alt else 21, ink, {"ls": 0.02, "valign": VERTICAL_ALIGNMENT_CENTER}))
+	var ink := UiKit.PLAQUE_INK
+	var l := UiKit.lbl(text, "display", UiKit.NAME if alt else UiKit.D_S, ink, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(l)
 	if small != "":
-		var s := UiKit.lbl(small, "700", 11, ink, {"valign": VERTICAL_ALIGNMENT_CENTER})
+		var s := UiKit.lbl(small, "700", UiKit.T_S, ink, {"valign": VERTICAL_ALIGNMENT_CENTER})
 		s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		h.add_child(s)
 
-## .ghostbtn: outlined quiet button.
-static func ghost(text: String) -> Tap:
-	var t := Tap.new(UiKit.flat(Color(0, 0, 0, 0), 12, 1, UiKit.LINE, Vector4(14, 10, 14, 10)))
-	var l := UiKit.lbl(text, "700", 13, UiKit.MUTE, {"upper": true, "ls": 0.06, "align": "center"})
+## .quiet: the secondary button, a brass hairline box with ink2 text (no caps, no tracking).
+static func quiet(text: String) -> Tap:
+	var t := Tap.new(UiKit.flat(Color(0, 0, 0, 0), 5, 1, UiKit.LINE, Vector4(14, 8, 14, 8)))
+	t.custom_minimum_size.y = 40
+	var l := UiKit.lbl(text, "700", UiKit.T_M, UiKit.INK2, {"align": "center", "valign": VERTICAL_ALIGNMENT_CENTER})
 	t.add_child(l)
 	t.set_meta("lbl", l)
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	return t
 
-## .metabtn: title-screen tile (title + sub line). `ready` = the gold "pack ready" state.
+## Old name for quiet().
+static func ghost(text: String) -> Tap:
+	return quiet(text)
+
+## Title-screen tile (title + sub line), quiet-styled. `ready` = act now (pack ready): gold outline and glow.
 static func meta_btn() -> Tap:
 	var t := Tap.new()
-	t.dis_mod = Color(1, 1, 1, 0.7)
+	t.dis_mod = Color(1, 1, 1, 1)   # a waiting pack stays readable; its sub line says when
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var v := UiKit.vbox(3)
+	var v := UiKit.vbox(2)
 	t.add_child(v)
 	t.set_meta("v", v)
 	set_meta_btn(t, "", "", false)
 	return t
 
 static func set_meta_btn(t: Tap, title: String, sub: String, ready := false) -> void:
-	var st := UiKit.flat(Color(1, 1, 1, 0.04), 14, 1.5, UiKit.LINE, Vector4(12, 10, 12, 10))
-	if ready:
-		st = UiKit.glow_box(UiKit.flat(Color(1, 207 / 255.0, 107 / 255.0, 0.12), 14, 1.5, UiKit.GOLD, Vector4(12, 10, 12, 10)),
-			Color(1, 207 / 255.0, 107 / 255.0, 0.25), 9)
-	t.style = st
+	var pad := Vector4(10, 8, 10, 8)
+	t.style = UiKit.act_style(pad) if ready else UiKit.flat(Color(0, 0, 0, 0.18), 5, 1, UiKit.LINE, pad)
 	t.disabled = t.disabled
 	var v: VBoxContainer = t.get_meta("v")
 	UiKit.clear(v)
-	v.add_child(UiKit.lbl(title, "display", 16, UiKit.INK, {"lh": -4}))
-	v.add_child(UiKit.lbl(sub, "700", 11, UiKit.GOLD if ready else UiKit.MUTE, {"wrap": true, "lh": -2}))
+	v.add_child(UiKit.lbl(title, "display", UiKit.NAME, UiKit.INK, {"lh": -2}))
+	v.add_child(UiKit.lbl(sub, "700", UiKit.T_S, UiKit.GOLD_HI if ready else UiKit.INK2, {"wrap": true, "lh": -3}))
 
 static func row(a: Control, b: Control) -> HBoxContainer:
 	var r := UiKit.hbox(8)
@@ -106,11 +120,13 @@ static func row(a: Control, b: Control) -> HBoxContainer:
 
 # ------------------------------------------------------------------ logo
 
+## Screen title over the scene: the display face filled with a parchment-to-gold gradient and a dark
+## brown drop shadow, with an optional sentence-case tagline in ink.
 static func logo(ui, title_key: String, title: String, size: float, p_key: String, p_text: String) -> VBoxContainer:
 	var v := UiKit.vbox(6)
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	var h1 := UiKit.lbl(title, "display", int(size), Color.WHITE, {"align": "center", "shadow": Color("#24154f"),
-		"shadow_off": Vector2(0, 5), "lh": int(-size * 0.25)})
+	var h1 := UiKit.lbl(title, "display", int(size), Color.WHITE, {"align": "center", "shadow": UiKit.PLAQUE_INK,
+		"shadow_off": Vector2(0, maxf(2.0, roundf(size / 14.0))), "outline": 2, "outline_c": UiKit.PLAQUE_INK, "lh": int(-size * 0.2)})
 	if not _logo_shader:
 		_logo_shader = Shader.new()
 		_logo_shader.code = LOGO_SHADER
@@ -120,18 +136,13 @@ static func logo(ui, title_key: String, title: String, size: float, p_key: Strin
 	h1.resized.connect(func():
 		var f: Font = h1.get_theme_font("font")
 		var asc := f.get_ascent(int(size))
-		m.set_shader_parameter("y0", (h1.size.y - f.get_height(int(size))) / 2.0 + asc * 0.12)
+		m.set_shader_parameter("y0", (h1.size.y - f.get_height(int(size))) / 2.0 + asc * 0.2)
 		m.set_shader_parameter("y1", (h1.size.y - f.get_height(int(size))) / 2.0 + asc * 1.0))
-	var glow := RRect.new({"radius": 999.0, "mode": "radial", "rc": Vector2(0.5, 0.5), "c0": Color(125 / 255.0, 92 / 255.0, 1, 0.32),
-		"c1": Color(125 / 255.0, 92 / 255.0, 1, 0.0)})
-	var stack := Box.new()
-	stack.add_child(Box.fill(glow))
-	stack.add_child(h1)
-	stack.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	v.add_child(stack)
+	h1.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(h1)
 	ui.el[title_key] = h1
 	if p_key != "" or p_text != "":
-		var p := UiKit.lbl(p_text, "700", 13, UiKit.MUTE, {"upper": true, "ls": 0.16, "align": "center", "wrap": true, "lh": 0})
+		var p := UiKit.lbl(p_text, "500", UiKit.T_L, UiKit.INK, {"align": "center", "wrap": true, "lh": -2})
 		v.add_child(p)
 		if p_key != "":
 			ui.el[p_key] = p
@@ -139,6 +150,14 @@ static func logo(ui, title_key: String, title: String, size: float, p_key: Strin
 
 # ------------------------------------------------------------------ screens
 
+## Space between groups in a sheet (8 between related items, 16 inside windows, 24 between groups;
+## sheets use 16 so the 375x667 phone keeps its stage).
+const SHEET_GAP := 16
+## Side gutter between the screen edge and a sheet or header.
+const GUTTER := 12.0
+
+## A screen in three zones: header (`top`, on a scrim), stage (the creature, between them; Layout keeps
+## art out of the other two), sheet (`items` in one window at the bottom, scrolling past `frac` of the screen).
 static func _screen(ui, id: String, top: Control, items: Array, frac := 0.68) -> void:
 	var scr := Control.new()
 	scr.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -146,9 +165,8 @@ static func _screen(ui, id: String, top: Control, items: Array, frac := 0.68) ->
 	ui.root.add_child(scr)
 	ui.screens[id] = scr
 	if top:
-		# scrim: a dark fade behind the header so its text reads over the bright diorama
-		var scrim := RRect.new({"radius": 0.0, "angle": 180.0, "c0": Color(0.04, 0.03, 0.09, 0.82),
-			"c1": Color(0.04, 0.03, 0.09, 0.72), "s1": 0.75, "c2": Color(0.04, 0.03, 0.09, 0.0)})
+		# header zone: a navy scrim behind the title so it reads over the bright diorama
+		var scrim := UiKit.scrim()
 		scrim.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 		scr.add_child(scrim)
 		top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
@@ -162,10 +180,11 @@ static func _screen(ui, id: String, top: Control, items: Array, frac := 0.68) ->
 	outer.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	outer.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	scr.add_child(outer)
-	var inner := UiKit.panel(UiKit.flat(UiKit.PANEL, 22, 1, UiKit.LINE, Vector4(16, 18, 16, 16)))
+	# sheet zone: one window holds every control; groups inside it sit SHEET_GAP apart
+	var inner := UiKit.win(16)
 	inner.mouse_filter = Control.MOUSE_FILTER_STOP
 	outer.add_child(inner)
-	var vb := UiKit.vbox(14)
+	var vb := UiKit.vbox(SHEET_GAP)
 	for it in items:
 		vb.add_child(it)
 	inner.add_child(CapScroll.new(vb, frac, 36))
@@ -180,18 +199,18 @@ static func _screen(ui, id: String, top: Control, items: Array, frac := 0.68) ->
 
 ## Re-apply safe-area padding and the 460px max width (on resize).
 static func frame(ui, s: Dictionary) -> void:
-	var side: float = s.side + 16.0
+	var side: float = s.side + GUTTER
 	for id in ui.screens:
 		var scr: Control = ui.screens[id]
 		var top = scr.get_meta("top") if scr.has_meta("top") else null
 		if top:
 			top.offset_left = side
 			top.offset_right = -side
-			top.offset_top = 18.0 + s.top
+			top.offset_top = 16.0 + s.top
 		var outer: Control = scr.get_meta("outer")
 		outer.offset_left = side
 		outer.offset_right = -side
-		outer.offset_bottom = -(16.0 + s.bottom)
+		outer.offset_bottom = -(12.0 + s.bottom)
 
 ## sheetIn: .4s cubic-bezier(.2,1.2,.4,1) from 40px down and transparent.
 static func sheet_in(ui, id: String) -> void:
@@ -211,12 +230,14 @@ static func _named(ui, key: String, c: Control) -> Control:
 static func build(ui) -> void:
 	var el: Dictionary = ui.el
 	# ---- title
-	var t_logo := logo(ui, "titleH1", "Wildbound", 62, "", "Collect · Deal · Survive")
+	var t_logo := logo(ui, "titleH1", "Wildbound", 55, "", "Collect · Deal · Survive")
 	# the current team (summary only; editing is on scr-team)
 	el.teamRow = UiKit.hbox(6)
 	el.teamRow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	el.teamBtn = ghost("Team")
-	var head := _vbox_with(8, [_named(ui, "pickEyebrow", UiKit.eyebrow("Your team")), row(el.teamRow, el.teamBtn)])
+	var ey := _named(ui, "pickEyebrow", UiKit.eyebrow("Your team"))
+	ey.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var head := _vbox_with(8, [row(ey, el.teamBtn), el.teamRow])
 	var metarow := UiKit.grid(3, 8)
 	for k in ["packBtn", "collBtn", "shopBtn"]:
 		el[k] = meta_btn()
@@ -232,7 +253,7 @@ static func build(ui) -> void:
 	# under the lineup: the deck's element mix and a two-line hint (what a tap does / the replace prompt)
 	el.teamMix = UiKit.hbox(6)
 	el.teamMix.custom_minimum_size.y = 22
-	el.teamHint = UiKit.lbl("", "700", 12, UiKit.MUTE, {"wrap": true, "lh": -1})
+	el.teamHint = UiKit.lbl("", "500", UiKit.T_S, UiKit.INK2, {"wrap": true, "lh": -2})
 	el.teamHint.custom_minimum_size.y = 32
 	var tm_info := _vbox_with(6, [el.teamMix, el.teamHint])
 	var starters := UiKit.grid(3, 8)
@@ -250,11 +271,11 @@ static func build(ui) -> void:
 	# ---- map
 	el.trail = UiKit.hbox(5)
 	var mhead := _vbox_with(6, [_named(ui, "mapEyebrow", UiKit.eyebrow("Floor 1 of 8")), UiKit.h2("Pick a path")])
-	el.nodes = UiKit.vbox(8)
+	el.nodes = UiKit.rows()
 	el.mapParty = UiKit.hbox(8)
 	var gold := UiKit.hbox(5)
-	gold.add_child(UiKit.icon("coin", 13, UiKit.MUTE))
-	el.mapGold = UiKit.lbl("", "700", 12, UiKit.MUTE, {"ls": 0.06, "wrap": true})
+	gold.add_child(UiKit.icon("coin", 13, UiKit.GOLD_HI))
+	el.mapGold = UiKit.lbl("", "500", UiKit.T_S, UiKit.INK2, {"wrap": true, "lh": -3})
 	el.mapGold.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gold.add_child(el.mapGold)
 	el.lineupBtn = ghost("Lineup")
@@ -272,7 +293,7 @@ static func build(ui) -> void:
 	rw_m.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rw_m.add_theme_constant_override("margin_top", 14)
 	rw_m.add_child(el.rewards)
-	el.rwDeck = UiKit.lbl("", "700", 12, UiKit.MUTE, {"ls": 0.06, "wrap": true})
+	el.rwDeck = UiKit.lbl("", "500", UiKit.T_S, UiKit.INK2, {"wrap": true, "lh": -3})
 	el.skipBtn = ghost("Skip")
 	_screen(ui, "scr-reward", null, [rhead, rw_m, row(el.rwDeck, el.skipBtn)])
 
@@ -280,7 +301,7 @@ static func build(ui) -> void:
 	var uhead := _vbox_with(6, [UiKit.eyebrow("Upgrade a card"), UiKit.h2("Pick a card"),
 		UiKit.sub("Each card can be upgraded once. Card upgrades last for this run.")])
 	el.upList = UiKit.vbox(12)
-	el.upChoice = UiKit.panel(UiKit.flat(Color(1, 207 / 255.0, 107 / 255.0, 0.08), 14, 1, Color(1, 207 / 255.0, 107 / 255.0, 0.3), Vector4(10, 10, 10, 10)))
+	el.upChoice = UiKit.panel(UiKit.inset(Vector4(12, 10, 12, 12), true))
 	el.upChoiceBox = UiKit.vbox(8)
 	el.upChoice.add_child(el.upChoiceBox)
 	el.upChoice.visible = false
@@ -289,19 +310,19 @@ static func build(ui) -> void:
 
 	# ---- party
 	var phead := _vbox_with(6, [UiKit.eyebrow("Party"), UiKit.h2("Set your lineup"), _named(ui, "ptSub", UiKit.sub(""))])
-	el.ptList = UiKit.vbox(8)
+	el.ptList = UiKit.rows()
 	el.ptDone = big("Done")
 	_screen(ui, "scr-party", null, [phead, el.ptList, el.ptDone], 0.82)
 
 	# ---- pack
-	var pk_logo := logo(ui, "packH1", "Daily pack", 47, "packP", "One new friend a day")
+	var pk_logo := logo(ui, "packH1", "Daily pack", UiKit.D_L, "packP", "One new friend a day")
 	el.packCard = _flip(ui)
 	el.packTxt = UiKit.vbox(6)
 	el.packOk = big("Nice!")
 	_screen(ui, "scr-pack", pk_logo, [el.packCard, el.packTxt, el.packOk])
 
 	# ---- collection
-	var c_logo := logo(ui, "collH1", "Collection", 43, "collCount", "")
+	var c_logo := logo(ui, "collH1", "Collection", UiKit.D_L, "collCount", "")
 	el.collEss = UiKit.flow(6, true)
 	c_logo.add_child(el.collEss)
 	el.collGrid = UiKit.grid(4, 6)
@@ -310,16 +331,16 @@ static func build(ui) -> void:
 	_screen(ui, "scr-coll", c_logo, [el.collGrid, el.collDetail, el.collBack], 0.62)
 
 	# ---- shop
-	var s_logo := logo(ui, "shopH1", "Item shop", 43, "", "Spend your loot")
+	var s_logo := logo(ui, "shopH1", "Item shop", UiKit.D_L, "", "Spend your loot")
 	el.shopWallet = UiKit.flow(6, true)
 	s_logo.add_child(el.shopWallet)
-	el.shopBuy = UiKit.vbox(8)
-	el.shopSell = UiKit.vbox(8)
+	el.shopBuy = UiKit.rows()
+	el.shopSell = UiKit.rows()
 	el.shopBack = ghost("Back")
-	_screen(ui, "scr-shop", s_logo, [UiKit.eyebrow("Buy"), el.shopBuy, UiKit.eyebrow("Sell"), el.shopSell, el.shopBack], 0.70)
+	_screen(ui, "scr-shop", s_logo, [_vbox_with(4, [UiKit.eyebrow("Buy"), el.shopBuy]), _vbox_with(4, [UiKit.eyebrow("Sell"), el.shopSell]), el.shopBack], 0.70)
 
 	# ---- end
-	var e_logo := logo(ui, "endH", "Run over", 51, "endP", "")
+	var e_logo := logo(ui, "endH", "Run over", UiKit.D_L, "endP", "")
 	el.endStats = UiKit.grid(4, 8)
 	el.endEss = UiKit.flow(6, true)
 	el.endLoot = UiKit.flow(6, true)
@@ -341,20 +362,24 @@ static func _flip(ui) -> Control:
 	card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var bx := Box.new(Vector2(150, 200))
 	card.add_child(bx)
-	# back: purple, "W", wiggling
+	# back: navy glass in a brass frame, a gold "W", wiggling
 	var back := Box.new(Vector2(150, 200))
-	back.add_child(Box.fill(RRect.new({"radius": 16.0, "c0": Color("#7d5cff"), "c1": Color("#2a1a5e"), "angle": 160.0,
-		"border_w": 2.0, "border_c": Color("#c8b4ff"), "glow": 30.0, "glow_c": Color(155 / 255.0, 123 / 255.0, 1, 0.5)})))
+	back.add_child(Box.fill(RRect.new({"radius": 8.0, "c0": UiKit.DEEP2, "c1": UiKit.NAVY2, "angle": 160.0,
+		"border_w": 2.0, "border_c": UiKit.BRASS, "glow": 24.0, "glow_c": UiKit.alpha(UiKit.GOLD_HI, 0.25)})))
+	var inset := RRect.new({"radius": 5.0, "c0": Color(0, 0, 0, 0), "c1": Color(0, 0, 0, 0), "border_w": 1.0,
+		"border_c": UiKit.alpha(UiKit.BRASS, 0.4)})
+	inset.custom_minimum_size = Vector2(138, 188)
+	back.add_child(inset)
 	var bv := UiKit.vbox(8)
 	bv.alignment = BoxContainer.ALIGNMENT_CENTER
-	bv.add_child(UiKit.lbl("W", "display", 56, Color.WHITE, {"align": "center", "shadow": Color("#24154f"), "shadow_off": Vector2(0, 3), "lh": -14}))
-	bv.add_child(UiKit.lbl("Wildbound", "display", 16, Color("#e3d6ff"), {"align": "center"}))
+	bv.add_child(UiKit.lbl("W", "display", 55, UiKit.GOLD_HI, {"align": "center", "shadow": UiKit.PLAQUE_INK, "shadow_off": Vector2(0, 3), "lh": -12}))
+	bv.add_child(UiKit.lbl("Wildbound", "display", UiKit.NAME, UiKit.INK2, {"align": "center"}))
 	back.add_child(bv)
 	back.pivot_offset = Vector2(75, 100)
 	bx.add_child(Box.fill(back))
 	# front: element card
 	var front := Box.new(Vector2(150, 200))
-	var fbg := RRect.new({"radius": 16.0, "angle": 170.0, "border_w": 2.0, "glow": 34.0})
+	var fbg := RRect.new({"radius": 8.0, "angle": 170.0, "border_w": 2.0, "glow": 30.0})
 	front.add_child(Box.fill(fbg))
 	var fm := MarginContainer.new()
 	fm.mouse_filter = Control.MOUSE_FILTER_IGNORE

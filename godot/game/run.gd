@@ -3,8 +3,8 @@ extends Node
 ## map, nodes, loot, rewards, lineup, end of run. Spec: ../CLAUDE.md §2, §5–§7, §11, §16.
 ## Screens are the frames Ui builds (Ui.el ids = index.html ids); this fills and wires them.
 
-## UI colours of the materials (TS MAT_DEF.color: var(--ember) / var(--tide) / var(--thorn)).
-const MAT_COL := {"sword": Color("#ff7a45"), "orb": Color("#3fb6ff"), "jewel": Color("#5fd36a")}
+## UI colours of the materials (the Ember / Tide / Thorn accents).
+const MAT_COL := {"sword": UiKit.EL.ember, "orb": UiKit.EL.tide, "jewel": UiKit.EL.thorn}
 
 var run_ess := {}
 var run_loot := {}
@@ -281,12 +281,12 @@ func show_map(reroll := true) -> void:
 	for i in Data.BAL.floors:
 		var f: int = i + 1
 		var st: StyleBoxFlat
-		if f < S.floor:
-			st = UiKit.flat(UiKit.PURPLE, 3)
-		elif f == S.floor:
-			st = UiKit.glow_box(UiKit.flat(UiKit.GOLD, 3), UiKit.alpha(UiKit.GOLD, 0.6), 4)
-		elif f == Data.BAL.floors or f == 4:
-			st = UiKit.flat(Color(1, 90 / 255.0, 110 / 255.0, 0.35), 3)
+		if f < S.floor:   # walked: shaded brass
+			st = UiKit.flat(UiKit.GOLD_LO, 3)
+		elif f == S.floor:   # here: the one lit step
+			st = UiKit.glow_box(UiKit.flat(UiKit.GOLD_HI, 3), UiKit.alpha(UiKit.GOLD_HI, 0.5), 4)
+		elif f == Data.BAL.floors or f == 4:   # Warden and Noctyrm ahead
+			st = UiKit.flat(UiKit.alpha(UiKit.FOE, 0.45), 3)
 		else:
 			st = UiKit.flat(Color(1, 1, 1, 0.1), 3)
 		var bar := Panel.new()
