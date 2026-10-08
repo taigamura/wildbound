@@ -234,25 +234,35 @@ static func build(ui) -> void:
 
 	# ---- team
 	# (no intro paragraph: the hint under the lineup says what a tap does, which keeps Done on screen)
-	var tm_head := _vbox_with(6, [_named(ui, "teamEyebrow", UiKit.eyebrow("Team")), UiKit.h2("Build your team")])
+	# header: title and the team count on one line, so the sheet stays short and the creature on the
+	# stage stands near the front (a tall sheet pushes it up the screen, far back into the depth blur)
+	# header: the title with the deck's element mix beside it, so the sheet stays short and the
+	# creature on the stage stands near the front (a tall sheet pushes it up the screen, far back
+	# into the depth blur)
+	var tm_head := UiKit.hbox(6)
+	var tm_h2 := UiKit.h2("Your team")
+	tm_h2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tm_h2.autowrap_mode = TextServer.AUTOWRAP_OFF
+	tm_head.add_child(tm_h2)
+	el.teamMix = UiKit.hbox(4)
+	el.teamMix.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tm_head.add_child(el.teamMix)
 	el.teamOrder = UiKit.grid(3, 8)
-	# under the lineup: the deck's element mix and a two-line hint (what a tap does / the replace prompt)
-	el.teamMix = UiKit.hbox(6)
-	el.teamMix.custom_minimum_size.y = 22
+	# under the lineup: a two-line hint (which slot the next tap fills)
 	el.teamHint = UiKit.lbl("", "500", UiKit.T_S, UiKit.INK2, {"wrap": true, "lh": -2})
 	el.teamHint.custom_minimum_size.y = 32
-	var tm_info := _vbox_with(6, [el.teamMix, el.teamHint])
-	var starters := UiKit.grid(3, 8)
+	var tm_info: Control = el.teamHint
+	var starters := UiKit.grid(4, 6)
 	el.starters = starters
 	var st_m := MarginContainer.new()
 	st_m.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for k in ["left", "right"]:
 		st_m.add_theme_constant_override("margin_" + k, 2)
-	st_m.add_theme_constant_override("margin_top", 6)
-	st_m.add_theme_constant_override("margin_bottom", 4)
+	st_m.add_theme_constant_override("margin_top", 2)
+	st_m.add_theme_constant_override("margin_bottom", 2)
 	st_m.add_child(starters)
 	el.teamDone = big("Done")
-	_screen(ui, "scr-team", null, [tm_head, el.teamOrder, tm_info, CapScroll.new(st_m, 0.31), el.teamDone], 0.74)
+	_screen(ui, "scr-team", null, [tm_head, el.teamOrder, tm_info, CapScroll.new(st_m, 0.2), el.teamDone], 0.74)
 
 	# ---- map (UI-QUEUE item 8: a trail of medallions, one detail strip, party portraits, wallet row)
 	var mtitle := _vbox_with(2, [_named(ui, "mapEyebrow", UiKit.eyebrow("Floor 1 of 8")),

@@ -721,6 +721,26 @@ static func face_por(key: String, el: String, sz: float, ring := Color(0, 0, 0, 
 	b.set_meta("rim", rim)
 	return b
 
+## A creature's face in a card's face window (the Crystal Foil look, CardView): the sprite crop on a
+## radial wash of its element over the card's navy ground, framed in the element colour. `sz` sets
+## the crop's aspect; everything is drawn inside it.
+static func face_win(key: String, el: String, sz: Vector2, radius := 4.0) -> Box:
+	var c := el_css(el)
+	var b := Box.new(sz)
+	b.add_child(Box.fill(RRect.new({"radius": radius, "mode": "radial", "rc": Vector2(0.5, 0.7), "s1": 1.0, "s_end": 0.85,
+		"c0": c.lerp(CardView.GROUND[1], 0.45), "c1": CardView.GROUND[1]})))
+	var f := TextureRect.new()
+	f.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	f.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	f.stretch_mode = TextureRect.STRETCH_SCALE
+	f.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	f.custom_minimum_size = sz - Vector2(2, 2)
+	f.texture = CardView.face_tex(key, el, sz.x / sz.y, Vector2(0.5, 0.4))
+	b.add_child(f)
+	b.add_child(Box.fill(RRect.new({"radius": radius, "c0": Color(0, 0, 0, 0), "c1": Color(0, 0, 0, 0),
+		"border_w": 1.5, "border_c": c.lerp(Color.BLACK, 0.2)})))
+	return b
+
 ## Grey a face_por out (knocked out) or bring it back.
 static func set_face_ko(b: Box, ko: bool) -> void:
 	var m: ShaderMaterial = (b.get_meta("face") as TextureRect).material
