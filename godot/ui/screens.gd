@@ -230,21 +230,7 @@ static func _named(ui, key: String, c: Control) -> Control:
 static func build(ui) -> void:
 	var el: Dictionary = ui.el
 	# ---- title
-	var t_logo := logo(ui, "titleH1", "Wildbound", 55, "", "Collect · Deal · Survive")
-	# the current team (summary only; editing is on scr-team)
-	el.teamRow = UiKit.hbox(6)
-	el.teamRow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	el.teamBtn = ghost("Team")
-	var ey := _named(ui, "pickEyebrow", UiKit.eyebrow("Your team"))
-	ey.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var head := _vbox_with(8, [row(ey, el.teamBtn), el.teamRow])
-	var metarow := UiKit.grid(3, 8)
-	for k in ["packBtn", "collBtn", "shopBtn"]:
-		el[k] = meta_btn()
-		metarow.add_child(el[k])
-	el.startBtn = big("Start expedition")
-	el.bestT = UiKit.best("")
-	_screen(ui, "scr-title", t_logo, [head, metarow, el.startBtn, el.bestT])
+	_title(ui)
 
 	# ---- team
 	# (no intro paragraph: the hint under the lineup says what a tap does, which keeps Done on screen)
@@ -342,14 +328,8 @@ static func build(ui) -> void:
 	el.packOk = big("Nice!")
 	_screen(ui, "scr-pack", pk_logo, [el.packCard, el.packTxt, el.packOk])
 
-	# ---- collection
-	var c_logo := logo(ui, "collH1", "Collection", UiKit.D_L, "collCount", "")
-	el.collEss = UiKit.flow(6, true)
-	c_logo.add_child(el.collEss)
-	el.collGrid = UiKit.grid(4, 6)
-	el.collDetail = UiKit.vbox(8)
-	el.collBack = ghost("Back")
-	_screen(ui, "scr-coll", c_logo, [el.collGrid, el.collDetail, el.collBack], 0.62)
+	# ---- collection (idea 9: a bestiary)
+	_coll(ui)
 
 	# ---- shop
 	var s_logo := logo(ui, "shopH1", "Item shop", UiKit.D_L, "", "Spend your loot")
@@ -423,6 +403,181 @@ static func _above_sheet(ui, id: String, c: Control) -> void:
 	c.minimum_size_changed.connect(pin)
 	ui.band[id].bottom = c
 	c.resized.connect(func(): if ui.current == id: ui.measure())
+
+# ------------------------------------------------------------------ title (idea 8)
+
+## The title as a diorama: the logo on the header scrim, the lead creature alone on the stage, and at
+## the bottom the team (a tappable pill of portraits, the lead's name and the best run) over the one
+## brass plaque, then a four-icon dock (Team, Daily pack, Collection, Item shop). No sheet window: the
+## bottom group is the "sheet" zone for Layout and the UI check, so the creature stays above it.
+static func _title(ui) -> void:
+	var el: Dictionary = ui.el
+	var id := "scr-title"
+	var scr := Control.new()
+	scr.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui.root.add_child(scr)
+	ui.screens[id] = scr
+	var top := logo(ui, "titleH1", "Wildbound", 55, "titleP", "Collect creatures. Deal cards. Survive.")
+	var scrim := UiKit.scrim()
+	scrim.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	scr.add_child(scrim)
+	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	scr.add_child(top)
+	top.item_rect_changed.connect(func():
+		var hb := top.get_rect().end.y
+		scrim.offset_bottom = hb + 44.0
+		scrim.look({"s1": hb / (hb + 44.0)}))
+	# a soft navy fade under the dock and plaque, so the bottom group sits on the scene, not in a box
+	var floor_fade := RRect.new({"radius": 0.0, "angle": 0.0, "c0": UiKit.alpha(UiKit.SCRIM, 0.7), "c1": UiKit.alpha(UiKit.SCRIM, 0.35),
+		"s1": 0.55, "c2": UiKit.alpha(UiKit.SCRIM, 0.0)})
+	floor_fade.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	scr.add_child(floor_fade)
+
+	# the team pill: overlapping portraits, "Emberwick leads", the best run; tap = the Team screen
+	el.teamBtn = Tap.new(UiKit.flat(UiKit.alpha(UiKit.NAVY2, 0.82), 22, 1, UiKit.HAIR, Vector4(8, 6, 16, 6)))
+	el.teamBtn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var pill := UiKit.hbox(10)
+	el.teamRow = UiKit.hbox(-6)
+	el.teamRow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pill.add_child(el.teamRow)
+	var tv := UiKit.vbox(0)
+	tv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	el.pickEyebrow = UiKit.lbl("", "700", UiKit.T_M, UiKit.INK)
+	el.bestT = UiKit.lbl("", "500", UiKit.T_S, UiKit.INK2)
+	tv.add_child(el.pickEyebrow)
+	tv.add_child(el.bestT)
+	pill.add_child(tv)
+	el.teamBtn.add_child(pill)
+
+	el.startBtn = big("Start expedition")
+	# the dock: one window split by hairlines into four icon cells
+	var dock := UiKit.win(0, false)
+	dock.mouse_filter = Control.MOUSE_FILTER_STOP
+	var cells := UiKit.hbox(0)
+	dock.add_child(cells)
+	for x in [["dockTeam", "team"], ["packBtn", "pack"], ["collBtn", "book"], ["shopBtn", "bag"]]:
+		var t := dock_cell(x[1])
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t.set_meta("divider", cells.get_child_count() > 0)
+		el[x[0]] = t
+		cells.add_child(t)
+
+	var inner := UiKit.vbox(12)
+	inner.add_child(el.teamBtn)
+	inner.add_child(el.startBtn)
+	inner.add_child(_pad(dock, 4))
+	var outer := MarginContainer.new()
+	outer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	outer.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	outer.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	outer.add_child(inner)
+	scr.add_child(outer)
+	outer.item_rect_changed.connect(func(): floor_fade.offset_top = outer.get_rect().position.y - scr.size.y + 40.0)
+	scr.set_meta("top", top)
+	scr.set_meta("outer", outer)
+	scr.set_meta("inner", inner)
+	ui.band[id] = {"top": top, "bottom": outer}
+	for n in [top, outer]:
+		n.resized.connect(func(): if ui.current == id: ui.measure())
+
+static func _pad(c: Control, top: int) -> MarginContainer:
+	var m := MarginContainer.new()
+	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	m.add_theme_constant_override("margin_top", top)
+	m.add_child(c)
+	return m
+
+## A dock cell: icon over a label and a sub line (a count, a price, "Ready"). Fill it with set_dock_cell.
+static func dock_cell(glyph: String) -> Tap:
+	var t := Tap.new(UiKit.flat(Color(0, 0, 0, 0), 0, 0, Color(), Vector4(4, 10, 4, 10)))
+	t.dis_mod = Color(1, 1, 1, 1)   # a waiting pack stays readable; its sub line says when
+	t.set_meta("glyph", glyph)
+	var b := Box.new()
+	t.add_child(b)
+	var v := UiKit.vbox(2)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	b.add_child(v)
+	t.set_meta("v", v)
+	t.set_meta("box", b)
+	# hairline on the left edge between cells (drawn inside the cell, so nothing spills)
+	t.draw.connect(func(): if t.get_meta("divider", false): t.draw_rect(Rect2(0, 10, 1, t.size.y - 20), UiKit.HAIR))
+	set_dock_cell(t, "", "", false, false)
+	return t
+
+## `ready` = act now (pack ready): gold icon and label plus a glowing gold dot; `dim` = waiting (muted icon).
+static func set_dock_cell(t: Tap, label: String, sub: String, ready := false, dim := false) -> void:
+	var v: VBoxContainer = t.get_meta("v")
+	var b: Box = t.get_meta("box")
+	UiKit.clear(v)
+	for c in b.get_children():
+		if c != v:
+			b.remove_child(c)
+			c.queue_free()
+	var ic := UiKit.icon(t.get_meta("glyph"), 24, UiKit.GOLD_HI if ready else (UiKit.MUTE if dim else UiKit.INK))
+	v.add_child(ic)
+	v.add_child(UiKit.lbl(label, "700", UiKit.T_S, UiKit.GOLD_HI if ready else UiKit.INK, {"align": "center"}))
+	v.add_child(UiKit.lbl(sub, "500", UiKit.T_S, UiKit.GOLD_HI if ready else UiKit.INK2, {"align": "center"}))
+	if ready:   # the gold dot sits at the icon's upper right, inside the cell
+		var dot := Control.new()
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dot.custom_minimum_size = Vector2(16, 16)
+		dot.draw.connect(func():
+			dot.draw_circle(Vector2(8, 8), 7.0, UiKit.alpha(Color("#ffcf5a"), 0.3))
+			dot.draw_circle(Vector2(8, 8), 4.5, Color("#ffcf5a")))
+		Fx.kf(dot, 0.9, [[0.0, {"a": 0.55}], [1.0, {"a": 1.0}]], {"loop": "alternate"})
+		var vh := v.get_combined_minimum_size().y
+		dot.set_meta("off", Vector2(21, -vh / 2.0 + 8.0))   # Box centres it, then nudges it to the icon's corner
+		b.add_child(dot)
+
+# ------------------------------------------------------------------ collection (idea 9)
+
+## The Collection as a bestiary: a compact header (title, how many found, Essence), a framed specimen
+## window over the stage band where the selected creature stands (so it never meets the header), and
+## one sheet with the six-wide portrait grid and the detail panel (name, tabs, tab body).
+static func _coll(ui) -> void:
+	var el: Dictionary = ui.el
+	# header: the title with Back at its right (Back lives up here so the sheet leaves the specimen
+	# window room), then how many are found with the Essence chips at the right
+	var head := UiKit.vbox(4)
+	var r1 := UiKit.hbox(12)
+	var h1 := _named(ui, "collH1", UiKit.disp("Collection", UiKit.D_M, UiKit.INK, {"shadow": UiKit.PLAQUE_INK, "shadow_off": Vector2(0, 3)}))
+	h1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	r1.add_child(h1)
+	el.collBack = ghost("Back")
+	el.collBack.mouse_filter = Control.MOUSE_FILTER_STOP
+	r1.add_child(el.collBack)
+	head.add_child(r1)
+	var r2 := UiKit.hbox(12)
+	var cnt := _named(ui, "collCount", UiKit.lbl("", "500", UiKit.T_M, UiKit.INK))
+	cnt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cnt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	r2.add_child(cnt)
+	el.collEss = UiKit.hbox(4)
+	r2.add_child(el.collEss)
+	head.add_child(r2)
+	el.collGrid = UiKit.grid(6, 8)
+	el.collDetail = UiKit.vbox(12)
+	_screen(ui, "scr-coll", head, [el.collGrid, el.collDetail], 0.74)
+	var scr: Control = ui.screens["scr-coll"]
+	var outer: Control = scr.get_meta("outer")
+	# the specimen window: a glassless frame over the stage band (Layout keeps the creature inside it)
+	var spec := Box.new()
+	spec.add_child(Box.fill(UiKit.panel(UiKit.window_frame())))
+	el.collSpecChip = UiKit.hbox(0)
+	spec.add_child(Box.at(el.collSpecChip, "bl", Vector2(10, 10)))
+	scr.add_child(spec)
+	scr.move_child(spec, 1)   # above the header scrim, under the header and sheet
+	el.collSpec = spec
+	var fit := func():
+		var t := head.get_rect().end.y + 8.0
+		var b := outer.get_rect().position.y - 8.0
+		spec.position = Vector2(outer.offset_left, t)
+		spec.size = Vector2(scr.size.x - outer.offset_left + outer.offset_right, maxf(b - t, 0.0))
+		spec.visible = b - t + 16.0 >= Layout.MIN_ROOM
+	for n in [head, outer, scr]:
+		n.item_rect_changed.connect(fit)
 
 # ------------------------------------------------------------------ pack flip card
 
