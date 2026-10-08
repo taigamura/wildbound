@@ -3,7 +3,7 @@ extends Node
 ## UI, opens the title screen and drives the per-frame update in TS order.
 ##
 ## Debug screenshots: `godot --path godot --resolution 390x844 -- --shot=<screen>` shows a screen
-## (title team team-swap map reward upgrade party end pack coll shop battle), waits a few frames, saves
+## (title team team-swap map reward upgrade party end pack coll shop battle battle-shared), waits a few frames, saves
 ## /tmp/claude-1000/wb-<screen>.png and quits. Add `--shot-dir=<dir>` to save elsewhere.
 ## With `--ui-check` (scripts/ui-check.sh) the shot is deterministic and goes through tests/ui_check.gd:
 ## `--golden=<dir>` compares against <dir>/wb-<screen>.png, `--update` rewrites it, and the exit code
@@ -97,14 +97,18 @@ func _start_shot() -> void:
 	match _shot:
 		"title":
 			Run.to_title()
-		"battle", "flick", "inspect":
+		"battle", "flick", "inspect", "battle-shared":
 			if _shot == "battle":
 				S.picks = ["emberwick", "bellspring", "truffmole"]
+			if _shot == "battle-shared":   # two Ember creatures share their cards (scratch save, not user://save.cfg)
+				Platform.use_save_path("user://shot-battle-shared.cfg")
+				Platform.store_set("owned", Array(Data.ROSTER))
+				S.picks = ["emberwick", "cinderpip", "bellspring"]
 			Run.start_run()
 			Battle.start_battle(S.nodes[0])
 		_:
 			Run.debug_show(_shot)
-	_shot_frames = 150 if _shot in ["battle", "flick", "inspect"] else 70
+	_shot_frames = 150 if _shot in ["battle", "flick", "inspect", "battle-shared"] else 70
 
 func _shot_tick() -> void:
 	if _shot == "" or _shot_frames <= 0:
@@ -112,6 +116,8 @@ func _shot_tick() -> void:
 	_shot_frames -= 1
 	if _shot == "battle" and _shot_frames == 40 and S.hand.size() > 1:
 		S.energy = 7.0
+	if _shot == "battle-shared" and _shot_frames == 40:
+		_shared_hand()
 	if _shot in ["flick", "inspect"]:
 		_drive_input()
 	if _shot_frames == 10 and _shot_scroll >= 0 and Ui.current != null:
@@ -132,6 +138,18 @@ func _shot_tick() -> void:
 			get_tree().quit(chk.new().check(_shot, img, _shot_dir, "" if _no_golden else _golden, _update))
 			return
 		get_tree().quit()
+
+## battle-shared: every card state at once. Ember cards show both Ember faces; Bellspring is down, so
+## its Splash is dead; Peck has its -1 cost upgrade; 2 energy leaves Wickflare unaffordable.
+func _shared_hand() -> void:
+	var t := S.team()
+	t[0].ups["strike"] = "cost"
+	t[2].alive = false
+	t[2].hp = 0
+	S.hand = [CardRef.new(t[0].uid, "sig"), CardRef.new(t[1].uid, "strike"), CardRef.new(t[2].uid, "strike"), CardRef.new(t[0].uid, "strike")]
+	S.energy = 2.0
+	Ui.render_bench()
+	Ui.refresh_hand()
 
 ## Synthetic pointer input: press card 1, scrub right onto card 2, then (flick) swipe it up to play,
 ## or (inspect) keep holding so the shot shows the magnified card.

@@ -11,6 +11,8 @@ const LIFT_LOCK := 0.12   # upward travel (× card height, and more up than side
 const SCRUB_HYST := 0.22  # × card width a neighbour must be closer than the magnified card before the magnifier moves
 const FAN_DEG := 8.0      # rotation per step from the centre (4 cards → ±4°, ±12°)
 const FAN_DROP := 0.06    # × card width × step² that outer cards sit lower
+const HELD_LIFT := 12.0   # px the held card rises out of the fan (the preview does the magnifying)
+const PREVIEW_K := 2.0    # hold preview width × card width (shrinks to fit the stage)
 
 const SCREENS := ["scr-title", "scr-team", "scr-map", "scr-reward", "scr-upgrade", "scr-party", "scr-end", "scr-pack", "scr-coll", "scr-shop"]
 
@@ -24,6 +26,7 @@ var hud: Control
 var hud_top: VBoxContainer
 var hud_bottom: VBoxContainer
 var hand: Control
+var preview := CardView.new("hand")   # the held card, large, on the stage
 var segs: Array = []
 var heavy: Control
 var chain: Control
@@ -32,6 +35,7 @@ var current = null      # shown screen id, or null for the battle HUD
 var _h := {}
 var _sel := -1
 var _sel_ref = null
+var _pv_sel := -1
 var _laid_q := false
 var _drag = null
 var _last_stat := ""
@@ -235,6 +239,8 @@ func _build_hud() -> void:
 		b.gui_input.connect(_slot_input.bind(i))
 		hand.add_child(b)
 		slots.append(b)
+	preview.visible = false
+	hud.add_child(preview)
 
 	# ---- pinned over the world: heavy telegraph and chain counter (outside #hud in TS)
 	heavy = UiKit.vbox(2)
@@ -307,6 +313,8 @@ func show(id) -> void:
 			UiScreens.sheet_in(self, s)
 		screens[s].visible = on
 	hud.visible = id == null
+	preview.visible = false
+	_pv_sel = -1
 	chain.visible = false
 	heavy.visible = false
 	if id == null and was != null:
@@ -378,12 +386,16 @@ func _paint(i: int) -> void:
 	if up == null:
 		up = ""
 	var cost = Data.BAL.discard_cost if dead else S.card_cost(r)
-	var k := "%s|%s|%s|%s|%s|%s|%s|%s|%s" % [r.uid, r.slot, co.by.uid, def.cost, cost, bench, strong, up, dead]
+	var base = cost if dead else S.base_card(src, r.slot).cost
+	var faces := S.card_faces(r).map(func(m: Mon): return [m.key, m.el])
+	var k := "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" % [r.uid, r.slot, co.by.uid, def.cost, cost, bench, strong, up, dead, faces]
 	if b.face.key == k and not b.face.empty:
 		return
-	b.face.face(def, co.el, {"cost": cost, "chip": true, "bench": bench, "dead": dead, "strong": strong, "pow": co.pow,
-		"upgraded": "+30%" if up == "power" else ("−1" if up == "cost" else "")})
+	b.face.face(def, co.el, {"slot": r.slot, "cost": cost, "base": base, "faces": faces, "bench": bench, "dead": dead,
+		"strong": Data.adv(co.el, e.el) if strong else 0.0, "pow": co.pow, "upgraded": up, "energy": S.energy})
 	b.face.key = k
+	if i == _sel:
+		_preview_paint()
 
 func refresh_hand() -> void:
 	for i in slots.size():
@@ -421,7 +433,8 @@ func _hand_resized() -> void:
 		b._apply()
 	_queue_layout()
 
-## Fan the slots that hold a card; the inspected one lifts, straightens and grows.
+## Fan the slots that hold a card; the inspected one straightens and lifts a little (HELD_LIFT, so
+## the bench and lead plate stay visible) while the big preview shows it on the stage.
 func _poses() -> Array:
 	var W := hand.size.x
 	var cw := _cw
@@ -442,14 +455,39 @@ func _poses() -> Array:
 		out[i] = {"x": t * step + nudge, "y": cw * FAN_DROP * t * t, "r": t * FAN_DEG, "s": 1.0, "z": k + 1}
 	if si >= 0:
 		var p: Dictionary = out[_sel]
-		var s := 1.16
-		var lim := maxf(0.0, (W - cw * s) / 2.0)
+		var lim := maxf(0.0, (W - cw) / 2.0)
 		p.x = clampf(p.x, -lim, lim)
-		p.y = -ch * 0.3
+		p.y = -HELD_LIFT
 		p.r = 0.0
-		p.s = s
+		p.s = 1.0
 		p.z = 20
 	return out
+
+## The hold preview: the held card at about 2× in the middle of the stage, between the enemy plate
+## and the lead plate (shrunk to fit a short stage). Hidden once a swipe is committed.
+func _preview_layout() -> void:
+	var on: bool = _sel >= 0 and current == null and not (_drag != null and _drag.lifted) and not slots[_sel].face.empty
+	if not on:
+		_pv_sel = -1
+		preview.visible = false
+		return
+	var top := hud_top.get_global_rect().end.y + 8.0
+	var bot := hud_bottom.get_global_rect().position.y - 8.0
+	var vp := root.get_viewport_rect().size
+	var w := floorf(minf(_cw * PREVIEW_K, minf((bot - top) * 0.75, vp.x - 32.0)))
+	var sz := Vector2(w, roundf(w * 4.0 / 3.0))
+	preview.size = sz
+	preview.position = Vector2(roundf((vp.x - sz.x) / 2.0), roundf(top + (bot - top - sz.y) / 2.0))
+	preview.pivot_offset = sz / 2.0
+	if _pv_sel != _sel:
+		_pv_sel = _sel
+		_preview_paint()
+		preview.visible = true
+		Fx.kf(preview, 0.14, [[0.0, {"s": 0.9, "a": 0.0}], [1.0, {"s": 1.0, "a": 1.0}]], {"ease": [0.2, 0.9, 0.3, 1.0]})
+
+func _preview_paint() -> void:
+	if _sel >= 0:
+		preview.copy_from(slots[_sel].face)
 
 func _layout_hand() -> void:
 	_laid_q = false
@@ -481,6 +519,7 @@ func _layout_hand() -> void:
 	order.sort_custom(func(a, c): return a[0] < c[0] or (a[0] == c[0] and a[1] < c[1]))
 	for k in order.size():
 		hand.move_child(slots[order[k][1]], k)
+	_preview_layout()
 
 func _queue_layout() -> void:
 	if not _laid_q:
@@ -843,9 +882,11 @@ func sync_hud() -> void:
 		var r = S.hand[i] if i < S.hand.size() else null
 		if r == null:
 			continue
-		var why: String = S.card_block(r)
-		var kind := "dead" if S.card_dead(r) else ("bench" if S.card_benched(r) else "")
-		slots[i].set_dim(why == "energy" or why == "busy", kind)
+		# the card shows bench/dead/can't-afford itself; the slot only dims while cards can't be played at all
+		slots[i].set_dim(S.card_block(r) == "busy")
+		slots[i].face.set_energy(en)
+	if preview.visible:
+		preview.set_energy(en)
 
 	var es: Array = []
 	var ps: Array = []
