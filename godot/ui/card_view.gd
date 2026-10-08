@@ -442,13 +442,19 @@ func _notification(what: int) -> void:
 	fit_child_in_rect(nm, nr)
 	var tags := _strip.get_child_count() > 0
 	var tr := Rect2(19.0 * u, (67.0 if tags else 69.0) * u, 62.0 * u, (22.0 if tags else 26.0) * u)
-	_fit(tx, roundi(9.0 * u), tr.size.x, tr.size.y)
+	var fs := _fit(tx, roundi(9.0 * u), tr.size.x, tr.size.y)
 	fit_child_in_rect(tx, tr)
+	# the font's estimate can wrap differently from the Label itself: shrink until the Label agrees
+	while fs > 6 and (tx.get_line_count() > tx.get_visible_line_count() or tx.get_combined_minimum_size().y > tr.size.y + 0.5):
+		fs -= 1
+		tx.add_theme_font_size_override("font_size", fs)
+		fit_child_in_rect(tx, tr)
 	_cost_l.add_theme_font_size_override("font_size", roundi(11.0 * u))
 	fit_child_in_rect(_cost_l, Rect2((4.0 if sig else 0.0) * u, 62.0 * u, (13.0 if sig else 16.0) * u, 13.0 * u))
 	# status strip: one tag spans it; two or more share it with their short text
 	var sr := Rect2(19.0 * u, 96.0 * u, 61.0 * u, 13.0 * u)
 	fit_child_in_rect(_strip, sr)
+	_strip.visible = _strip.get_child_count() > 0   # an empty strip mustn't count as a corner piece
 	var n := _strip.get_child_count()
 	var tg := 2.0 * u
 	var tw := (sr.size.x - tg * (n - 1)) / maxf(1.0, n)
@@ -487,6 +493,7 @@ func _style_tag(l: Label, kind: String, u: float) -> void:
 	sb.set_border_width_all(1 if line.a > 0.0 else 0)
 	sb.set_corner_radius_all(roundi(2.0 * u))
 	sb.anti_aliasing = false
+	sb.set_content_margin_all(0)   # the default (-1) pads by the border width, pushing the text past the strip
 	l.add_theme_stylebox_override("normal", sb)
 	l.add_theme_color_override("font_color", ink)
 
