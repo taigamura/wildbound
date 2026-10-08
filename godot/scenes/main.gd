@@ -3,8 +3,8 @@ extends Node
 ## UI, opens the title screen and drives the per-frame update in TS order.
 ##
 ## Debug screenshots: `godot --path godot --resolution 390x844 -- --shot=<screen>` shows a screen
-## (title team team-swap map map-sel map-warden map-late reward reward-warden upgrade party end end-win pack coll
-## coll-trait coll-up shop battle battle-shared battle-heavy), waits a few frames, saves
+## (title team team-swap map map-sel map-warden map-late reward reward-warden upgrade party end end-win pack
+## pack-pick coll coll-trait coll-up shop battle battle-shared battle-heavy), waits a few frames, saves
 ## /tmp/claude-1000/wb-<screen>.png and quits. Add `--shot-dir=<dir>` to save elsewhere.
 ## With `--ui-check` (scripts/ui-check.sh) the shot is deterministic and goes through tests/ui_check.gd:
 ## `--golden=<dir>` compares against <dir>/wb-<screen>.png, `--update` rewrites it, and the exit code
@@ -101,7 +101,7 @@ func _start_shot() -> void:
 		"battle", "flick", "inspect", "battle-shared", "battle-heavy":
 			if _shot == "battle":
 				S.picks = ["emberwick", "bellspring", "truffmole"]
-			if _shot == "battle-shared":   # two Ember creatures share their cards (scratch save, not user://save.cfg)
+			if _shot == "battle-shared":   # two Ember creatures: the benched one's cards play as basic hits (scratch save, not user://save.cfg)
 				Platform.use_save_path("user://shot-battle-shared.cfg")
 				Platform.store_set("owned", Array(Data.ROSTER))
 				S.picks = ["emberwick", "cinderpip", "bellspring"]
@@ -113,7 +113,8 @@ func _start_shot() -> void:
 			Battle.start_battle(MapNode.new("wild", "puddlet") if _shot == "battle-heavy" else S.nodes[0])
 		_:
 			Run.debug_show(_shot)
-	_shot_frames = 150 if _shot in ["battle", "flick", "inspect", "battle-shared", "battle-heavy"] else 70
+	_shot_frames = 150 if _shot in ["battle", "flick", "inspect", "battle-shared", "battle-heavy"] \
+		else (110 if _shot in ["end", "end-win", "pack"] else 70)   # the pack meter fill and the card flips settle
 
 func _shot_tick() -> void:
 	if _shot == "" or _shot_frames <= 0:
@@ -146,7 +147,7 @@ func _shot_tick() -> void:
 			return
 		get_tree().quit()
 
-## battle-shared: every card state at once. Ember cards show both Ember faces; Bellspring is down, so
+## battle-shared: every card state at once. Cinderpip's Scorch is a basic hit for Emberwick; Bellspring is down, so
 ## its Splash is dead; Peck has its -1 cost upgrade; 2 energy leaves Wickflare unaffordable.
 func _shared_hand() -> void:
 	var t := S.team()

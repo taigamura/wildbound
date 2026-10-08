@@ -8,18 +8,18 @@ All numbers below are **starting values**. They live in `godot/core/data.gd` (`B
 
 # Part 1: Game design (MVP)
 
-Portrait iOS creature roguelite. Real-time card combat, creatures collected from packs, loot that upgrades them between runs, about 5-minute runs, one free daily pack.
+Portrait iOS creature roguelite. Real-time card combat, creatures collected from packs (one free daily pack, more earned by winning fights), loot that upgrades them between runs, about 5-minute runs.
 
 ## 1. Pillars
 1. **Frantic, readable combat.** Cards can be played at any time. The enemy telegraphs; you react.
 2. **Your team is your deck.** Picking your three creatures before a run *is* deckbuilding.
 3. **Instant restart.** From death, to results, to a new run takes under 2 seconds of taps.
-4. **Collection and loot give lasting progress.** Packs add creatures (options); dungeon loot buys permanent upgrades (power) and alternate cards and Traits (options). There is no evolution: each creature is unique and has one form.
+4. **Collection and loot give lasting progress.** Packs add creatures and copies of them (options: more copies unlock alternate cards); dungeon loot buys permanent upgrades (power), and Essence learns Traits (options). There is no evolution: each creature is unique and has one form.
 5. **Small asset budget.** One still image per creature. All motion comes from code (tweens, squash and stretch, particles).
 
 ## 2. Core loop
 ```
-Packs (daily free, or bought) → pick a team of up to 3 → 8-floor run → loot every win → win/lose (loot is kept either way) → upgrade creatures, shop, set loadouts → repeat
+Packs (daily free, earned on the pack meter, or bought; pick 1 of 3) → pick a team of up to 3 → 8-floor run → loot and pack points every win → win/lose (both are kept either way) → open packs, upgrade creatures, shop, set loadouts → repeat
 ```
 
 ## 3. Elements
@@ -66,18 +66,21 @@ Each element owns one status:
 - Hand of **4**. Playing a card immediately draws the next one. The deck cycles: the discard pile reshuffles when the draw pile is empty. With fewer than 4 cards in the deck (floor 1, solo starter), the extra slots stay empty.
 - Cards can be played any time, including during wind-ups. There is no global cooldown.
 - **Hold to read, slide to scrub, swipe up to play.** A touch lifts the card under the finger slightly and shows it enlarged in the middle of the stage, between the enemy plate and the party rail, so the bench stays visible. Sliding sideways moves the magnification along the fan, like picking a card from a held hand. Swiping up plays the magnified card (up more than 40% of its height, or released moving up fast after 15%). Once the swipe passes 12% of the card's height it locks to that card and the card follows the finger; dragging back down returns to scrubbing. Releasing without a swipe puts the card back. A card that can't be played can still be magnified; swiping it shakes it and it snaps back.
-- **Cards belong to an element, not a creature.** The deck is still built from each lineup creature's equipped cards (§4.2), and each card takes the element of the creature that brought it. The card face (the "Crystal Foil" card) shows:
+- **Each card belongs to its owner.** The deck is built from each lineup creature's equipped cards (§4.2); a card's **owner** is the creature that brought it, and the card has the owner's element. The card face (the "Crystal Foil" card) shows:
     - **Cost** as a rail of energy crystals down the left edge (the number under them from 3 up). Crystals you can't afford yet are red outlines; a −1 cost upgrade leaves a hollow crystal.
-    - **Faces** of every living lineup member of the card's element, the card's owner first: one face, or a split window for two or three, framed in the element's colour. A knocked-out creature's face leaves every card it shared; faces change at run start and on a KO or revive, never on a swap.
+    - **The owner's face only**, framed in the element's colour (alive or knocked out; there is no shared split window).
     - **Foil by slot:** Strike plain, Skill crosshatched, Signature a gold double frame with a moving sheen.
-    - Statuses (Strong, upgraded, can't afford) get their own strip under the rules text.
-  - **Only cards of the lead's element can be played.** Any living lead of that element plays it, so two Ember creatures share their Ember cards. Cards of other elements stay in the hand, dimmed with a swap chip in their element's colour, until you swap in a creature of that element. Each bench portrait shows how many waiting hand cards it would unlock. Playing a card never swaps. Deciding when to swap (and living with a hand of off-element cards meanwhile) is the strategy.
-  - **A card fires as the lead.** The lead's permanent Power and Spirit (§5.2) and its Trait apply (Quickfuse counts the lead's first card, Thirst heals the lead on any Strike, and so on). The card's text, slot and in-run upgrade (§7) come from the card itself.
-  - A card is **dead** only when no living lineup member shares its element. Dead cards **stay in the deck**, greyed out with the owner's face under "KO". Swiping one up discards it for **1** energy and draws the next card (no chain, Trait or discount effects).
-- "Self" on a card means the lead that plays it. "Team" means every living lineup member.
+    - Statuses (Basic, Strong, upgraded, can't afford) get their own strip under the rules text.
+  - **What the lead can do with a card** depends on who owns it:
+    - **The lead owns it:** it plays in full: its printed cost, its effect, the lead's permanent Power and Spirit (§5.2) and its Trait (Quickfuse counts its first card, Thirst heals it on its Strikes, and so on). The card's text, slot and in-run upgrade (§7) come from the card.
+    - **Same element, but the owner is benched or knocked out:** the card plays as a **basic hit**. It costs **1** energy whatever its printed cost and deals **4** × the lead's Power in the lead's element (chain bonus and element multipliers apply). It raises the chain like any card, but has no card effects, triggers no Traits, neither uses nor applies the discount, and isn't the lead's "played" card (Quickfuse). The face shows the cost as 1 crystal, the rules text dimmed, and a "BASIC n" strip with the real damage (Power included).
+    - **Another element:** it can't be played. It stays in the hand, dimmed with a swap chip in its element's colour; swiping it shakes it and a toast names the owner ("Swap to Emberwick to play this").
+    - **Dead:** no living lineup member shares its element. Dead cards **stay in the deck**, greyed out with the owner's face under "KO". Swiping one up discards it for **1** energy and draws the next card (no chain, Trait or discount effects).
+  - Each bench portrait counts the hand cards it **owns** that aren't fully playable right now (swap to it to fire them in full); a knocked-out creature counts nothing. Playing a card never swaps. Deciding when to swap (and whether a basic hit now beats the full card later) is the strategy.
+- "Self" on a card means the lead that plays it (the owner, since only the owner fires card effects). "Team" means every living lineup member.
 
 ### 4.4 Swapping
-- Swapping is **only** by tapping a bench portrait. It is free but has a **6s cooldown**. Bench portraits are 56px circles showing the creature's face inside an HP ring; the cooldown is a dark wedge with the seconds left, and the portrait pops when swapping is ready. An element-coloured chip at its lower right counts the waiting hand cards it would make playable.
+- Swapping is **only** by tapping a bench portrait. It is free but has a **6s cooldown**. Bench portraits are 56px circles showing the creature's face inside an HP ring; the cooldown is a dark wedge with the seconds left, and the portrait pops when swapping is ready. An element-coloured chip at its lower right counts the hand cards it owns that it would fire in full once it leads (none while it's knocked out).
 - When the lead is knocked out, the healthiest bench creature auto-swaps in for free; this ignores and does not start the cooldown.
 - Shields and statuses stay on a creature when it is benched (shields keep decaying).
 
@@ -105,7 +108,7 @@ A swap outside the window is a normal swap. During a heavy wind-up, bench portra
 - Resets after a 1.5s gap. The counter pulses in its last 0.5s.
 
 ### 4.9 Win and lose
-- **Win:** enemy at 0 HP. Every win drops loot (§5.1).
+- **Win:** enemy at 0 HP. Every win drops loot (§5.1) and pack points (§11).
 - **Lose:** all lineup creatures knocked out. **The run ends.**
 - **Victories don't heal.** After a fight, HP carries over and knocked-out creatures stay down at 0 HP until a Spring or a Heal reward revives them; shields and statuses clear. If the lead is down, the healthiest living creature leads the next fight. Healing comes from Springs, Heal rewards and cards.
 
@@ -136,7 +139,7 @@ Level n → n+1 costs **(n+1)** of the track's material **+ 20 × (n+1)** gold (
 
 ### 5.3 Item shop
 Reached from the title screen and the end-of-run screen. Shows gold and material counts.
-- **Buy:** a Sword, Orb or Jewel for **30** gold each; a **creature pack** for **150** gold (same result as the daily pack, §11; if every creature is owned and shiny, the pack is unavailable and nothing is charged).
+- **Buy:** a Sword, Orb or Jewel for **30** gold each; a **creature pack** for **150** gold (pick 1 of 3, like any pack, §11). If a rolled pack is still waiting for its pick, the shop's pack button opens that one instead, free.
 - **Sell:** any material for **15** gold.
 
 ## 6. Run structure
@@ -162,7 +165,7 @@ The map is a short trail: this floor's nodes are medallions on branching paths, 
 **Enemy scaling:** wild HP = `90 × (0.6 + 0.4 × speciesHP / 55) × (1 + 0.15 × (floor − 1))`. Damage ×`(1 + 0.10 × (floor − 1))`. Biome B wilds drawn from the Biome A pool scale as if 2 floors higher.
 
 ## 7. Rewards (after every non-boss win)
-The fight's loot (§5.1) and Essence are shown in a ribbon under "Victory" (each drop pops in) and banked first. A pip row shows the picks left. Then pick **1 of 3**: **Upgrade a card**, **Heal** (40% max HP to the whole party, reviving KOs), or **Scavenge** (+1 random material). Alphas give 2 picks; repeats are allowed.
+The fight's loot (§5.1), Essence and pack points (§11; "+N pts · Pack earned!" when they fill the meter, with a toast pointing to the title screen) are shown in a ribbon under "Victory" (each drop pops in) and banked first. A pip row shows the picks left. Then pick **1 of 3**: **Upgrade a card**, **Heal** (40% max HP to the whole party, reviving KOs), or **Scavenge** (+1 random material). Alphas give 2 picks; repeats are allowed.
 
 - **Upgrade:** choose any equipped card in your party, then **+30% effect** or **−1 cost** (min 0). Each card can be upgraded once. A card with no number to scale (e.g. Static, Flicker) offers only −1 cost.
 - Card upgrades last for the current run only (permanent upgrades are §5.2).
@@ -175,7 +178,7 @@ The fight's loot (§5.1) and Essence are shown in a ribbon under "Victory" (each
 Creatures don't evolve. Each of the 12 is a unique creature with a single form and a single image. Within a run, a creature only changes through §7 card upgrades; across runs, through its loadout (§16) and its permanent upgrades (§5.2).
 
 ## 10. Roster (12 creatures)
-Each creature has 3 card slots: **Strike / Skill / Signature**. They are the cards it brings to the deck; in battle they belong to its element and any lead of that element plays them (§4.3). Strike has one option; Skill and Signature each have the default and one alternate (unlocked with Essence, §16). Each creature also has a built-in Trait (§16). HP is max HP at run start before Vitality upgrades (§5.2). Atk/Spd only affect it as an enemy.
+Each creature has 3 card slots: **Strike / Skill / Signature**. They are the cards it brings to the deck and it owns them in battle: it plays them in full while it leads, and another lead of its element plays them as basic hits (§4.3). Strike has one option; Skill and Signature each have the default and two alternates, unlocked by collecting copies (§16.3): the alternate Skill at **2** copies, the alternate Signature at **3**, the third Skill at **5**, the third Signature at **7**. Each creature also has a built-in Trait (§16). HP is max HP at run start before Vitality upgrades (§5.2). Atk/Spd only affect it as an enemy.
 
 "N dmg ×H" hits H times; each hit gets the chain bonus. "+N if Burned" (or Soaked, Rooted) adds N damage if the enemy has that status.
 
@@ -207,18 +210,42 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. They are the car
 | **Sparkit** | Glass cannon | 35 | Jolt (1): 7 dmg | Overcharge (1): +2 energy, take 4 | Supercharge (2): next Strike ×3 | Thunderclap (4): 22 dmg | Ball Lightning (3): 14 dmg, +1 chain | Live Wire |
 | **Coilsnail** | Tank | 70 | Prod (1): 5 dmg | Capacitor (2): shield 10, next Strike ×2 | Grounding (2): shield 8, cleanse team | Discharge (3): damage equal to your shield, consuming it | Static Field (3): shield team 6, apply Shock | Grounded |
 
+### Third options (Skill at 5 copies, Signature at 7)
+| Creature | Third Skill | Third Signature |
+|---|---|---|
+| **Emberwick** | Stoke (2): 6 dmg, +6 if Burned | Pyre Bloom (4): 8 dmg ×2, apply Burn |
+| **Cinderpip** | Sootburst (2): apply Burn, +1 chain | Pop Flare (2): 9 dmg, +1 chain |
+| **Kilnback** | Ashwall (2): shield team 5 | Furnace Heart (4): shield 12, heal self 10 |
+| **Bellspring** | Tolling Wave (2): heal team 4, cleanse team | Riptide Peal (4): 8 dmg ×2, apply Soak |
+| **Puddlet** | Puddle Hop (1): +1 energy, heal self 4 | Drizzle Volley (3): 4 dmg ×3, heal team 4 |
+| **Brinecrab** | Saltcrust (2): apply Soak, shield 7 | Abyss Pincer (4): 16 dmg, +8 if Soaked |
+| **Truffmole** | Truffle Hunt (1): +1 energy, next Strike ×2 | Fairy Ring (3): apply Root, heal team 6 |
+| **Brambat** | Briar Bite (2): 4 dmg ×2, heal self 50% of damage | Gorge (3): heal self 8, next Strike ×3 |
+| **Mossling** | Moss Pillow (1): shield 5, +1 chain | Verdant Bloom (4): heal team 7, shield team 5 |
+| **Skiray** | Crosswind (1): 4 dmg, +1 chain | Squall Dive (4): 6 dmg ×3, +1 chain |
+| **Sparkit** | Crackle (2): 3 dmg ×3, +1 chain | Short Circuit (3): 19 dmg, take 6 |
+| **Coilsnail** | Coil Up (1): shield 4, +1 energy | Volt Bastion (4): shield 16, next hit taken reflects 50% |
+
+Every third option has a number the +30% reward upgrade can scale. Roles: status setup or payoff (Stoke, Sootburst, Saltcrust, Fairy Ring, Abyss Pincer), burst (Pyre Bloom, Riptide Peal, whose second hit lands on the Soak its first applies, Squall Dive, Short Circuit), team utility (Ashwall, Tolling Wave, Verdant Bloom, Drizzle Volley), cheap chain tempo (Puddle Hop, Truffle Hunt, Moss Pillow, Crosswind, Crackle, Coil Up, Pop Flare) and a big next Strike (Gorge).
+
 - **Shields** absorb damage until broken, and decay 20%/s once 3s have passed since they were last added to.
 - **Spawn pools** (who you fight; any species can appear, owned or not, and none can be caught): Biome A (floors 1–3): Cinderpip, Puddlet, Brambat, Skiray, Kilnback, Mossling. Biome B (5–7): Brinecrab, Sparkit, Coilsnail, plus the Biome A pool at +2 floors' scaling.
 
 ## 11. Collection and packs
 - **New install:** you own the 3 starters.
-- **Packs are the only way to get creatures.** **Daily pack:** one free per day, resetting at **04:00 device-local time**. A card-flip reveal grants **1 creature you don't own**, random from the 9 non-starters. Once you own all 12, it grants a **shiny** of a random owned creature that isn't shiny yet (a hue-shift with a sparkle on entry). With everything shiny, it says so. A **creature pack** bought in the item shop (§5.3) gives the same result.
+- **Packs are the only way to get creatures and copies.** Three sources, all the same pack:
+    - **Daily pack:** one free per day, resetting at **04:00 device-local time**.
+    - **Pack meter:** every fight won adds pack points: Wild **2**, Alpha **3**, Warden **5**, Noctyrm **10**. They are banked the moment the fight is won, like loot, so they're kept on a loss or a retreat (retreating a fresh run earns nothing, since points come only from wins). Every **50** points banks one **pack token**; overflow carries into the next meter. That is about one pack per 5 runs; a full winning run earns about 0.6 of a pack.
+    - **Creature pack** bought in the item shop for **150** gold (§5.3).
+- **Pick 1 of 3.** A pack rolls **3 different species** from all 12; a species you don't own is **3×** as likely as one you own. The three cards flip face up one after another (tapping a face-down card turns them all over, so there are no blind picks); each shows the creature's face, its name, NEW or the copy it would become ("Copy 3/10"), and what that copy gives (its role for a new creature, the card or shiny it unlocks, or gold when it's complete). Tap one to keep it; the others fade, and a line says what it gave. The roll is saved as **pending** until a pick is made, so closing the app never rerolls, and any pack source opens the pending pack first without spending anything.
+- **Copies.** Keeping a creature you don't own adds it to the collection (1 copy); keeping one you own adds a copy. Copies unlock its alternate cards and, at **10**, make it **shiny** (a hue-shift with a sparkle on entry; §16.3). A copy beyond 10 converts to **25** gold. A pack is never empty. From the title, a new creature joins the team if there's room.
+- **Opening packs:** the title dock's pack cell shows how many packs are waiting (a pending pick, today's free pack and the tokens: "Pack", "Packs ×3") with the meter under it ("32/50"), gold-dotted when one is ready; tapping it opens the pending pick first, then the daily pack, then a token.
 - **Starting a run:** pick a team of up to 3 owned creatures on the Team screen (§4.2). Each starts at its §10 stats plus its permanent upgrades (§5.2), with its saved loadout (§16).
-- **Title:** the lead creature on the stage, the logo and tagline on a scrim, a team pill (portraits, who leads, best run) that opens the Team screen, one **Start expedition** plaque, and a four-icon dock (Team, Daily pack with a gold dot when ready, Collection, Item shop) with counts.
-- **End of run:** floor reached, gold earned, Perfect Swaps and time as large numbers, then a ribbon of everything banked this run (loot and Essence), party portraits, **Run again**, and Item shop / Title. Loot was banked as it dropped; a win adds **+50** gold. The screen links to the item shop.
-- **Collection screen:** the selected creature stands in a framed specimen window; a six-wide portrait grid (unowned are "?" silhouettes); a detail panel with **Cards / Trait / Upgrades** tabs (upgrade tracks are five-pip bars). Back and the currency the open tab spends sit in the header. Tap any portrait to see its cards and Trait. It is also the **loadout editor** (§16) and the **upgrade screen** (§5.2) for owned creatures.
+- **Title:** the lead creature on the stage, the logo and tagline on a scrim, a team pill (portraits, who leads, best run) that opens the Team screen, one **Start expedition** plaque, and a four-icon dock (Team, Packs with a gold dot when one is ready, Collection, Item shop) with counts.
+- **End of run:** floor reached, gold earned, Perfect Swaps and time as large numbers, then a ribbon of everything banked this run (loot and Essence), the **pack meter** (it fills from where it stood at the run's start over this run's points, "+N this run" and "32/50 · 18 to go"; each time it fills it reads "Pack earned!" with a heavy haptic, and an **Open pack** button appears beside it), party portraits, **Run again**, and Item shop / Title. Loot was banked as it dropped; a win adds **+50** gold. The screen links to the item shop.
+- **Collection screen:** the selected creature stands in a framed specimen window; a six-wide portrait grid (unowned are "?" silhouettes); a detail panel with **Cards / Trait / Upgrades** tabs (upgrade tracks are five-pip bars; the Cards tab opens with "Copies n/10" as pips and what the next copy unlocks, and locked cards say how many copies they need). Back and the open tab's currency sit in the header: copies for Cards, Essence for Trait, gold and materials for Upgrades. Tap any portrait to see its cards and Trait. It is also the **loadout editor** (§16) and the **upgrade screen** (§5.2) for owned creatures.
 - **"Run again"** on the results screen restarts immediately with the same team.
-- **Persisted** (through `Platform.store_get`/`store_set` in `core/platform.gd`, saved to `user://save.cfg`): `owned`, `shiny`, `packDay`, `best`, `wins`, `lineup` (last team; `starter` is read once as a fallback), `muted`, `essence`, `learned`, `loadout`, `loot` (gold and materials), `upgrades` (per-species track levels).
+- **Persisted** (through `Platform.store_get`/`store_set` in `core/platform.gd`, saved to `user://save.cfg`): `copies` (per species), `packDay`, `packPts`, `packTokens`, `packPending` (the rolled choices), `packSource` (`daily`/`token`/`shop`), `best`, `wins`, `lineup` (last team; `starter` is read once as a fallback), `muted`, `essence`, `learned` (learned Traits, plus card ids unlocked with Essence before copies), `loadout`, `loot` (gold and materials), `upgrades` (per-species track levels). The old `owned` and `shiny` keys are only read to migrate (§16.3).
 
 ## 12. Feel
 - **Haptics:** light on card play, medium on a hit landing, heavy on a Perfect Swap or a pack reveal.
@@ -233,32 +260,32 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. They are the car
 - **Current art** (`godot/art/hd2d/`): real sprites for Brinecrab, Puddlet, Brambat and Bellspring (`painted` entries in `manifest.gd`). Every other species still uses a placeholder: one of the 3 HD-2D anchors, hue-remapped per element (`recolor.gd`; mapping in `manifest.gd`). The rest are generated a few per day with `/hd2d-batch` (Codex, `scripts/hd2d-codex.py`). The diorama is real 3D (Godot): procedural meshes and pixel textures, a warm key light from the upper left with shadows, depth of field, glow, light shafts, fog. Biome 0 is sunlit forest ruins, biome 1 moonlit castle ruins with lanterns. No background images.
 
 ## 14. Out of scope (later)
-Events, rival tamers, tamer cards, eggs, Warden part-breaking, crafting beyond Essence unlocks and material upgrades (§5, §16), equipment items, more than one alternate per card slot, sightings-based packs, evolution (§9), a second Warden, ranked mode and leaderboards, a daily seeded run, cosmetic card frames, monetization.
+Events, rival tamers, tamer cards, eggs, Warden part-breaking, crafting beyond Trait learning and material upgrades (§5, §16), equipment items, more than two alternates per card slot, sightings-based packs, evolution (§9), a second Warden, ranked mode and leaderboards, a daily seeded run, cosmetic card frames, monetization.
 
 ## 15. Open tuning questions (decide by playing)
-- Swap pace: is a 6s swap cooldown with no auto-swapping bench cards too clunky, or are hands clogged with off-element and dead cards too often? Element-shared cards make same-element teams smoother; watch whether mono-element lineups dominate. Levers: `BAL.swap_cd`, `discard_cost`. With no post-fight revive, also watch whether runs snowball after the first KO (levers: Spring frequency, Heal reward size).
-- Pack pace: with the daily pack plus bought packs (150 gold), how fast do players own all 12? Levers: `BAL.shopPack`, loot gold.
+- Swap pace: is a 6s swap cooldown with no auto-swapping bench cards too clunky, or are hands clogged with off-element and dead cards too often? Basic hits (§4.3) keep same-element teams moving; watch whether they make mono-element lineups dominate or make swapping to the owner feel pointless. Levers: `BAL.swap_cd`, `discard_cost`, `basic_cost`, `basic_dmg`. With no post-fight revive, also watch whether runs snowball after the first KO (levers: Spring frequency, Heal reward size).
+- Pack pace: with the daily pack, the pack meter (about one pack per 5 runs) and bought packs (150 gold), how fast do players own all 12, and reach 5 and 7 copies of the creatures they play? Levers: `BAL.pts_wild`/`pts_alpha`/`pts_warden`/`pts_boss`, `pack_meter`, `pack_choices`, `pack_new_weight`, `shop_pack`, `dupe_gold`, and the copy counts in `Data.COPY_TIERS`.
 - Loot and upgrade pace: target about **1 permanent upgrade per run**. Levers: `BAL.wildGold`/`goldPerFloor`/`wildMatChance`/`alphaGoldMul`/`alphaMats`/`wardenGold`/`wardenMats`/`bossGold`/`winGold`, `upGold`, `upMax`, `upDmg`/`upSpirit`/`upHp`, and shop prices `shopMat`/`shopPack`/`shopSell`.
-- Essence earn rate: target **1–2 unlocks per run**. Levers: `BAL.essWild`/`essAlpha`/`essWarden`/`essBoss`, `moveCost`, `traitCost`.
+- Essence earn rate: Essence now only learns Traits, so it piles up faster than it's spent; target about **1 Trait every 2–3 runs**. Levers: `BAL.ess_wild`/`ess_alpha`/`ess_warden`/`ess_boss`, `trait_cost`.
 - Do the chain Traits (Live Wire, Quickfuse, Relay) stack too strongly when socketed together? Levers: raise `BAL.livewireChain`, or allow only one chain Trait per lineup.
 - Humanoid characters (§13) have art direction but no in-game role yet. Candidates: the player's tamer on the title and map screens, the Warden's keeper, rival tamers (§14). Decide before generating more than the anchor.
 - Late-floor difficulty: permanent upgrades (§5.2) make veteran teams stronger, so enemy scaling may need to rise for them. Watch floor 6–8 death rates. The levers are `BAL.hpPerFloor`/`dmgPerFloor`, Spring frequency, Heal reward size and the upgrade percentages.
 
-## 16. Loadouts, Essence and Traits
+## 16. Loadouts, copies, Essence and Traits
 Loadouts give options, not power: every alternate is a sidegrade. Raising a creature's numbers is the job of permanent upgrades (§5.2).
 
 ### 16.1 Loadouts
-- Per creature: **Skill** (default or alternate), **Signature** (default or alternate), and a **Trait** socket. Strike has one option. Alternates are in §10.
+- Per creature: **Skill** (default or one of two alternates), **Signature** (default or one of two alternates), and a **Trait** socket. Strike has one option. Alternates are in §10; they unlock from copies (§16.3).
 - Loadouts are saved per species and edited only on the **Collection screen**, never mid-run, so "Run again" stays one tap (pillar 3).
 - A creature uses its saved loadout whenever it joins a run. It's fixed for that creature for the rest of the run.
 - Locked or missing choices fall back to the default.
-- Unlocking a card equips it; learning a Trait sockets it in the creature being viewed (one tap fewer).
+- Unlocking a card equips it (when a copy reaches its tier); learning a Trait sockets it in the creature being viewed (one tap fewer).
 
 ### 16.2 Traits
 - Every creature has a built-in Trait in its socket. **The socket is never empty.**
 - Once a Trait is **learned**, other creatures can socket it. A learned Trait sits in **only one** other creature at a time: socketing it elsewhere returns the previous holder to its built-in Trait. The creature it's built into always keeps it.
 - A learned Trait is usable only while its source creature is owned.
-- "It" / "its" means the creature holding the Trait. "Its card" means a card it plays as the lead, whichever creature brought that card (§4.3).
+- "It" / "its" means the creature holding the Trait. "Its card" means a card it owns, played in full while it leads (§4.3). Basic hits never trigger Traits.
 
 | Trait | Built into | Effect |
 |---|---|---|
@@ -275,8 +302,24 @@ Loadouts give options, not power: every alternate is a sidegrade. Raising a crea
 | **Live Wire** | Sparkit | The first time its card reaches chain **3+**, +1 energy |
 | **Grounded** | Coilsnail | Can't be Shocked; a Shock on it gives +1 energy instead |
 
-### 16.3 Essence
-One persisted currency split into the 4 elements. The end-of-run screen shows the Essence earned.
+### 16.3 Copies
+Each species has a persisted copy count (0 = not owned). Copies come only from packs (§11), and each tier is reached once, permanently:
+
+| Copies | Unlocks |
+|---|---|
+| **1** | the creature (owned) |
+| **2** | its alternate Skill |
+| **3** | its alternate Signature |
+| **5** | its third Skill |
+| **7** | its third Signature |
+| **10** | shiny |
+
+A card unlocked by a copy is equipped at once. Beyond 10, each copy converts to **25** gold. The tiers are `Data.COPY_TIERS` (`copies_for(slot, i)`, `max_copies()`).
+
+**Old saves migrate:** an owned species with no copy count has 1 copy, a shiny one has 10, and alternate cards already unlocked with Essence (their ids in `learned`) stay unlocked.
+
+### 16.4 Essence
+One persisted currency split into the 4 elements, spent **only on Traits** (cards unlock from copies). The end-of-run screen shows the Essence earned.
 
 | Source | Essence |
 |---|---|
@@ -287,10 +330,9 @@ One persisted currency split into the 4 elements. The end-of-run screen shows th
 
 | Spend | Cost | Requires |
 |---|---|---|
-| Unlock an alternate card | **5** Essence of the creature's element | the creature is owned |
 | Learn a Trait | **8** Essence of its source creature's element | the source creature is owned |
 
-Unlocks are permanent.
+Learned Traits are permanent.
 
 ---
 
@@ -314,7 +356,8 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 `godot/CONTRACT.md` is the module contract from the port: which autoload owns what, the cross-module APIs, and the naming rule (TS names → snake_case). Keep it in sync when an API changes.
 
 ## Current state (2026-10-08)
-- **Shipped:** v0.3.0 build 10 on TestFlight (build 6 was the first Godot build). Everything in Part 1 is implemented, including element-mapped cards and the Team screen's pending-replace picker: real-time card combat with the fanned hand, statuses, Perfect Swap, chain, 12 creatures with alternate cards and Traits, the 8-floor run with Warden and Noctyrm, loot, permanent upgrades, item shop, daily and bought packs, Collection with the loadout editor.
+- **Shipped:** v0.3.0 build 10 on TestFlight (build 6 was the first Godot build). It has everything in Part 1 except the next item's pack and copies work (it still has element-shared cards, one-creature packs and Essence card unlocks), including the Team screen's pending-replace picker: real-time card combat with the fanned hand, statuses, Perfect Swap, chain, 12 creatures with alternate cards and Traits, the 8-floor run with Warden and Noctyrm, loot, permanent upgrades, item shop, daily and bought packs, Collection with the loadout editor.
+- **Implemented, not shipped (branch `pack-meter-copies`):** the pack meter (pack points per fight won, a token per 50), pick-1-of-3 packs from every source with a persisted pending roll, per-species copies that unlock the alternate cards (2/3 copies) and the new third Skill/Signature options (5/7 copies, 24 new cards) and shininess (10), Essence for Traits only, save migration from `owned`/`shiny`/Essence-unlocked cards, and the owner rule (a card fires in full only for its owner; other same-element leads play it as a basic hit; card faces show only the owner). Nothing of it has been on a device yet.
 - **Art is mostly placeholder:** 4 of 14 creatures have real sprites (Brinecrab, Puddlet, Brambat, Bellspring); the 3 HD-2D anchors (Sable, ember fox, dragon) stand in for the rest, recoloured per element (§13). The anchors are painted in Ember, so the Ember placeholders (Emberwick = fox, Cinderpip = Sable, Kilnback = dragon) show unrecoloured and look finished, but they aren't: a species is done only when `godot/art/hd2d/<key>.png` exists. `/hd2d-batch` generates the remainder a few per day.
 - **Unverified on device:** frame rate on a real iPhone (the 3D stage was only measured on a software renderer; first lever if it drops below 60 fps: render the 3D scene at ~0.75 resolution), the UI shaders added in build 10 (card foil sheen, energy crystal, face dimming), Pixelify Sans crispness at device scale, haptics, safe-area insets.
 - **UI redesign shipped in build 10:** warm HD-2D palette, Pixelify Sans + Atkinson Hyperlegible, window frames, brass plaque, Crystal Foil cards with teammate faces, the battle HUD diet with the energy crystal, title dock, bestiary, map trail, reward and results screens. Follow-ups are in `docs/UI-QUEUE.md`.
@@ -327,18 +370,18 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godot hangs at startup without it here). **Never open Godot windows on the desktop:** any non-headless run (`--shot`, `stage_preview.gd`) goes through `scripts/godot-bg.sh` instead of `godot`, which renders on a private Xvfb display (same pixels; `GODOT_WINDOW=1` shows the window when you really want it). `scripts/ui-check.sh` already does this.
 - `godot --headless --audio-driver Dummy --path godot --quit`: load check (parse errors show here)
 - `godot --headless --audio-driver Dummy --path godot --script res://tests/test_core.gd`: core logic tests (all must pass)
-- `scripts/godot-bg.sh --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<screen> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). Screens: `title team team-swap map map-sel map-warden map-late reward reward-warden upgrade party end end-win pack coll coll-trait coll-up shop battle battle-shared battle-heavy inspect flick` (`ALL` in `scripts/ui-check.sh` is the checked list). `--shot=team-swap` shows the Team screen with every creature owned, a full team and Cinderpip pending (it uses a scratch save, `user://shot-team-swap.cfg`, never `save.cfg`). Renders for real here (Vulkan llvmpipe).
-- `scripts/ui-check.sh [screen...]`: the screenshot UI check. Renders every `--shot` screen at 390×844 (simulated 47/34 px notch insets) and 375×667 (20/0) in deterministic mode, lints the layout (`godot/tests/ui_check.gd`: offscreen or outside the safe area, a box spilling out of its parent, squashed boxes, wrapped text overflowing, ellipsis truncation, a corner badge covering text, creature art under a panel, low-contrast text over the scene, header/sheet overlap) and diffs against the goldens in `godot/tests/golden/<size>/`. Shots, `.fail.png` (findings outlined) and `.diff.png` land in `/tmp/claude-1000/ui-check/`. `--update` accepts the current renders as goldens; only do that after looking at them. `NO_GOLDEN=1` runs the layout rules only (for parallel branches that will all change the look; update the goldens once after merging). `UI_CHECK_OUT` and `UI_CHECK_JOBS` (default 3) set the output folder and parallel runs. A full run (22 screens × 2 sizes) takes about 4 minutes.
+- `scripts/godot-bg.sh --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<screen> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). Screens: `title team team-swap map map-sel map-warden map-late reward reward-warden upgrade party end end-win pack pack-pick coll coll-trait coll-up shop battle battle-shared battle-heavy inspect flick` (`ALL` in `scripts/ui-check.sh` is the checked list). `--shot=team-swap` shows the Team screen with every creature owned, a full team and Cinderpip pending (it uses a scratch save, `user://shot-team-swap.cfg`, never `save.cfg`). `--shot=pack` shows a daily pack's three choices (a new creature, a copy that unlocks a card, a copy that turns shiny) and `pack-pick` the same pack after keeping Bellspring; both use the scratch save `user://shot-pack.cfg`. `--shot=battle-shared` shows every card state at once (a basic hit, a dead card, an upgraded card, an unaffordable one; scratch save `user://shot-battle-shared.cfg`). Renders for real here (Vulkan llvmpipe).
+- `scripts/ui-check.sh [screen...]`: the screenshot UI check. Renders every `--shot` screen at 390×844 (simulated 47/34 px notch insets) and 375×667 (20/0) in deterministic mode, lints the layout (`godot/tests/ui_check.gd`: offscreen or outside the safe area, a box spilling out of its parent, squashed boxes, wrapped text overflowing, ellipsis truncation, a corner badge covering text, creature art under a panel, low-contrast text over the scene, header/sheet overlap) and diffs against the goldens in `godot/tests/golden/<size>/`. Shots, `.fail.png` (findings outlined) and `.diff.png` land in `/tmp/claude-1000/ui-check/`. `--update` accepts the current renders as goldens; only do that after looking at them. `NO_GOLDEN=1` runs the layout rules only (for parallel branches that will all change the look; update the goldens once after merging). `UI_CHECK_OUT` and `UI_CHECK_JOBS` (default 3) set the output folder and parallel runs. A full run (23 screens × 2 sizes) takes about 4 minutes.
 - `scripts/godot-bg.sh --audio-driver Dummy --path godot --script res://tests/stage_preview.gd`: stage-only visual test (both biomes, effects); `-- --pair=<enemy>,<partner>` puts two species on the biome 0 pedestals instead (checks a new sprite)
 - `godot --path godot -e`: the editor
 
 ## Where things live (all under `godot/`)
-- Balance and content: `core/data.gd` (`Data`). `BAL` holds every tuning number; `SPECIES` the roster and cards (each slot a list: `[default, ...alternates]`); `TRAITS` the Trait definitions.
-- Combat, statuses, Perfect Swap, chain, Trait effects: `game/battle.gd` (`Battle`). It emits `card_played(i)` / `card_denied(i, why)`; it never touches card Controls.
-- Run state and card resolution: `game/state.gd` (`S`), entity classes `game/mon.gd`, `enemy.gd`, `card_ref.gd`, `map_node.gd`.
-- Collection, packs, loot wallet, permanent upgrades, shop trades, Essence, unlocks, loadouts, the last lineup: `game/meta.gd` (`Meta`).
+- Balance and content: `core/data.gd` (`Data`). `BAL` holds every tuning number; `SPECIES` the roster and cards (each slot a list: `[default, ...alternates]`); `TRAITS` the Trait definitions; `COPY_TIERS` the copy counts that unlock card options and shininess (`copies_for(slot, i)`, `max_copies()`).
+- Combat, statuses, Perfect Swap, chain, basic hits, Trait effects: `game/battle.gd` (`Battle`). It emits `card_played(i)` / `card_denied(i, why)`; it never touches card Controls.
+- Run state and card resolution (the owner rule: `card_basic`, `card_waiting_for`, `card_block`): `game/state.gd` (`S`), entity classes `game/mon.gd`, `enemy.gd`, `card_ref.gd`, `map_node.gd`.
+- Collection (copies and their migration), packs (daily, tokens, pending pick), the pack meter, loot wallet, permanent upgrades, shop trades, Essence and Traits, card unlocks from copies, loadouts, the last lineup: `game/meta.gd` (`Meta`).
 - Persistence and haptics: `core/platform.gd` (`Platform`, `user://save.cfg`). Sound: `core/audio.gd` (`Sfx`, synthesized at startup).
-- Map, nodes, loot drops, rewards, card upgrades, lineup, end of run, title, team builder (`scr-team`), quit (`quit_tap`/`quit_run`), pack reveal, item shop, Collection with loadout editor and upgrades: `game/run.gd` (`Run`).
+- Map, nodes, loot and pack-point drops, rewards, card upgrades, lineup, end of run with the pack meter animation, title, team builder (`scr-team`), quit (`quit_tap`/`quit_run`), the pick-1-of-3 pack screen, item shop, Collection with loadout editor and upgrades: `game/run.gd` (`Run`).
 - HUD and the card fan: `ui/ui.gd` (`Ui`, plus the energy `ui/crystal.gd`); screen frames `ui/screens.gd`; shared look (palette, fonts, Theme, builders) `ui/kit.gd` with the window frame `ui/win_style.gd` and hairline lists `ui/rows.gd`; card face `ui/card_view.gd` (+ `card_foil`/`card_face` shaders); map trail `ui/map_trail.gd`; popups, banners, toasts, the loot reveal `ui/fx.gd` (`Fx`). Fonts in `ui/fonts/` (OFL licences beside them). Frame loop and `--shot`: `scenes/main.gd`.
 - HD-2D stage: `render/stage.gd` (`Stage`: 3D world, camera, lights, WorldEnvironment, pedestals, shield, `projectile`, `lightning`), `render/actor.gd` (`Actor`), `render/particles.gd`, `render/feel.gd` (hit-stop, slow-mo, shake), `render/layout.gd` (screen band, `U`, spots). Art: `art/hd2d/` (`manifest.gd` species→sprite, `recolor.gd` per-element recolour, `diorama.gd` the two biomes, `tex.gd` procedural pixel textures, `pedestal.gd`, `shaders/`).
 - HD-2D sprite template: `docs/HD2D.md`; per-creature prompts `docs/hd2d/prompts.md` (+ `.json`, generated by `scripts/hd2d-prompts.py`); Codex generation `scripts/hd2d-codex.py` (driven by the `/hd2d-batch` skill); ChatGPT/Codex originals `docs/hd2d/original/` (gitignored, local only); anchors in `docs/hd2d/anchors/`; normalizer `scripts/hd2d-sprite.py`.
@@ -376,5 +419,5 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 - Load check and `tests/test_core.gd` (see Commands): zero script errors, all tests pass.
 - UI changes: `scripts/ui-check.sh` must pass. When a golden diff is an intended change, look at the new shots, then rerun with `--update` and commit the goldens with the change.
 - For stage or art changes, also run `tests/stage_preview.gd` and check both biomes.
-- Debug helpers: `Battle.debug` (`hurt`, `energy`, `add`, `essence`, `loot`, `trait`, `heavy`).
+- Debug helpers: `Battle.debug` (`hurt`, `energy`, `add`, `essence`, `loot`, `trait`, `heavy`, `copies` (raise a species' copy count), `packpts` (add pack points)).
 - Before a release, `scripts/ship-ios-godot.sh --no-submit` proves the signed iOS build.

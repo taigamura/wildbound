@@ -405,23 +405,27 @@ func _paint(i: int) -> void:
 		if not b.face.empty:
 			b.face.clear_face()
 		return
-	var co = S.card_of(r)
+	var basic: bool = S.card_basic(r)
+	# a basic card's rules text (dimmed) reads as its owner would play it
+	var co = S.card_of(r, S.mon(r.uid)) if basic else S.card_of(r)
 	var def: Dictionary = co.def
 	var src: Mon = co.src
 	var e = S.enemy
 	var dead: bool = S.card_dead(r)
 	var bench: bool = S.card_benched(r)
-	var strong: bool = not dead and e != null and (def.get("dmg", 0) or def.get("from_shield", false)) and Data.adv(co.el, e.el) > 1
+	var hits: bool = basic or def.get("dmg", 0) or def.get("from_shield", false)
+	var strong: bool = not dead and e != null and hits and Data.adv(co.el, e.el) > 1
+	var bdmg: int = S.basic_dmg(r) if basic else -1
 	var up = src.ups.get(r.slot, "")
 	if up == null:
 		up = ""
 	var cost = Data.BAL.discard_cost if dead else S.card_cost(r)
 	var base = cost if dead else S.base_card(src, r.slot).cost
 	var faces := S.card_faces(r).map(func(m: Mon): return [m.key, m.el])
-	var k := "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" % [r.uid, r.slot, co.by.uid, def.cost, cost, bench, strong, up, dead, faces]
+	var k := "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" % [r.uid, r.slot, co.by.uid, def.cost, cost, bench, strong, up, dead, faces, bdmg]
 	if b.face.key == k and not b.face.empty:
 		return
-	b.face.face(def, co.el, {"slot": r.slot, "cost": cost, "base": base, "faces": faces, "bench": bench, "dead": dead,
+	b.face.face(def, co.el, {"slot": r.slot, "cost": cost, "base": base, "faces": faces, "bench": bench, "dead": dead, "basic": bdmg,
 		"strong": Data.adv(co.el, e.el) if strong else 0.0, "pow": co.pow, "upgraded": up, "energy": S.energy})
 	b.face.key = k
 	if i == _sel:
@@ -729,7 +733,7 @@ func render_bench() -> void:
 
 ## A bench portrait: the creature's face inside an HP ring, the swap cooldown as a dark wedge with the
 ## seconds in the middle, a shield marker (top left) while it resists the incoming heavy, and the
-## count of waiting hand cards it would unlock as an element chip (bottom right). All inside its box.
+## count of hand cards it owns and would fire in full as an element chip (bottom right). All inside its box.
 func _bench_cell(c) -> Box:
 	var cell := Box.new(Vector2(BENCH + 4, BENCH + 4))
 	cell.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -792,13 +796,14 @@ func _bench_cd(b: Box, alive: bool) -> void:
 		Sfx.tick()
 	b.set_meta("cooling", cd)
 
-## Hand cards that are waiting for a swap and that `c` (a bench creature) could play once it leads.
+## Hand cards `c` (a bench creature) owns and would fire in full once it leads (S.card_waiting_for).
+## A knocked-out creature counts nothing.
 func _bench_playable(c) -> int:
 	if not c.alive:
 		return 0
 	var n := 0
 	for r in S.hand:
-		if r != null and S.card_benched(r) and S.card_el(r) == c.el:
+		if r != null and S.card_waiting_for(r) == c:
 			n += 1
 	return n
 

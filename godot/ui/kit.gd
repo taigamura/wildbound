@@ -422,6 +422,37 @@ static func meter(frac: float, c := HP, h := 8.0) -> Control:
 			m.draw_style_box(fg, Rect2(0, 0, maxf(w, h), m.size.y)))
 	return m
 
+## A progress bar for the pack meter: a dark track, the points banked before this run in shaded brass
+## and this run's points in bright gold. Drive it with set_fill (cheap: it only redraws).
+static func fill_bar(h := 10.0) -> Control:
+	var m := Control.new()
+	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	m.custom_minimum_size.y = h
+	m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	m.set_meta("f", 0.0)
+	m.set_meta("f0", 0.0)
+	var bg := flat(Color(0, 0, 0, 0.5), 2, 1, alpha(BRASS, 0.45))
+	m.draw.connect(func():
+		m.draw_style_box(bg, Rect2(Vector2.ZERO, m.size))
+		var inner := Rect2(Vector2(2, 2), m.size - Vector2(4, 4))
+		var f: float = clampf(m.get_meta("f"), 0.0, 1.0)
+		var f0: float = clampf(m.get_meta("f0"), 0.0, f)
+		if f0 > 0.0:
+			m.draw_rect(Rect2(inner.position, Vector2(roundf(inner.size.x * f0), inner.size.y)), GOLD_LO)
+		if f > f0:
+			var x0 := roundf(inner.size.x * f0)
+			var r := Rect2(inner.position + Vector2(x0, 0), Vector2(roundf(inner.size.x * f) - x0, inner.size.y))
+			m.draw_rect(r, GOLD_HI)
+			m.draw_rect(Rect2(r.position, Vector2(r.size.x, 1)), mix(GOLD_HI, Color.WHITE, 0.6)))
+	m.resized.connect(m.queue_redraw)
+	return m
+
+## Set a fill_bar: `f` filled (0..1), of which the part before `f0` is shaded (banked earlier).
+static func set_fill(bar: Control, f: float, f0 := 0.0) -> void:
+	bar.set_meta("f", f)
+	bar.set_meta("f0", f0)
+	bar.queue_redraw()
+
 ## Header scrim (mockup .scrim): navy fading to clear, behind text drawn over the scene.
 ## `solid` = share of the height at full strength before the fade.
 static func scrim(solid := 0.7) -> RRect:

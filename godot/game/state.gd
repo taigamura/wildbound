@@ -77,17 +77,18 @@ func base_card(c: Mon, slot: String) -> Dictionary:
 	var i: int = c.moves.get(slot, 0)
 	return l[i] if i >= 0 and i < l.size() else l[0]
 
-## Cards belong to an element, not a creature. A ref still names its source creature (whose equipped
-## card def, slot and in-run `ups` it carries); the card's element is the source's element.
+## Each card belongs to its owner creature (the ref's source) and the owner's element. The owning
+## lead plays it in full; a same-element lead that isn't the owner plays it as a basic hit (card_basic);
+## a lead of another element can't play it; with no living creature of its element it is dead.
 func card_el(r: CardRef) -> String:
 	var c := mon(r.uid)
 	return c.el if c else ""
 
-## Who fires the card: the lead when it is alive and shares the card's element, else the source
-## (used for previews of cards the lead can't play).
+## Who fires the card: the lead when it is the living owner, or when it plays the card as a basic hit
+## (for its Power); else the owner (used for previews of cards the lead can't play in full).
 func card_by(r: CardRef) -> Mon:
 	var lead := act()
-	if lead != null and lead.alive and lead.el == card_el(r):
+	if lead != null and lead.alive and (lead.uid == r.uid or card_basic(r)):
 		return lead
 	return mon(r.uid)
 
@@ -105,12 +106,36 @@ func card_of(r: CardRef, by: Mon = null) -> Dictionary:
 	def.cost = maxi(0, base.cost - (1 if up == "cost" else 0))
 	return {"def": def, "pow": pow, "src": src, "by": by, "el": src.el}
 
+## Energy the card costs right now. A basic hit always costs BAL.basic_cost (no Quickfuse, no discount).
 func card_cost(r: CardRef) -> int:
+	if card_basic(r):
+		return Data.BAL.basic_cost
 	var co := card_of(r)
 	var by: Mon = co.by
 	if by.trait_key == "quickfuse" and by.played == 0:
-		return 0   # Quickfuse: the firer's first card free
+		return 0   # Quickfuse: the owner's first card free
 	return maxi(0, co.def.cost - discount)
+
+## The living lead shares the card's element but isn't its owner (the owner is benched or knocked out):
+## the card plays as a basic hit, BAL.basic_dmg × the lead's Power in the lead's element, no effects.
+func card_basic(r: CardRef) -> bool:
+	var lead := act()
+	if lead == null or not lead.alive or lead.uid == r.uid or lead.el != card_el(r):
+		return false
+	return not card_dead(r)
+
+## The owner a card is waiting for (swap to it to fire the card in full): the owner when it is alive and
+## not leading, else null.
+func card_waiting_for(r: CardRef) -> Mon:
+	var c := mon(r.uid)
+	if c != null and c.alive and c.uid != active:
+		return c
+	return null
+
+## A basic hit's damage before chain and element multipliers: BAL.basic_dmg × the lead's Power.
+func basic_dmg(_r: CardRef = null) -> int:
+	var lead := act()
+	return roundi(Data.BAL.basic_dmg * (lead.power if lead != null else 1.0))
 
 ## No living lineup member has the card's element: playing it discards it for BAL.discard_cost.
 func card_dead(r: CardRef) -> bool:
@@ -129,24 +154,15 @@ func card_benched(r: CardRef) -> bool:
 	var lead := act()
 	return lead == null or not lead.alive or lead.el != card_el(r)
 
-## Who the card's face window shows: every living lineup member of its element (any of them can lead
-## and play it), its source first. A dead card shows just its source. Changes on a KO or a revive, never on a swap.
+## Who the card's face window shows: only its owner (alive or not).
 func card_faces(r: CardRef) -> Array[Mon]:
-	var src := mon(r.uid)
 	var out: Array[Mon] = []
-	if src == null:
-		return out
-	for c in team():
-		if c.alive and c.el == src.el:
-			if c == src:
-				out.push_front(c)
-			else:
-				out.append(c)
-	if out.is_empty():
+	var src := mon(r.uid)
+	if src != null:
 		out.append(src)
 	return out
 
-## Why a card can't be played right now ("" = playable, "energy", "bench", "busy").
+## Why a card can't be played right now ("" = playable, in full or as a basic hit, "energy", "bench", "busy").
 ## Only cards of the lead's element play; the rest wait for a swap to a living creature of their element.
 func card_block(r: CardRef) -> String:
 	if mode != "battle":
