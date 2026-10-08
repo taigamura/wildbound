@@ -15,7 +15,7 @@ signal card_discarded(i: int)
 var debug := {}
 var _pending: Array[bool] = []   # slot i is waiting for its delayed repaint (TS: the slot has the 'play' class)
 
-const C_ENERGY := [Color("#c8b4ff"), Color("#ffffff"), Color("#9b7bff")]
+const C_ENERGY := [Color("#e6fbff"), Color("#ffffff"), Color("#57c8ff"), Color("#2178c2")]   # the cards' crystal blue
 const C_SHIELD := [Color("#8fe3ff"), Color("#ffffff"), Color("#3fb6ff")]
 const C_BLOCK := [Color("#8fe3ff"), Color("#ffffff")]
 const C_HEAL := [Color("#6ff0a0"), Color("#c8ffd9"), Color("#ffffff")]

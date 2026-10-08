@@ -618,7 +618,7 @@ func end_run(won: bool, quit := false) -> void:
 			_later(k * 0.25, func():
 				var x := randf_range(vp.x * 0.15, vp.x * 0.85)
 				var y := randf_range(vp.y * 0.1, vp.y * 0.35)
-				Particles.emit(x, y, {"n": 60, "color": [Color("#ffcf6b"), Color("#ff7a45"), Color("#3fb6ff"), Color("#5fd36a"), Color("#ffd23f"), Color("#c8b4ff")], "spd": 5, "life": 1.6, "size": 0.2, "grav": 3, "drag": 1})
+				Particles.emit(x, y, {"n": 60, "color": [Color("#ffcf6b"), Color("#ff7a45"), Color("#3fb6ff"), Color("#5fd36a"), Color("#ffd23f"), Color("#f2d68c")], "spd": 5, "life": 1.6, "size": 0.2, "grav": 3, "drag": 1})
 				Particles.emit(x, y, {"n": 10, "color": [Color("#ffcf6b"), Color("#ffffff")], "spd": 4, "life": 1.6, "size": 0.35, "grav": 2, "drag": 1, "tex": "star", "spin": 6})
 				Particles.ring(x, y, Color("#ffcf6b"), 2.5, 0.6, false))
 	else:
