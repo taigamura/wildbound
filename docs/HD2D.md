@@ -46,11 +46,16 @@ Anchors are the approved sprites every later prompt is compared against. There i
 |---|---|---|
 | `anchors/humanoid.png` | Sable: chibi human, rival tamer | humanoid characters |
 | `anchors/biped.png` | Ember fox: upright creature, half humanoid, half monster | biped monsters, companions that stand like a person |
-| `anchors/quadruped.png` | Emberwing dragon: four-legged winged creature | quadruped, winged and serpent monsters, and anything without a closer anchor (blob, shell) |
+| `anchors/quadruped.png` | Emberwing dragon: four-legged winged creature | quadruped and serpent monsters, dragons (Noctyrm), and anything without a closer anchor yet |
+| `anchors/shell.png` | Brinecrab: low, heavy shelled creature | shell monsters (Brinecrab, Coilsnail) |
+| `anchors/blob.png` | Puddlet: legless rounded body | blob monsters (Puddlet) |
+| `anchors/winged.png` | Brambat: hovering, wings spread | flying monsters (Brambat, Skiray) |
 
 Attach **only the matching anchor**: attaching a humanoid to a monster prompt pulls the monster toward human posture and clothes (that is how the Ember fox got its scarf and boots).
 
-**Adding an anchor** for a new body type (e.g. a blob, or a serpent if the quadruped doesn't fit):
+The shell, blob and winged anchors were made with [Part A of hd2d/prompts.md](hd2d/prompts.md#part-a-make-the-missing-anchors), which has the step-by-step procedure and a ready-to-paste prompt for each. Each is also a roster creature's sprite. The steps below are the general recipe for any future body type.
+
+**Adding an anchor** for a new body type (e.g. a serpent if the quadruped doesn't fit):
 1. New chat. Attach the closest existing anchor and paste the prompt for that kind ([B](#b-any-later-female-humanoid-attach-humanoidpng) or [C](#c-monster-attach-the-matching-anchor)). The first anchor ever, with nothing to attach, used [prompt A](#a-first-humanoid-anchor-no-attachments).
 2. Regenerate until one is right against the [checklist](#checklist). Expect 5–10 tries; this is the one place to be picky.
 3. Normalize it (Step 3), save it as `docs/hd2d/anchors/<body-type>.png`, and add a row to the table above.
@@ -122,6 +127,10 @@ If two edits in a row don't land, start a new chat; more edits in one chat drift
 ## Copy-paste prompts
 
 Ready to paste as is. Swap the SUBJECT for your own character; leave everything above it alone.
+
+**Generating with Codex instead of by hand:** the `/hd2d-batch` skill (`.claude/skills/hd2d-batch/`) runs `scripts/hd2d-codex.py` to generate the next few creatures in fresh Codex sessions (anchor attached, flat magenta background keyed out by the normalizer), then reviews, normalizes and wires them in. It checks first that Codex's image tool is offered, since it disappears while the daily image quota is used up.
+
+**Every creature, the Warden and the boss** have their own ready-to-paste prompt, normalize command and manifest notes in [hd2d/prompts.md](hd2d/prompts.md), in the order to make them (the new anchors first). It is generated from one Style Block, with the body and baseline sentences adjusted per body plan (biped, quadruped, shell, blob, winged), so only the SUBJECT differs within a plan. The prompts below are the templates and the humanoid examples.
 
 The appeal comes from the character design: a strong silhouette, big expressive hair, a distinctive outfit, a confident expression and a clear pose accent, the way Octopath's cast reads at a glance. At chibi proportions, body shape barely reads; the **head, hair and silhouette hook** carry the character, so push those (hair volume, hat, scarf, coat tails, a prop) rather than figure or fine detail. Describe characters with words like *stylish*, *cool* and *striking*. **Do not combine chibi proportions with alluring or revealing wording** ("alluring", "glamorous", bare shoulders, short hems, thigh-high boots): ChatGPT blocks that mix, because big-headed childlike proportions plus suggestive styling reads as sexualizing a child, and it fails with a generic "error on my side" message rather than a refusal. Outfits should be full, practical adventuring clothes. Always state an age in the twenties or older and keep "still clearly an adult" in the Style Block, so the chibi proportions don't turn into a child.
 

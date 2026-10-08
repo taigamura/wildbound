@@ -10,3 +10,6 @@ node_modules/
 # Signing credentials downloaded from EAS (scripts/ship-ios-godot.sh): never commit
 eas/credentials.json
 eas/credentials/
+
+# ChatGPT/Codex sprite originals (large; the normalized sprites are committed)
+docs/hd2d/original/

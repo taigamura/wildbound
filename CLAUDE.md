@@ -223,7 +223,7 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. They are the car
 - **Cast:** monsters (the roster, Warden, boss) and **humanoid characters**. Humanoids are generated in ChatGPT with the template in `docs/HD2D.md`; monsters use the same Style Block so both read as one game.
 - **Locked style constants** (full list in `docs/HD2D.md`): humanoids about 128 px tall and chibi (about 3 heads, like Octopath Traveler's field sprites, always adult characters); monsters about 100 px × species size (in-game height set by the manifest, so the pixel count can vary slightly); three-quarter view facing right; key light from the upper left; 1 px selective outline, never pure black; at most 32 colours asked for in the prompt. `scripts/hd2d-sprite.py` snaps ChatGPT's output onto its own pixel grid without merging detail.
 - **Budget:** 12 creature stills, 1 Warden, 1 boss, 2 biome backgrounds = **16 images**, plus humanoids once they have a role (§15). Element icons and card frames are drawn in code. Shinies are a filter. 
-- **Current art** (`godot/art/hd2d/`): placeholders until the roster is generated. The 3 anchors stand in for every creature, hue-remapped per element (`recolor.gd`; mapping in `manifest.gd`). The diorama is real 3D (Godot): procedural meshes and pixel textures, a warm key light from the upper left with shadows, depth of field, glow, light shafts, fog. Biome 0 is sunlit forest ruins, biome 1 moonlit castle ruins with lanterns. No background images.
+- **Current art** (`godot/art/hd2d/`): real sprites for Brinecrab, Puddlet, Brambat and Bellspring (`painted` entries in `manifest.gd`). Every other species still uses a placeholder: one of the 3 HD-2D anchors, hue-remapped per element (`recolor.gd`; mapping in `manifest.gd`). The rest are generated a few per day with `/hd2d-batch` (Codex, `scripts/hd2d-codex.py`). The diorama is real 3D (Godot): procedural meshes and pixel textures, a warm key light from the upper left with shadows, depth of field, glow, light shafts, fog. Biome 0 is sunlit forest ruins, biome 1 moonlit castle ruins with lanterns. No background images.
 
 ## 14. Out of scope (later)
 Events, rival tamers, tamer cards, eggs, Warden part-breaking, crafting beyond Essence unlocks and material upgrades (§5, §16), equipment items, more than one alternate per card slot, sightings-based packs, evolution (§9), a second Warden, ranked mode and leaderboards, a daily seeded run, cosmetic card frames, monetization.
@@ -308,7 +308,7 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 
 ## Current state (2026-10-04)
 - **Shipped:** v0.3.0 build 8 on TestFlight (build 6 was the first Godot build). Everything in Part 1 is implemented, including element-mapped cards and the Team screen's pending-replace picker: real-time card combat with the fanned hand, statuses, Perfect Swap, chain, 12 creatures with alternate cards and Traits, the 8-floor run with Warden and Noctyrm, loot, permanent upgrades, item shop, daily and bought packs, Collection with the loadout editor.
-- **Art is placeholder:** the 3 HD-2D anchors (Sable, ember fox, dragon) stand in for all 14 creatures, recoloured per element (§13). Generating the real roster with `docs/HD2D.md` is the next art task.
+- **Art is mostly placeholder:** 4 of 14 creatures have real sprites (Brinecrab, Puddlet, Brambat, Bellspring); the 3 HD-2D anchors (Sable, ember fox, dragon) stand in for the rest, recoloured per element (§13). `/hd2d-batch` generates the remainder a few per day.
 - **Unverified on device:** frame rate on a real iPhone (the 3D stage was only measured on a software renderer; first lever if it drops below 60 fps: render the 3D scene at ~0.75 resolution), haptics, safe-area insets.
 - **Known gaps from the port:** no background blur on panels; a card that turns dead repaints in place instead of flying off; the HUD band isn't re-measured when status tags change its height.
 - **Balance is untuned** for the loot economy and 3-creature teams from floor 1 (§15).
@@ -320,7 +320,7 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 - `godot --headless --audio-driver Dummy --path godot --quit`: load check (parse errors show here)
 - `godot --headless --audio-driver Dummy --path godot --script res://tests/test_core.gd`: core logic tests (all must pass)
 - `godot --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|team|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). `--shot=team-swap` shows the Team screen with every creature owned, a full team and Cinderpip pending (it uses a scratch save, `user://shot-team-swap.cfg`, never `save.cfg`). Renders for real here (Vulkan llvmpipe).
-- `godot --audio-driver Dummy --path godot --script res://tests/stage_preview.gd`: stage-only visual test (both biomes, effects)
+- `godot --audio-driver Dummy --path godot --script res://tests/stage_preview.gd`: stage-only visual test (both biomes, effects); `-- --pair=<enemy>,<partner>` puts two species on the biome 0 pedestals instead (checks a new sprite)
 - `godot --path godot -e`: the editor
 
 ## Where things live (all under `godot/`)
@@ -332,7 +332,7 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 - Map, nodes, loot drops, rewards, card upgrades, lineup, end of run, title, team builder (`scr-team`), quit (`quit_tap`/`quit_run`), pack reveal, item shop, Collection with loadout editor and upgrades: `game/run.gd` (`Run`).
 - HUD and the card fan: `ui/ui.gd` (`Ui`); screen frames `ui/screens.gd`; shared look (palette, fonts, Theme) `ui/kit.gd`; card face `ui/card_view.gd`; popups, banners, toasts `ui/fx.gd` (`Fx`). Frame loop and `--shot`: `scenes/main.gd`.
 - HD-2D stage: `render/stage.gd` (`Stage`: 3D world, camera, lights, WorldEnvironment, pedestals, shield, `projectile`, `lightning`), `render/actor.gd` (`Actor`), `render/particles.gd`, `render/feel.gd` (hit-stop, slow-mo, shake), `render/layout.gd` (screen band, `U`, spots). Art: `art/hd2d/` (`manifest.gd` species→sprite, `recolor.gd` per-element recolour, `diorama.gd` the two biomes, `tex.gd` procedural pixel textures, `pedestal.gd`, `shaders/`).
-- HD-2D sprite template: `docs/HD2D.md`; anchors in `docs/hd2d/anchors/`; normalizer `scripts/hd2d-sprite.py`.
+- HD-2D sprite template: `docs/HD2D.md`; per-creature prompts `docs/hd2d/prompts.md` (+ `.json`, generated by `scripts/hd2d-prompts.py`); Codex generation `scripts/hd2d-codex.py` (driven by the `/hd2d-batch` skill); ChatGPT/Codex originals `docs/hd2d/original/`; anchors in `docs/hd2d/anchors/`; normalizer `scripts/hd2d-sprite.py`.
 - iOS: `godot/export_presets.cfg` (`iOS` preset), `godot/ios/` (icon, launch images, `build-number.txt`, `mac-build.sh`), `scripts/ship-ios-godot.sh`.
 
 ## Rules
@@ -344,7 +344,7 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 - **Input:** the hand uses touch/mouse press-drag-release. Press magnifies instantly; horizontal movement scrubs the magnification between cards (hysteresis `SCRUB_HYST`); upward travel past `LIFT_LOCK` commits a swipe on that card; release plays it if the `FLICK_*` thresholds are met, otherwise the card returns to the fan. Constants are in `ui/ui.gd`.
 - **Storage and native calls** only in `core/platform.gd`.
 - **Reserved word:** `trait` is reserved in GDScript; the field is `Mon.trait_key`, and dictionary keys `"trait"` are read with brackets.
-- **Assets:** pixel art uses nearest filtering; the only image files are the 3 HD-2D sprites (everything else is procedural). Keep it that way unless a real asset is approved.
+- **Assets:** pixel art uses nearest filtering; the only image files are the HD-2D sprites in `godot/art/hd2d/` (everything else is procedural). Keep it that way unless a real asset is approved.
 
 ## Releasing (iOS / TestFlight)
 - **Identity:** bundle ID `com.taiga.wildbound`, App Store Connect app ID `6818680785`, Apple team `6R43H3SA48`. Version: `application/short_version` in `godot/export_presets.cfg` (0.3.0). Build number: `godot/ios/build-number.txt` holds the last build uploaded to App Store Connect; the script builds with +1 and writes it back only after a confirmed submit. Commit it with the History entry.

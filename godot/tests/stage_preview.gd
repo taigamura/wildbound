@@ -1,7 +1,8 @@
 # Stage preview (the stage's visual test). Builds both biomes, puts an enemy and a partner of
 # different elements on the pedestals, fires a projectile, a burst and a lightning bolt, and saves
 # screenshots. Run:  godot --path godot --resolution 390x844 --audio-driver Dummy res://tests/stage_preview.tscn
-# Output: /tmp/claude-1000/stage_*.png (-- --out=<dir> to change, -- --nohud to drop the HUD bands)
+# Output: /tmp/claude-1000/stage_*.png (-- --out=<dir> to change, -- --nohud to drop the HUD bands,
+# -- --pair=<enemy>,<partner> to put two species keys on the biome 0 pedestals, e.g. a new sprite)
 extends Node
 
 var out := "/tmp/claude-1000"
@@ -10,6 +11,7 @@ var pa: Actor
 var t := 0.0
 var shield := 0.0
 var hud := true
+var pair: PackedStringArray = []
 var band := Vector2(110, 560)
 
 
@@ -17,7 +19,12 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="): out = a.substr(6)
 		if a == "--nohud": hud = false
+		if a.begins_with("--pair="): pair = a.substr(7).split(",")
 	DirAccess.make_dir_recursive_absolute(out)
+	if pair.size() == 2:
+		await _scene(0, pair[0], Data.SPECIES[pair[0]].el, pair[1], Data.SPECIES[pair[1]].el)
+		get_tree().quit()
+		return
 	await _scene(0, "brinecrab", "tide", "emberwick", "ember")
 	await _scene(1, "noctyrm", "volt", "sparkit", "volt", true)
 	await _title()

@@ -1,9 +1,10 @@
 # HD-2D cast and ambience. Port of game/src/art/packs/hd2d/manifest.ts.
 #
-# PLACEHOLDER CAST: only the three HD-2D anchors exist, stored at their true pixel grid.
-# Every species reuses one of them, recoloured per element (recolor.gd). Within each element:
-# 1st -> fox (biped), 2nd -> Sable (humanoid), 3rd, the tank -> dragon (quadruped).
-# To add a real sprite: drop `<species>.png` into this folder and point its entry at it.
+# Sprites are stored at their true pixel grid (scripts/hd2d-sprite.py --scale 1; prompts in
+# docs/hd2d/prompts.md). Species without their own sprite yet reuse a placeholder anchor,
+# recoloured per element (recolor.gd). Within each element: 1st -> fox (biped),
+# 2nd -> Sable (humanoid), 3rd, the tank -> dragon (quadruped).
+# To add a real sprite: drop `<species>.png` into this folder and give it a `painted` entry.
 #
 # Fields (fractions of the image): anchor = feet, head = projectile target, emitters = ambient
 # element particles. height = drawn canvas height in art units (56 art units = 1 world unit U).
@@ -30,6 +31,11 @@ static func dragon(recolor: Dictionary = {}, height := 124.0) -> Dictionary:
 		"emitters": [], "recolor": recolor}
 
 
+## A species' own sprite, painted in its colours. Numbers come from the normalizer's output.
+static func painted(image: String, anchor: Vector2, height: float, head: Vector2) -> Dictionary:
+	return {"image": image, "anchor": anchor, "height": height, "head": head, "emitters": [], "recolor": null}
+
+
 static var _creatures: Dictionary = {}
 
 
@@ -37,8 +43,13 @@ static func creatures() -> Dictionary:
 	if _creatures.is_empty():
 		_creatures = {
 			"emberwick": fox(), "cinderpip": sable(), "kilnback": dragon(),
-			"bellspring": fox(), "puddlet": sable(), "brinecrab": dragon(),
-			"truffmole": fox(), "brambat": sable(), "mossling": dragon(),
+			# Anchor x is the body's centre, not the normalizer's lowest-row guess (claw or tail tips).
+			"bellspring": painted("bellspring", Vector2(0.56, 0.901), 119.0, Vector2(0.678, 0.3)),
+			"puddlet": painted("puddlet", Vector2(0.48, 0.901), 106.0, Vector2(0.55, 0.45)),
+			"brinecrab": painted("brinecrab", Vector2(0.5, 0.903), 146.0, Vector2(0.55, 0.35)),
+			"truffmole": fox(),
+			"brambat": painted("brambat", Vector2(0.51, 0.906), 111.0, Vector2(0.6, 0.4)),
+			"mossling": dragon(),
 			"skiray": fox(), "sparkit": sable(), "coilsnail": dragon(),
 			# Gravewood: deeper, mossier green than Mossling, and 8% larger on top of its species size.
 			"warden": dragon({"ramps": {"thorn": [195.0, 168.0, 142.0, 104.0]}, "light": 0.66, "sat": 0.85, "wash": [0.8, 0.9, 0.74]}, 134.0),
