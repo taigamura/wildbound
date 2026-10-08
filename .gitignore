@@ -13,3 +13,4 @@ eas/credentials/
 
 # ChatGPT/Codex sprite originals (large; the normalized sprites are committed)
 docs/hd2d/original/
+.claude/worktrees/

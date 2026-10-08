@@ -11,7 +11,8 @@
 # Output goes to $UI_CHECK_OUT (default /tmp/claude-1000/ui-check/<w>x<h>/): wb-<screen>.png (the shot),
 # .fail.png (findings outlined: red offscreen, orange spill, magenta squashed, yellow overflow,
 # cyan truncated, green art, purple contrast, white overlap) and .diff.png (pixels that changed).
-# Exit code is 1 if any screen failed. Needs a real renderer (Vulkan llvmpipe works); not headless.
+# Exit code is 1 if any screen failed. Needs a real renderer (Vulkan llvmpipe works); runs on a
+# private Xvfb display via scripts/godot-bg.sh, so no windows open on the desktop.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -38,7 +39,7 @@ run_one() {   # <screen> <size:insets>
   local dir="$OUT/$size"
   mkdir -p "$dir"
   rm -f "$dir/wb-$screen".{png,fail.png,diff.png}
-  timeout 180 godot --audio-driver Dummy --fixed-fps 60 --path godot --resolution "$size" -- \
+  timeout 180 "$ROOT/scripts/godot-bg.sh" --audio-driver Dummy --fixed-fps 60 --path godot --resolution "$size" -- \
     --shot="$screen" --shot-dir="$dir" --ui-check --safe="$safe" \
     ${NO_GOLDEN:+--no-golden} --golden="$ROOT/godot/tests/golden/$size" $UPDATE 2>&1 | grep -E '^(UICHECK|SCRIPT ERROR)'
   local code=${PIPESTATUS[0]}
