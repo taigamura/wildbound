@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**This file is the single source of truth for Wildbound:** what the game is (design spec), how the code is laid out, and the rules for changing it. If code and this file disagree, one of them is a bug; fix whichever is wrong and keep them in sync in the same change. `README.md` covers setup and shipping only. `docs/UI-QUEUE.md` is the approved UI redesign work waiting to be applied, in order. `docs/HD2D.md` is the ChatGPT template and normalizer guide for HD-2D sprites; it follows the art rules here. `godot/CONTRACT.md` is the module contract from the Godot port.
+**This file is the single source of truth for Wildbound:** what the game is (design spec), how the code is laid out, and the rules for changing it. If code and this file disagree, one of them is a bug; fix whichever is wrong and keep them in sync in the same change. `README.md` covers setup and shipping only. `docs/UI-QUEUE.md` lists UI follow-ups left over from the redesign. `docs/HD2D.md` is the ChatGPT template and normalizer guide for HD-2D sprites; it follows the art rules here. `godot/CONTRACT.md` is the module contract from the Godot port.
 
 All numbers below are **starting values**. They live in `godot/core/data.gd` (`BAL` and the roster) and are tuned by playing. When you change a number there, change it here too.
 
@@ -47,33 +47,37 @@ Each element owns one status:
 ## 4. Combat
 
 ### 4.1 Layout (portrait)
-- **Top:** enemy plate (HP bar, intent bar, statuses). During a heavy wind-up, a large element icon and the attack's name appear over the enemy.
+- **Top:** the enemy plate in one window: an intent ring that fills over the wind-up, the name, status tags, the element chip and an HP bar with the number outside. Under it, a strip that is always reserved: during a heavy wind-up it shows a banner with the attack's name, its element, the seconds left and which element resists it. Nothing is drawn over the enemy.
 - **Middle:** enemy and your lead creature. The chain counter floats beside your lead.
-- **Bottom (thumb zone):** lead plate, 2 bench portraits, energy bar, a hand of 4 cards.
+- **Bottom (thumb zone):** a party rail (the lead's face, name, HP, Trait and statuses on the left; round bench portraits on the right), then the energy crystal beside a hand of 4 cards.
 - **The hand is a fan**, held like real cards: they overlap and tilt around a pivot below the screen (about ±4° and ±12° for 4 cards, outer cards slightly lower). Only cards that exist are fanned, so a short deck leaves no gaps.
-- **Quit:** a button in the battle HUD (beside mute) and on the map. There is no pause: the first tap arms it for 2s, the second ends the run as a loss ("Retreated"). Loot already banked is kept.
+- **Quit:** a button in the battle HUD (beside mute) and on the map (beside the title). There is no pause: the first tap arms it for 2s, the second ends the run as a loss ("Retreated"). Loot already banked is kept.
 
 ### 4.2 Lineup
-- Before a run, the **Team** screen (opened from the title's Team button, never the title itself) picks the team: **up to 3** owned creatures. Tap a creature to add or remove it (at least 1 stays); tap a lineup slot to make it the lead. The title shows the current team and Start. The party *is* this lineup for the whole run (no creatures join or leave mid-run). The last team is remembered (saved on every change).
-- **Selection is always readable.** Each lineup slot and its picker card share a numbered badge in the creature's element colour ("1 ★" is the lead, then "2", "3"); picked creatures glow with a bright element border, unpicked ones are dimmed.
+- Before a run, the **Team** screen (opened from the title's team pill or the dock's Team cell, never the title itself) picks the team: **up to 3** owned creatures. Tap a creature to add or remove it (at least 1 stays); tap a lineup slot to make it the lead. The title shows the current team and Start. The party *is* this lineup for the whole run (no creatures join or leave mid-run). The last team is remembered (saved on every change).
+- **Selection is always readable.** Each lineup slot and its picker card share a numbered badge in the creature's element colour ("1 ★" is the lead, then "2", "3"); picked creatures get a gold outline, unpicked ones are dimmed.
 - **Nothing is replaced silently.** With the team full, tapping an unpicked creature makes it the *pending* pick (pulsing outline); the slots pulse with "Tap to replace" and the hint reads "Swap in X: tap a slot to replace". Tapping a slot (or an in-team picker card) puts X in that position, keeping the order (replacing the lead makes X the lead). Tapping X again cancels; tapping another unpicked creature changes the pending pick. The changed slot pops, with a select haptic.
 - Under the lineup, a **Deck** line shows the team's element mix (e.g. Ember ×2, Tide ×1).
 - The **deck** is the lineup's *equipped* cards: up to 3 creatures × 3 cards (Strike / Skill / Signature, as set in each creature's loadout, §16).
 - The party screen (choose the lead) opens from the map's **Lineup** button at any time. It is never forced (pillar 3).
 
 ### 4.3 Energy and hand
-- Energy regenerates **1/s**, **cap 10**. A fight starts with 3.
+- Energy regenerates **1/s**, **cap 10**. A fight starts with 3. It shows as a crystal orb beside the hand: the number inside, one pip per point around the rim, filling like liquid as it regenerates.
 - Hand of **4**. Playing a card immediately draws the next one. The deck cycles: the discard pile reshuffles when the draw pile is empty. With fewer than 4 cards in the deck (floor 1, solo starter), the extra slots stay empty.
 - Cards can be played any time, including during wind-ups. There is no global cooldown.
-- **Hold to read, slide to scrub, swipe up to play.** A touch magnifies the card under the finger (lifted, straightened, enlarged; the others make room). Sliding sideways moves the magnification along the fan, like picking a card from a held hand. Swiping up plays the magnified card (up more than 40% of its height, or released moving up fast after 15%). Once the swipe passes 12% of the card's height it locks to that card and the card follows the finger; dragging back down returns to scrubbing. Releasing without a swipe puts the card back. A card that can't be played can still be magnified; swiping it shakes it and it snaps back.
-- **Cards belong to an element, not a creature.** The deck is still built from each lineup creature's equipped cards (§4.2), and each card takes the element of the creature that brought it. The card face shows that element's icon and colour (no creature portrait).
-  - **Only cards of the lead's element can be played.** Any living lead of that element plays it, so two Ember creatures share their Ember cards. Cards of other elements stay in the hand, dimmed with a swap marker in their element's colour, until you swap in a creature of that element. Each bench portrait shows how many waiting hand cards it would unlock. Playing a card never swaps. Deciding when to swap (and living with a hand of off-element cards meanwhile) is the strategy.
+- **Hold to read, slide to scrub, swipe up to play.** A touch lifts the card under the finger slightly and shows it enlarged in the middle of the stage, between the enemy plate and the party rail, so the bench stays visible. Sliding sideways moves the magnification along the fan, like picking a card from a held hand. Swiping up plays the magnified card (up more than 40% of its height, or released moving up fast after 15%). Once the swipe passes 12% of the card's height it locks to that card and the card follows the finger; dragging back down returns to scrubbing. Releasing without a swipe puts the card back. A card that can't be played can still be magnified; swiping it shakes it and it snaps back.
+- **Cards belong to an element, not a creature.** The deck is still built from each lineup creature's equipped cards (§4.2), and each card takes the element of the creature that brought it. The card face (the "Crystal Foil" card) shows:
+    - **Cost** as a rail of energy crystals down the left edge (the number under them from 3 up). Crystals you can't afford yet are red outlines; a −1 cost upgrade leaves a hollow crystal.
+    - **Faces** of every living lineup member of the card's element, the card's owner first: one face, or a split window for two or three, framed in the element's colour. A knocked-out creature's face leaves every card it shared; faces change at run start and on a KO or revive, never on a swap.
+    - **Foil by slot:** Strike plain, Skill crosshatched, Signature a gold double frame with a moving sheen.
+    - Statuses (Strong, upgraded, can't afford) get their own strip under the rules text.
+  - **Only cards of the lead's element can be played.** Any living lead of that element plays it, so two Ember creatures share their Ember cards. Cards of other elements stay in the hand, dimmed with a swap chip in their element's colour, until you swap in a creature of that element. Each bench portrait shows how many waiting hand cards it would unlock. Playing a card never swaps. Deciding when to swap (and living with a hand of off-element cards meanwhile) is the strategy.
   - **A card fires as the lead.** The lead's permanent Power and Spirit (§5.2) and its Trait apply (Quickfuse counts the lead's first card, Thirst heals the lead on any Strike, and so on). The card's text, slot and in-run upgrade (§7) come from the card itself.
-  - A card is **dead** only when no living lineup member shares its element. Dead cards **stay in the deck**, greyed out. Swiping one up discards it for **1** energy and draws the next card (no chain, Trait or discount effects).
+  - A card is **dead** only when no living lineup member shares its element. Dead cards **stay in the deck**, greyed out with the owner's face under "KO". Swiping one up discards it for **1** energy and draws the next card (no chain, Trait or discount effects).
 - "Self" on a card means the lead that plays it. "Team" means every living lineup member.
 
 ### 4.4 Swapping
-- Swapping is **only** by tapping a bench portrait. It is free but has a **6s cooldown**. Bench portraits show the cooldown as a sweeping wedge with the seconds left, and pop when swapping is ready. A small element-coloured chip on a portrait counts the waiting hand cards it would make playable.
+- Swapping is **only** by tapping a bench portrait. It is free but has a **6s cooldown**. Bench portraits are 56px circles showing the creature's face inside an HP ring; the cooldown is a dark wedge with the seconds left, and the portrait pops when swapping is ready. An element-coloured chip at its lower right counts the waiting hand cards it would make playable.
 - When the lead is knocked out, the healthiest bench creature auto-swaps in for free; this ignores and does not start the cooldown.
 - Shields and statuses stay on a creature when it is benched (shields keep decaying).
 
@@ -81,8 +85,8 @@ Each element owns one status:
 The lead auto-attacks every **1.5s** for **2** damage, element multipliers applied. The chain doesn't apply.
 
 ### 4.6 Enemy behaviour
-- Intent bar fills over **3s** for a normal attack (÷ species speed).
-- **Every 3rd attack is heavy:** wind-up **+2s**, shows a large element icon and the attack's name, deals **2.5×**, and applies its element's status.
+- The intent ring fills over **3s** for a normal attack (÷ species speed).
+- **Every 3rd attack is heavy:** wind-up **+2s**, shows the heavy banner under the enemy plate (name, element, seconds left, who resists) while the intent ring draws thicker in the heavy's element, deals **2.5×**, and applies its element's status.
 - Enemies attack in their own element (exceptions: Warden, Noctyrm).
 - Enemy damage: base **5** × species attack × floor scaling (§6).
 
@@ -93,7 +97,7 @@ Swap (either way) to a creature that **resists** the incoming element during the
 - you're refunded **2** energy
 - **0.3× speed for 0.5s**, 120ms hit-stop, flash, heavy haptic, "PERFECT" popup.
 
-A swap outside the window is a normal swap. During a heavy wind-up, bench portraits that resist the incoming element show a shield marker.
+A swap outside the window is a normal swap. During a heavy wind-up, bench portraits that resist the incoming element show a shield badge and a cyan glow.
 
 ### 4.8 Chain meter
 - A card played within **1.5s** of the previous card raises the chain by 1.
@@ -145,6 +149,8 @@ Reached from the title screen and the end-of-run screen. Shows gold and material
 | 5–7 | B | Wild, Alpha, plus 60%: Spring |
 | 8 | B | **Noctyrm**, the boss (fixed) |
 
+The map is a short trail: this floor's nodes are medallions on branching paths, with the next floors fading up toward the Warden or Noctyrm. The first medallion starts selected and its details (gold range and material chance for Wilds and Alphas) show in a strip below; tapping another selects it, and a second tap or **Travel** goes there.
+
 | Node | What it is |
 |---|---|
 | **Wild** | A creature from the biome's spawn pool. The node shows its gold range and material chance (§5.1) |
@@ -156,7 +162,7 @@ Reached from the title screen and the end-of-run screen. Shows gold and material
 **Enemy scaling:** wild HP = `90 × (0.6 + 0.4 × speciesHP / 55) × (1 + 0.15 × (floor − 1))`. Damage ×`(1 + 0.10 × (floor − 1))`. Biome B wilds drawn from the Biome A pool scale as if 2 floors higher.
 
 ## 7. Rewards (after every non-boss win)
-The fight's loot (§5.1) is shown and banked first. Then pick **1 of 3**: **Upgrade a card**, **Heal** (40% max HP to the whole party, reviving KOs), or **Scavenge** (+1 random material). Alphas give 2 picks; repeats are allowed.
+The fight's loot (§5.1) and Essence are shown in a ribbon under "Victory" (each drop pops in) and banked first. A pip row shows the picks left. Then pick **1 of 3**: **Upgrade a card**, **Heal** (40% max HP to the whole party, reviving KOs), or **Scavenge** (+1 random material). Alphas give 2 picks; repeats are allowed.
 
 - **Upgrade:** choose any equipped card in your party, then **+30% effect** or **−1 cost** (min 0). Each card can be upgraded once. A card with no number to scale (e.g. Static, Flicker) offers only −1 cost.
 - Card upgrades last for the current run only (permanent upgrades are §5.2).
@@ -208,8 +214,9 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. They are the car
 - **New install:** you own the 3 starters.
 - **Packs are the only way to get creatures.** **Daily pack:** one free per day, resetting at **04:00 device-local time**. A card-flip reveal grants **1 creature you don't own**, random from the 9 non-starters. Once you own all 12, it grants a **shiny** of a random owned creature that isn't shiny yet (a hue-shift with a sparkle on entry). With everything shiny, it says so. A **creature pack** bought in the item shop (§5.3) gives the same result.
 - **Starting a run:** pick a team of up to 3 owned creatures on the Team screen (§4.2). Each starts at its §10 stats plus its permanent upgrades (§5.2), with its saved loadout (§16).
-- **End of run:** shows floor reached, gold earned, Perfect Swaps, time, and the run's Essence and loot. Loot was banked as it dropped; a win adds **+50** gold. The screen links to the item shop.
-- **Collection screen:** 12 slots; unowned are silhouettes. Tap any slot to see its cards and Trait. It is also the **loadout editor** (§16) and the **upgrade screen** (§5.2) for owned creatures.
+- **Title:** the lead creature on the stage, the logo and tagline on a scrim, a team pill (portraits, who leads, best run) that opens the Team screen, one **Start expedition** plaque, and a four-icon dock (Team, Daily pack with a gold dot when ready, Collection, Item shop) with counts.
+- **End of run:** floor reached, gold earned, Perfect Swaps and time as large numbers, then a ribbon of everything banked this run (loot and Essence), party portraits, **Run again**, and Item shop / Title. Loot was banked as it dropped; a win adds **+50** gold. The screen links to the item shop.
+- **Collection screen:** the selected creature stands in a framed specimen window; a six-wide portrait grid (unowned are "?" silhouettes); a detail panel with **Cards / Trait / Upgrades** tabs (upgrade tracks are five-pip bars). Back and the currency the open tab spends sit in the header. Tap any portrait to see its cards and Trait. It is also the **loadout editor** (§16) and the **upgrade screen** (§5.2) for owned creatures.
 - **"Run again"** on the results screen restarts immediately with the same team.
 - **Persisted** (through `Platform.store_get`/`store_set` in `core/platform.gd`, saved to `user://save.cfg`): `owned`, `shiny`, `packDay`, `best`, `wins`, `lineup` (last team; `starter` is read once as a fallback), `muted`, `essence`, `learned`, `loadout`, `loot` (gold and materials), `upgrades` (per-species track levels).
 
@@ -222,7 +229,7 @@ Each creature has 3 card slots: **Strike / Skill / Signature**. They are the car
 - **Direction: HD-2D**, in the spirit of Octopath Traveler. Low-resolution pixel-art sprites in a lit, painterly diorama. Depth of field, bloom, lighting and particles come from the engine, never from the sprite.
 - **Cast:** monsters (the roster, Warden, boss) and **humanoid characters**. Humanoids are generated in ChatGPT with the template in `docs/HD2D.md`; monsters use the same Style Block so both read as one game.
 - **Locked style constants** (full list in `docs/HD2D.md`): humanoids about 128 px tall and chibi (about 3 heads, like Octopath Traveler's field sprites, always adult characters); monsters about 100 px × species size (in-game height set by the manifest, so the pixel count can vary slightly); three-quarter view facing right; key light from the upper left; 1 px selective outline, never pure black; at most 32 colours asked for in the prompt. `scripts/hd2d-sprite.py` snaps ChatGPT's output onto its own pixel grid without merging detail.
-- **Budget:** 12 creature stills, 1 Warden, 1 boss, 2 biome backgrounds = **16 images**, plus humanoids once they have a role (§15). Element icons and card frames are drawn in code. Shinies are a filter. 
+- **Budget:** 12 creature stills, 1 Warden, 1 boss, 2 biome backgrounds = **16 images**, plus humanoids once they have a role (§15). Element icons and card frames are drawn in code; card and portrait faces are crops of the creature sprites (a `face` rect per species in `manifest.gd`), so they add no images. Shinies are a filter. 
 - **Current art** (`godot/art/hd2d/`): real sprites for Brinecrab, Puddlet, Brambat and Bellspring (`painted` entries in `manifest.gd`). Every other species still uses a placeholder: one of the 3 HD-2D anchors, hue-remapped per element (`recolor.gd`; mapping in `manifest.gd`). The rest are generated a few per day with `/hd2d-batch` (Codex, `scripts/hd2d-codex.py`). The diorama is real 3D (Godot): procedural meshes and pixel textures, a warm key light from the upper left with shadows, depth of field, glow, light shafts, fog. Biome 0 is sunlit forest ruins, biome 1 moonlit castle ruins with lanterns. No background images.
 
 ## 14. Out of scope (later)
@@ -310,7 +317,7 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 - **Shipped:** v0.3.0 build 9 on TestFlight (build 6 was the first Godot build). Everything in Part 1 is implemented, including element-mapped cards and the Team screen's pending-replace picker: real-time card combat with the fanned hand, statuses, Perfect Swap, chain, 12 creatures with alternate cards and Traits, the 8-floor run with Warden and Noctyrm, loot, permanent upgrades, item shop, daily and bought packs, Collection with the loadout editor.
 - **Art is mostly placeholder:** 4 of 14 creatures have real sprites (Brinecrab, Puddlet, Brambat, Bellspring); the 3 HD-2D anchors (Sable, ember fox, dragon) stand in for the rest, recoloured per element (§13). The anchors are painted in Ember, so the Ember placeholders (Emberwick = fox, Cinderpip = Sable, Kilnback = dragon) show unrecoloured and look finished, but they aren't: a species is done only when `godot/art/hd2d/<key>.png` exists. `/hd2d-batch` generates the remainder a few per day.
 - **Unverified on device:** frame rate on a real iPhone (the 3D stage was only measured on a software renderer; first lever if it drops below 60 fps: render the 3D scene at ~0.75 resolution), haptics, safe-area insets.
-- **UI redesign queued:** all ten mockup ideas are approved and listed in order in `docs/UI-QUEUE.md`; the card look is Crystal Foil with the faces of every teammate who can play the card (§4.3's element rule stays).
+- **UI redesign landed (branch `ui-redesign`, not shipped yet):** warm HD-2D palette, Pixelify Sans + Atkinson Hyperlegible, window frames, brass plaque, Crystal Foil cards with teammate faces, the battle HUD diet with the energy crystal, title dock, bestiary, map trail, reward and results screens. Follow-ups are in `docs/UI-QUEUE.md`.
 - **Known gaps from the port:** no background blur on panels; a card that turns dead repaints in place instead of flying off; the HUD band isn't re-measured when status tags change its height.
 - **Balance is untuned** for the loot economy and 3-creature teams from floor 1 (§15).
 - **Saves:** the Godot app's save file (`user://save.cfg`) starts fresh; progress from the web builds (≤ 0.2.0) does not carry over.
@@ -320,7 +327,7 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godot hangs at startup without it here). **Never open Godot windows on the desktop:** any non-headless run (`--shot`, `stage_preview.gd`) goes through `scripts/godot-bg.sh` instead of `godot`, which renders on a private Xvfb display (same pixels; `GODOT_WINDOW=1` shows the window when you really want it). `scripts/ui-check.sh` already does this.
 - `godot --headless --audio-driver Dummy --path godot --quit`: load check (parse errors show here)
 - `godot --headless --audio-driver Dummy --path godot --script res://tests/test_core.gd`: core logic tests (all must pass)
-- `scripts/godot-bg.sh --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|team|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). `--shot=team-swap` shows the Team screen with every creature owned, a full team and Cinderpip pending (it uses a scratch save, `user://shot-team-swap.cfg`, never `save.cfg`). Renders for real here (Vulkan llvmpipe).
+- `scripts/godot-bg.sh --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<screen> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). Screens: `title team team-swap map map-sel map-warden map-late reward reward-warden upgrade party end end-win pack coll coll-trait coll-up shop battle battle-shared battle-heavy inspect flick` (`ALL` in `scripts/ui-check.sh` is the checked list). `--shot=team-swap` shows the Team screen with every creature owned, a full team and Cinderpip pending (it uses a scratch save, `user://shot-team-swap.cfg`, never `save.cfg`). Renders for real here (Vulkan llvmpipe).
 - `scripts/ui-check.sh [screen...]`: the screenshot UI check. Renders every `--shot` screen at 390×844 (simulated 47/34 px notch insets) and 375×667 (20/0) in deterministic mode, lints the layout (`godot/tests/ui_check.gd`: offscreen or outside the safe area, a box spilling out of its parent, squashed boxes, wrapped text overflowing, ellipsis truncation, a corner badge covering text, creature art under a panel, low-contrast text over the scene, header/sheet overlap) and diffs against the goldens in `godot/tests/golden/<size>/`. Shots, `.fail.png` (findings outlined) and `.diff.png` land in `/tmp/claude-1000/ui-check/`. `--update` accepts the current renders as goldens; only do that after looking at them. Takes about 2 minutes.
 - `scripts/godot-bg.sh --audio-driver Dummy --path godot --script res://tests/stage_preview.gd`: stage-only visual test (both biomes, effects); `-- --pair=<enemy>,<partner>` puts two species on the biome 0 pedestals instead (checks a new sprite)
 - `godot --path godot -e`: the editor
@@ -332,7 +339,7 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 - Collection, packs, loot wallet, permanent upgrades, shop trades, Essence, unlocks, loadouts, the last lineup: `game/meta.gd` (`Meta`).
 - Persistence and haptics: `core/platform.gd` (`Platform`, `user://save.cfg`). Sound: `core/audio.gd` (`Sfx`, synthesized at startup).
 - Map, nodes, loot drops, rewards, card upgrades, lineup, end of run, title, team builder (`scr-team`), quit (`quit_tap`/`quit_run`), pack reveal, item shop, Collection with loadout editor and upgrades: `game/run.gd` (`Run`).
-- HUD and the card fan: `ui/ui.gd` (`Ui`); screen frames `ui/screens.gd`; shared look (palette, fonts, Theme) `ui/kit.gd`; card face `ui/card_view.gd`; popups, banners, toasts `ui/fx.gd` (`Fx`). Frame loop and `--shot`: `scenes/main.gd`.
+- HUD and the card fan: `ui/ui.gd` (`Ui`, plus the energy `ui/crystal.gd`); screen frames `ui/screens.gd`; shared look (palette, fonts, Theme, builders) `ui/kit.gd` with the window frame `ui/win_style.gd` and hairline lists `ui/rows.gd`; card face `ui/card_view.gd` (+ `card_foil`/`card_face` shaders); map trail `ui/map_trail.gd`; popups, banners, toasts, the loot reveal `ui/fx.gd` (`Fx`). Fonts in `ui/fonts/` (OFL licences beside them). Frame loop and `--shot`: `scenes/main.gd`.
 - HD-2D stage: `render/stage.gd` (`Stage`: 3D world, camera, lights, WorldEnvironment, pedestals, shield, `projectile`, `lightning`), `render/actor.gd` (`Actor`), `render/particles.gd`, `render/feel.gd` (hit-stop, slow-mo, shake), `render/layout.gd` (screen band, `U`, spots). Art: `art/hd2d/` (`manifest.gd` species→sprite, `recolor.gd` per-element recolour, `diorama.gd` the two biomes, `tex.gd` procedural pixel textures, `pedestal.gd`, `shaders/`).
 - HD-2D sprite template: `docs/HD2D.md`; per-creature prompts `docs/hd2d/prompts.md` (+ `.json`, generated by `scripts/hd2d-prompts.py`); Codex generation `scripts/hd2d-codex.py` (driven by the `/hd2d-batch` skill); ChatGPT/Codex originals `docs/hd2d/original/` (gitignored, local only); anchors in `docs/hd2d/anchors/`; normalizer `scripts/hd2d-sprite.py`.
 - iOS: `godot/export_presets.cfg` (`iOS` preset), `godot/ios/` (icon, launch images, `build-number.txt`, `mac-build.sh`), `scripts/ship-ios-godot.sh`.
