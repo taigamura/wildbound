@@ -163,13 +163,6 @@ func _loot_chips(l: Dictionary, plus := false) -> Array:
 		chip.call(m, MAT_COL[m], l.get(m, 0), Data.MAT_DEF[m].name)
 	return out
 
-func _wallet_text() -> String:
-	var w := Meta.wallet()
-	var parts: Array = ["%d gold" % w.gold]
-	for m in Data.MATS:
-		parts.append("%d %s" % [w[m], Data.MAT_DEF[m].name])
-	return " · ".join(parts)
-
 func _fill(box: Control, items: Array) -> void:
 	UiKit.clear(box)
 	for it in items:
@@ -234,6 +227,9 @@ func _gen_nodes(f: int) -> Array:
 		out2.append(MapNode.new("spring"))
 	return out2
 
+## What a node shows: colour, glyph, medallion label `m`, strip title `t`, element (or ""), and the
+## strip's sub line `s` (§6: Wilds and Alphas show gold range and material chance; the Warden and
+## the boss show only their icon and name).
 func _node_view(n: MapNode) -> Dictionary:
 	if n.type == "wild" or n.type == "alpha":
 		var sp: Dictionary = Data.SPECIES[n.sp]
@@ -241,20 +237,24 @@ func _node_view(n: MapNode) -> Dictionary:
 		var a: float = Data.adv(S.act().el, el)
 		var f: float = _floor_gold() * (Data.BAL.alpha_gold_mul if n.type == "alpha" else 1)
 		var gold := "%d–%d gold" % [roundi(Data.BAL.wild_gold[0] * f), roundi(Data.BAL.wild_gold[1] * f)]
-		var parts: Array = [Data.ELEM[el].name,
-			("tougher · 2 picks · %s + %d material" % [gold, Data.BAL.alpha_mats]) if n.type == "alpha" else ("%s · %d%% material" % [gold, roundi(Data.BAL.wild_mat_chance * 100)])]
+		var parts: Array = [("Tougher · 2 picks · %s · %d material" % [gold, Data.BAL.alpha_mats]) if n.type == "alpha" \
+			else ("%s · %d%% material" % [gold, roundi(Data.BAL.wild_mat_chance * 100)])]
 		if a > 1:
-			parts.append("your lead is strong here")
+			parts.append("%s is strong here" % S.act().name)
 		elif a < 1:
-			parts.append("your lead is weak here")
-		return {"c": UiKit.el_css(el), "g": "skull" if n.type == "alpha" else "paw", "t": ("Alpha " if n.type == "alpha" else "Wild ") + sp.name, "s": " · ".join(parts)}
+			parts.append("%s is weak here" % S.act().name)
+		return {"c": UiKit.el_css(el), "g": "skull" if n.type == "alpha" else "paw", "m": sp.name,
+			"t": ("Alpha " if n.type == "alpha" else "Wild ") + sp.name, "el": el, "s": " · ".join(parts)}
 	if n.type == "spring":
-		return {"c": UiKit.HP, "g": "moon", "t": "Moon Spring", "s": "Heal the party to full"}
+		return {"c": UiKit.HP, "g": "moon", "m": "Spring", "t": "Moon Spring", "el": "", "s": "Heal the party to full"}
 	if n.type == "warden":
-		return {"c": UiKit.EL.thorn, "g": "crown", "t": "Gravewood", "s": ""}
-	return {"c": UiKit.FOE, "g": "crown", "t": "Noctyrm", "s": ""}
+		return {"c": UiKit.EL.thorn, "g": "crown", "m": "Gravewood", "t": "Gravewood", "el": "", "s": ""}
+	return {"c": UiKit.FOE, "g": "crown", "m": "Noctyrm", "t": "Noctyrm", "el": "", "s": ""}
 
-## `reroll` = false keeps this floor's nodes (coming back from the lineup screen).
+## The selected medallion on this floor's map (a first tap selects, a second tap travels).
+var _map_sel := 0
+
+## `reroll` = false keeps this floor's nodes and selection (coming back from the lineup screen).
 func show_map(reroll := true) -> void:
 	var el := _el()
 	S.mode = "map"
@@ -267,36 +267,78 @@ func show_map(reroll := true) -> void:
 	place_player(false)
 	if reroll or S.nodes.is_empty():
 		S.nodes = _gen_nodes(S.floor)
-	el.mapEyebrow.text = ("Final floor" if S.floor == Data.BAL.floors else "Floor %d of %d" % [S.floor, Data.BAL.floors]) \
+		_map_sel = 0
+	_map_sel = clampi(_map_sel, 0, S.nodes.size() - 1)
+	var last: int = Data.BAL.floors
+	el.mapEyebrow.text = ("Final floor" if S.floor == last else "Floor %d of %d" % [S.floor, last]) \
 		+ (" · The Dusklands" if Data.biome_of(S.floor) else " · The Greenwood")
-	UiKit.clear(el.trail)
-	for i in Data.BAL.floors:
-		var f: int = i + 1
-		var st: StyleBoxFlat
-		if f < S.floor:   # walked: shaded brass
-			st = UiKit.flat(UiKit.GOLD_LO, 3)
-		elif f == S.floor:   # here: the one lit step
-			st = UiKit.glow_box(UiKit.flat(UiKit.GOLD_HI, 3), UiKit.alpha(UiKit.GOLD_HI, 0.5), 4)
-		elif f == Data.BAL.floors or f == 4:   # Warden and Noctyrm ahead
-			st = UiKit.flat(UiKit.alpha(UiKit.FOE, 0.45), 3)
-		else:
-			st = UiKit.flat(Color(1, 1, 1, 0.1), 3)
-		var bar := Panel.new()
-		bar.add_theme_stylebox_override("panel", st)
-		bar.custom_minimum_size.y = 6
-		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bar.size_flags_stretch_ratio = 1.6 if (f >= S.floor and (f == Data.BAL.floors or f == 4) and f != S.floor) else 1.0
-		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		el.trail.add_child(bar)
-	UiKit.clear(el.nodes)
+	var kind: String = S.nodes[0].type if S.nodes.size() == 1 else ""
+	el.mapTitle.text = "Face the Warden" if kind == "warden" else ("Face Noctyrm" if kind == "boss" else "Pick a path")
+	# the trail: the floors still to walk fade up toward the next boss (floor 4, then the last floor)
+	var goal_f := 4 if S.floor < 4 else last
+	var goal := {}
+	var between: Array = []
+	if goal_f > S.floor:
+		goal = {"t": "Floor %d · %s" % [goal_f, "Warden" if goal_f == 4 else "Noctyrm"], "g": "crown"}
+		for f in range(goal_f - 1, S.floor, -1):
+			between.append("Floor %d" % f)
+	var views: Array = []
 	for n in S.nodes:
 		var h := _node_view(n)
-		el.nodes.add_child(_node_btn(h.g, h.t, h.s, h.c, _choose_node.bind(n)))
-	_fill(el.mapParty, Ui.party_html())
-	el.mapGold.text = _wallet_text()
+		views.append({"c": h.c, "g": h.g, "t": h.m})
+	var trail: MapTrail = el.trail
+	trail.set_trail(views, goal, " · ".join(between), _map_sel)
+	for c in trail.tapped.get_connections():
+		trail.tapped.disconnect(c.callable)
+	trail.tapped.connect(_map_tap)
+	_on(el.mapGo, func():
+		_click()
+		_travel())
+	_map_info()
+	UiKit.clear(el.mapParty)
+	for i in S.lineup.size():
+		var c = S.mon(S.lineup[i])
+		if c != null:
+			el.mapParty.add_child(UiKit.party_por(c, 30, i == 0))
+	_fill(el.mapGold, [UiKit.wallet_row(Meta.wallet())])
 	el.lineupBtn.visible = S.party.size() >= 2
 	Ui.show("scr-map")
+
+## A medallion tap: select it, or travel if it already is.
+func _map_tap(i: int) -> void:
+	if S.mode != "map" or i >= S.nodes.size():
+		return
+	if i == _map_sel:
+		_click()
+		_travel()
+		return
+	Sfx.audio()
+	Sfx.pick()
+	Platform.haptic("select")
+	_map_sel = i
+	_el().trail.select(i)
+	_map_info()
+
+## Fill the detail strip for the selected node.
+func _map_info() -> void:
+	var el := _el()
+	var h := _node_view(S.nodes[_map_sel])
+	var head: HBoxContainer = el.mapInfoHead
+	UiKit.clear(head)
+	var nm := UiKit.lbl(h.t, "display", UiKit.NAME, UiKit.INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(nm)
+	if h.el != "":
+		head.add_child(UiKit.elchip(h.el, Data.ELEM[h.el].name))
+	elif h.s == "":   # Warden and boss: icon and name only
+		head.add_child(UiKit.icon(h.g, 14, h.c))
+	el.mapInfoSub.text = h.s
+	el.mapInfoSub.visible = h.s != ""
+
+func _travel() -> void:
+	if S.mode != "map" or S.nodes.is_empty():
+		return
+	_choose_node(S.nodes[clampi(_map_sel, 0, S.nodes.size() - 1)])
 
 func _choose_node(n: MapNode) -> void:
 	if n.type == "spring":
@@ -336,6 +378,7 @@ func after_fight() -> void:
 		if h != null:
 			S.active = h.uid
 	var loot = null
+	var before := run_ess.duplicate()
 	if e != null:
 		_fight_essence(e)
 		loot = _roll_loot(e)
@@ -347,7 +390,11 @@ func after_fight() -> void:
 		S.em.destroy()
 	S.em = null
 	place_player(false)
-	_show_reward(2 if (e != null and e.kind == "alpha") else 1, loot)
+	var ess := {}
+	for k in run_ess:
+		if run_ess[k] - before.get(k, 0) > 0:
+			ess[k] = run_ess[k] - before.get(k, 0)
+	_show_reward(2 if (e != null and e.kind == "alpha") else 1, loot, ess)
 
 # ================= rewards =================
 func _upgradable() -> bool:
@@ -357,27 +404,65 @@ func _upgradable() -> bool:
 				return true
 	return false
 
-func _show_reward(picks: int, loot) -> void:
+## Picks this reward screen started with (Alphas give 2), for the pip row.
+var _rw_total := 1
+
+## The loot ribbon's chips: gold, each material, then each element's Essence (`ess`), skipping zeros.
+func _ribbon_chips(l: Dictionary, ess: Dictionary) -> Array:
+	var out: Array = []
+	if l.get("gold", 0):
+		out.append(UiKit.loot_chip("coin", UiKit.GOLD_HI, "+%d gold" % l.gold))
+	for m in Data.MATS:
+		if l.get(m, 0):
+			out.append(UiKit.loot_chip(m, MAT_COL[m], "+%d %s" % [l[m], Data.MAT_DEF[m].name]))
+	# Essence: one chip; a single element reads "+2 Essence", several share one chip
+	var pairs: Array = []
+	for e in Data.EL_KEYS:
+		if ess.get(e, 0):
+			pairs.append([e, UiKit.el_css(e), "+%d" % ess[e]])
+	if pairs.size() == 1:
+		out.append(UiKit.loot_chip(pairs[0][0], pairs[0][1], "%s Essence" % pairs[0][2]))
+	elif pairs.size() > 1:
+		out.append(UiKit.multi_chip("Essence", pairs))
+	return out
+
+## `ess` = the Essence this fight earned; `fresh` = first showing (the ribbon pops in; later picks and
+## coming back from the upgrade screen show it at rest).
+func _show_reward(picks: int, loot, ess := {}, fresh := true) -> void:
 	var el := _el()
 	S.mode = "reward"
 	if picks <= 0:
 		_next_floor()
 		return
-	el.rwEyebrow.text = ("Victory · %d picks" % picks) if picks > 1 else "Victory"
+	if fresh:
+		_rw_total = picks
+	el.rwEyebrow.text = "Victory"
 	el.rwTitle.text = "Choose a reward"
-	var got: Array = _loot_chips(loot, true) if loot != null else []
+	var got: Array = _ribbon_chips(loot if loot != null else {}, ess)
 	_fill(el.rwSubLoot, got)
 	el.rwSubLoot.visible = not got.is_empty()
+	if fresh:
+		Fx.reveal(got)
+	UiKit.clear(el.rwPips)
+	el.rwPips.add_child(UiKit.pips(picks, _rw_total))
+	el.rwPips.add_child(UiKit.lbl("%d pick%s" % [picks, "s" if picks > 1 else ""], "700", UiKit.T_S, UiKit.INK, {"valign": VERTICAL_ALIGNMENT_CENTER}))
 	el.rwSub.text = "HP carries over. Knocked-out creatures stay down until a Spring or a Heal."
 	var box: Control = el.rewards
 	UiKit.clear(box)
-	var next := func(): _show_reward(picks - 1, loot)
+	var next := func(): _show_reward(picks - 1, loot, ess, false)
 	var opt := func(g: String, name: String, txt: String, color: Color, ok: bool, on_pick: Callable):
 		var t := Tap.new()
 		t.press_scale = 0.97
 		t.dis_mod = Color(1, 1, 1, 0.45)
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t.custom_minimum_size.y = 168   # tall cards (the card face stretches to fill)
 		var cv := CardView.new("reward").option(g, name, txt, color)
+		# readable rules text: the body face at 12px (the card's own size is below the type scale)
+		var tx = cv.get("tx")
+		if tx is Label:
+			tx.add_theme_font_override("font", UiKit.font("700"))
+			tx.add_theme_font_size_override("font_size", UiKit.T_S)
+			tx.add_theme_color_override("font_color", UiKit.INK2)
 		t.add_child(cv)
 		t.disabled = not ok
 		t.pressed.connect(func():
@@ -385,23 +470,24 @@ func _show_reward(picks: int, loot) -> void:
 			on_pick.call())
 		box.add_child(t)
 		cv.pivot_offset = Vector2(0, 0)
-		Fx.kf(cv, 0.32, [[0.0, {"y": 60.0, "s": 0.6, "r": 8.0, "a": 0.0}], [1.0, {"y": 0.0, "s": 1.0, "r": 0.0, "a": 1.0}]],
-			{"ease": [0.2, 1.4, 0.4, 1.0], "delay": (box.get_child_count() - 1) * 0.08})
+		if fresh:
+			Fx.kf(cv, 0.32, [[0.0, {"y": 60.0, "s": 0.6, "r": 8.0, "a": 0.0}], [1.0, {"y": 0.0, "s": 1.0, "r": 0.0, "a": 1.0}]],
+				{"ease": [0.2, 1.4, 0.4, 1.0], "delay": 0.1 + (box.get_child_count() - 1) * 0.08})
 	opt.call("up", "Upgrade", "One card: +30% effect or −1 cost", UiKit.GOLD, _upgradable(), func():
-		_show_upgrade(next, func(): _show_reward(picks, loot)))
-	opt.call("heart", "Heal", "Whole party +%d%% HP" % roundi(Data.BAL.heal_reward * 100), UiKit.HP, true, func():
+		_show_upgrade(next, func(): _show_reward(picks, loot, ess, false)))
+	opt.call("heart", "Heal", "Whole party +%d%% HP, revives KOs" % roundi(Data.BAL.heal_reward * 100), UiKit.HP, true, func():
 		for c in S.party:
 			c.alive = true
 			c.hp = minf(c.max_hp, c.hp + roundi(c.max_hp * Data.BAL.heal_reward))
 		Sfx.heal()
 		next.call())
-	opt.call("jewel", "Scavenge", "+1 random material: Sword, Orb or Jewel", UiKit.NEUTRAL, true, func():
+	opt.call("jewel", "Scavenge", "+1 random Sword, Orb or Jewel", UiKit.NEUTRAL, true, func():
 		var m: String = Meta.random_mat()
 		_bank({m: 1})
 		Sfx.caught()
 		Fx.toast("+1 %s" % Data.MAT_DEF[m].name)
 		next.call())
-	el.rwDeck.text = _wallet_text()
+	_fill(el.rwDeck, [UiKit.wallet_row(Meta.wallet())])
 	_on(el.skipBtn, func():
 		Sfx.pick()
 		next.call())
@@ -590,25 +676,26 @@ func end_run(won: bool, quit := false) -> void:
 	el.endP.text = ("Noctyrm is sealed. Your party walks out of the wild (+%d gold)." % Data.BAL.win_gold) if won \
 		else ("You left on floor %d. Your loot is safe." % S.floor) if quit \
 		else ("Your party fell on floor %d. Your loot is safe." % S.floor)
+	# floor, gold, Perfect Swaps and time as large pixel numbers
 	UiKit.clear(el.endStats)
-	for s in [[str(reached), "Floor"], [str(run_loot.get("gold", 0)), "Gold"], [str(S.stats.perfects), "Perfect"], ["%d:%02d" % [secs / 60, secs % 60], "Time"]]:
-		var p := UiKit.panel(UiKit.inset(Vector4(4, 8, 4, 8)))
-		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for s in [[str(reached), "Floor"], [str(run_loot.get("gold", 0)), "Gold"], [str(S.stats.perfects), "Perfect swaps"],
+			["%d:%02d" % [secs / 60, secs % 60], "Time"]]:
 		var v := UiKit.vbox(2)
-		v.add_child(UiKit.disp(s[0], UiKit.D_S, UiKit.INK, {"align": "center"}))
-		v.add_child(UiKit.lbl(s[1], "700", UiKit.T_S, UiKit.INK2, {"align": "center"}))
-		p.add_child(v)
-		el.endStats.add_child(p)
-	_fill(el.endParty, Ui.party_html(S.party))
-	var any_ess := false
-	for k in Data.EL_KEYS:
-		if run_ess.get(k, 0):
-			any_ess = true
-	_fill(el.endEss, ([UiKit.eyebrow("Essence")] + _ess_chips(run_ess, true)) if any_ess else [])
-	el.endEss.visible = any_ess
-	var got := _loot_chips(run_loot, true)
-	_fill(el.endLoot, ([UiKit.eyebrow("Loot")] + got) if got.size() else [])
-	el.endLoot.visible = got.size() > 0
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(UiKit.disp(s[0], UiKit.D_M, UiKit.GOLD_HI if s[1] == "Gold" else UiKit.INK, {"align": "center"}))
+		v.add_child(UiKit.lbl(s[1], "700", UiKit.T_S, UiKit.INK2, {"align": "center", "wrap": true, "lh": -4}))
+		el.endStats.add_child(v)
+	# the run's loot ribbon: everything banked this run, Essence included, popping in one by one
+	var got := _ribbon_chips(run_loot, run_ess)
+	if got.is_empty():
+		got = [UiKit.lbl("Nothing this time", "500", UiKit.T_M, UiKit.INK2)]
+	_fill(el.endLoot, got)
+	Fx.reveal(got)
+	UiKit.clear(el.endParty)
+	for i in S.lineup.size():
+		var c = S.mon(S.lineup[i])
+		if c != null:
+			el.endParty.add_child(UiKit.party_por(c, 40, i == 0))
 	if won:
 		Sfx.win()
 		Platform.haptic("success")
@@ -1347,16 +1434,47 @@ func debug_show(id: String) -> void:
 		"pack": _show_pack({"key": "sparkit", "shiny": false}, "Daily pack", "One new friend a day", to_title)
 		"map":
 			start_run()
+		"map-sel":   # the second medallion selected
+			start_run()
+			_map_tap(1)
+		"map-warden":   # floor 4: one medallion, the trail fades up toward Noctyrm
+			start_run()
+			S.floor = 4
+			show_map()
+		"map-late":   # floor 6 in the Dusklands, with an Alpha and a hurt, knocked-out party
+			start_run()
+			S.floor = 6
+			S.party[1].hp = 0.0
+			S.party[1].alive = false
+			S.party[2].hp = S.party[2].max_hp * 0.25
+			show_map()
 		"party":
 			start_run()
 			show_party(func(): show_map(false))
 		"reward":
 			start_run()
-			_show_reward(2, {"gold": 11, "sword": 1, "orb": 0, "jewel": 0})
+			_show_reward(2, {"gold": 11, "sword": 1, "orb": 0, "jewel": 0}, {"thorn": 2})
+		"reward-warden":   # the Warden's haul: five chips on the ribbon, one pick
+			start_run()
+			S.floor = 4
+			_show_reward(1, {"gold": 40, "sword": 1, "orb": 1, "jewel": 0}, {"thorn": 3, "ember": 3})
 		"upgrade":
 			start_run()
 			_show_upgrade(func(): show_map(), func(): show_map())
 		"end":
 			start_run()
 			S.floor = 3
+			run_loot = {"gold": 31, "sword": 1, "orb": 0, "jewel": 1}
+			run_ess = {"ember": 0, "tide": 1, "thorn": 2, "volt": 0}
+			S.stats.perfects = 2
+			S.party[2].hp = 0.0
+			S.party[2].alive = false
 			end_run(false)
+		"end-win":
+			start_run()
+			S.floor = 8
+			run_loot = {"gold": 312, "sword": 3, "orb": 2, "jewel": 4}
+			run_ess = {"ember": 9, "tide": 4, "thorn": 7, "volt": 3}
+			S.stats.perfects = 11
+			S.stats.start = Platform.ticks_msec() - 754000
+			end_run(true)
