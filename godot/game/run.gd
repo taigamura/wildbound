@@ -639,24 +639,27 @@ func _back_to_end() -> void:
 	Ui.show("scr-end")
 
 # ================= title =================
-## Home screen: the current team as a summary, Start, and the meta buttons. The team is edited on scr-team.
+## Home screen (idea 8): the lead alone on the stage; the team as a pill of portraits over the Start
+## plaque (tap = the Team screen); Team, Daily pack, Collection and Item shop in the dock.
 func _render_title() -> void:
 	var el := _el()
 	S.picks = _valid_picks()
 	var own := Meta.owned()
 	UiKit.clear(el.teamRow)
 	for i in S.picks.size():
-		el.teamRow.add_child(_team_chip(S.picks[i], i == 0))
-	el.pickEyebrow.text = "Your team · %d/%d" % [S.picks.size(), Data.BAL.lineup]
+		var sp: Dictionary = Data.SPECIES[S.picks[i]]
+		el.teamRow.add_child(UiKit.por(UiKit.el_css(sp.el), 30, sp.el, i == 0))
+	el.pickEyebrow.text = "%s leads" % Data.SPECIES[S.picks[0]].name
 	var best := Meta.best()
 	var wins := Meta.wins()
-	el.bestT.text = ("Expeditions won: %d · best floor %d" % [wins, best]) if wins else (("Best run: floor %d" % best) if best else "Runs take about five minutes")
+	el.bestT.text = ("Won %d · best floor %d" % [wins, best]) if wins else (("Best run: floor %d" % best) if best else "Runs take about five minutes")
+	UiScreens.set_dock_cell(el.dockTeam, "Team", "%d/%d" % [S.picks.size(), Data.BAL.lineup])
 	var ready := Meta.pack_ready()
-	UiScreens.set_meta_btn(el.packBtn, "Daily pack", "Ready to open" if ready else "Next in " + Meta.next_pack_in(), ready)
+	UiScreens.set_dock_cell(el.packBtn, "Daily pack", "Ready" if ready else "in " + Meta.next_pack_in(), ready, not ready)
 	el.packBtn.disabled = not ready
 	var sh := Meta.shinies().size()
-	UiScreens.set_meta_btn(el.collBtn, "Collection", "%d / %d%s" % [own.size(), Data.ROSTER.size(), (" · %d ✦" % sh) if sh else ""])
-	UiScreens.set_meta_btn(el.shopBtn, "Item shop", "%d gold" % Meta.wallet().gold)
+	UiScreens.set_dock_cell(el.collBtn, "Collection", "%d/%d%s" % [own.size(), Data.ROSTER.size(), (" · %d ✦" % sh) if sh else ""])
+	UiScreens.set_dock_cell(el.shopBtn, "Item shop", "%d gold" % Meta.wallet().gold)
 
 ## A compact team member: element orb, name, "Lead" marked in gold. `replace_c` set (team screen,
 ## a pending pick): the status line reads "Tap to replace" in the incoming creature's colour.
@@ -1318,10 +1321,11 @@ func init_run_ui() -> void:
 	el.endShopBtn.pressed.connect(func():
 		Sfx.pick()
 		_show_shop(_back_to_end))
-	el.teamBtn.pressed.connect(func():
-		Sfx.audio()
-		Sfx.pick()
-		show_team())
+	for b in [el.teamBtn, el.dockTeam]:
+		b.pressed.connect(func():
+			Sfx.audio()
+			Sfx.pick()
+			show_team())
 	el.teamDone.pressed.connect(func():
 		Sfx.pick()
 		to_title())
