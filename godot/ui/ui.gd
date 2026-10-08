@@ -27,8 +27,7 @@ var hud_top: VBoxContainer
 var hud_bottom: VBoxContainer
 var hand: Control
 var preview := CardView.new("hand")   # the held card, large, on the stage
-var segs: Array = []
-var heavy: Control
+var heavy: Control   # the heavy banner (BannerBg) in the telegraph strip under the enemy plate
 var chain: Control
 var current = null      # shown screen id, or null for the battle HUD
 
@@ -137,25 +136,28 @@ func _build_hud() -> void:
 	hud.visible = false
 	root.add_child(hud)
 
-	# ---- top band: floor pill + mute, enemy plate
+	# ---- top band (UI-QUEUE item 5): floor pill + mute + quit, the one-line enemy plate, and the
+	# telegraph strip under it. The strip is always reserved (part of the band), so the heavy banner
+	# it holds never covers the creatures and the stage doesn't jump when a heavy starts.
 	hud_top = UiKit.vbox(8)
 	hud_top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	hud.add_child(hud_top)
-	var meta := UiKit.hbox(6)
+	var meta := UiKit.hbox(8)
 	hud_top.add_child(meta)
-	var pill := UiKit.panel(UiKit.flat(UiKit.PANEL, 99, 1, UiKit.LINE, Vector4(10, 6, 10, 6)))
-	var ph := UiKit.hbox(0)
-	ph.add_child(UiKit.lbl("Floor ", "700", 12, UiKit.MUTE, {"upper": true, "ls": 0.06}))
-	el.floorT = UiKit.lbl("1", "800", 12, UiKit.INK, {"ls": 0.06})
+	var pill := UiKit.panel(UiKit.hud_btn_style(14, Vector4(12, 0, 12, 0)))
+	pill.custom_minimum_size.y = 28
+	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var ph := UiKit.hbox(5)
+	ph.add_child(UiKit.lbl("Floor", "700", UiKit.T_S, UiKit.INK2, {"valign": VERTICAL_ALIGNMENT_CENTER}))
+	el.floorT = UiKit.lbl("1/8", "700", UiKit.T_S, UiKit.INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
 	ph.add_child(el.floorT)
-	ph.add_child(UiKit.lbl("/8", "700", 12, UiKit.MUTE, {"ls": 0.06}))
 	pill.add_child(ph)
 	meta.add_child(pill)
 	meta.add_child(UiKit.spacer())
-	var mute := Tap.new(UiKit.flat(UiKit.PANEL, 16, 1, UiKit.LINE))
-	mute.custom_minimum_size = Vector2(32, 32)
+	var mute := Tap.new(UiKit.hud_btn_style(8))
+	mute.custom_minimum_size = Vector2(34, 32)
 	mute.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	el.muteIcon = UiKit.icon("sound", 16, UiKit.MUTE)
+	el.muteIcon = UiKit.icon("sound", 16, UiKit.INK2)
 	mute.add_child(el.muteIcon)
 	mute.pressed.connect(func():
 		Sfx.set_muted(not Sfx.is_muted())
@@ -164,76 +166,139 @@ func _build_hud() -> void:
 	el.muteBtn = mute
 	meta.add_child(mute)
 	# quit (no pause): the first tap arms it, the second ends the run (Run.quit_tap)
-	var quit := Tap.new(UiKit.flat(UiKit.PANEL, 16, 1, UiKit.LINE))
-	quit.custom_minimum_size = Vector2(32, 32)
+	var quit := Tap.new(UiKit.hud_btn_style(8))
+	quit.custom_minimum_size = Vector2(34, 32)
 	quit.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	quit.add_child(UiKit.icon("exit", 16, UiKit.MUTE))
+	quit.add_child(UiKit.icon("exit", 16, UiKit.INK2))
 	quit.pressed.connect(func(): Run.quit_tap(quit))
 	el.quitBtn = quit
 	meta.add_child(quit)
 
-	var foe := _plate()
-	hud_top.add_child(foe.panel)
-	el.eEl = foe.chip
-	el.eName = foe.name
-	el.eLv = foe.lv
-	el.eHp = Bar.new(false, Color("#ff8a97"), UiKit.FOE)
-	foe.box.add_child(el.eHp)
-	el.eIntBar = Bar.new(true, Color("#ff9d5c"), Color("#ff4d6a"))
-	foe.box.add_child(el.eIntBar)
-	el.eStat = UiKit.flow(5)
-	foe.box.add_child(el.eStat)
+	# enemy plate: intent ring | name, statuses, element chip / HP bar + number
+	var pst := UiKit.window(0, false)
+	pst.content_margin_left = 10
+	pst.content_margin_right = 12
+	pst.content_margin_top = 8
+	pst.content_margin_bottom = 8
+	var foe := UiKit.panel(pst)
+	hud_top.add_child(foe)
+	var fh := UiKit.hbox(10)
+	foe.add_child(fh)
+	el.eRing = IntentRing.new()
+	fh.add_child(el.eRing)
+	var fv := UiKit.vbox(4)
+	fv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	fh.add_child(fv)
+	var nr := UiKit.hbox(6)
+	nr.custom_minimum_size.y = 22
+	fv.add_child(nr)
+	el.eName = UiKit.lbl("", "display", UiKit.NAME, UiKit.INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	nr.add_child(el.eName)
+	el.eStat = UiKit.hbox(4)   # Burn/Soak/Root, Shock immune, Shifts in, Heavy next: as many as fit
+	el.eStat.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nr.add_child(el.eStat)
+	el.eEl = UiKit.hbox(0)
+	el.eEl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	nr.add_child(el.eEl)
+	var hr := UiKit.hbox(8)
+	fv.add_child(hr)
+	el.eHp = Bar.new(false, Color("#ff8a97"), UiKit.FOE, false)
+	el.eHp.custom_minimum_size.y = 10
+	el.eHp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	el.eHp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hr.add_child(el.eHp)
+	el.eHpN = UiKit.lbl("", "700", UiKit.T_S, UiKit.INK, {"align": "right", "valign": VERTICAL_ALIGNMENT_CENTER})
+	el.eHpN.custom_minimum_size.x = 56
+	hr.add_child(el.eHpN)
 
-	# ---- bottom band: my plate, bench, energy, hand
+	# telegraph strip: the heavy banner (attack name, element, seconds left, who resists)
+	var strip := Control.new()
+	strip.custom_minimum_size.y = 32
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_top.add_child(strip)
+	heavy = BannerBg.new()
+	heavy.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	heavy.offset_left = 10
+	heavy.offset_right = -10
+	heavy.visible = false
+	strip.add_child(heavy)
+	var hb := UiKit.hbox(8, BoxContainer.ALIGNMENT_CENTER)
+	hb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	heavy.add_child(hb)
+	el.heavyIcon = UiKit.icon("ember", 18)
+	el.heavyIcon.pivot_offset = Vector2(9, 9)
+	hb.add_child(el.heavyIcon)
+	el.heavyName = UiKit.lbl("", "display", UiKit.D_S, UiKit.INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	hb.add_child(el.heavyName)
+	el.heavySecs = UiKit.lbl("", "700", UiKit.T_M, UiKit.INK, {"align": "right", "valign": VERTICAL_ALIGNMENT_CENTER})
+	el.heavySecs.custom_minimum_size.x = 30   # fixed, so the line doesn't shift as the seconds tick
+	hb.add_child(el.heavySecs)
+	el.heavySub = UiKit.lbl("", "500", UiKit.T_M, UiKit.INK2, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	hb.add_child(el.heavySub)
+
+	# ---- bottom band: the party rail (lead | bench), then the energy crystal beside the hand
 	hud_bottom = UiKit.vbox(8)
 	hud_bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	hud_bottom.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	hud.add_child(hud_bottom)
-	var mine := _plate()
-	hud_bottom.add_child(mine.panel)
-	el.pEl = mine.chip
-	el.pName = mine.name
-	el.pLv = mine.lv
-	el.pHp = Bar.new(false, Color("#a8ffc6"), UiKit.HP)
-	mine.box.add_child(el.pHp)
-	el.pStat = UiKit.flow(5)
-	mine.box.add_child(el.pStat)
-	el.bench = UiKit.hbox(8)
-	hud_bottom.add_child(el.bench)
+	var rst := UiKit.window(0, false)
+	rst.content_margin_left = 10
+	rst.content_margin_right = 10
+	rst.content_margin_top = 8
+	rst.content_margin_bottom = 8
+	var rail := UiKit.panel(rst)
+	hud_bottom.add_child(rail)
+	var rh := UiKit.hbox(10)
+	rail.add_child(rh)
+	el.pPor = UiKit.hbox(0)
+	el.pPor.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rh.add_child(el.pPor)
+	var pv := UiKit.vbox(3)
+	pv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rh.add_child(pv)
+	var pn := UiKit.hbox(6)
+	pv.add_child(pn)
+	el.pName = UiKit.lbl("", "display", UiKit.NAME, UiKit.INK, {"ellipsis": true, "valign": VERTICAL_ALIGNMENT_CENTER})
+	el.pName.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pn.add_child(el.pName)
+	el.pHpN = UiKit.lbl("", "700", UiKit.T_S, UiKit.INK, {"align": "right", "valign": VERTICAL_ALIGNMENT_CENTER})
+	pn.add_child(el.pHpN)
+	el.pHp = Bar.new(false, Color("#a8ffc6"), UiKit.HP, false)
+	el.pHp.custom_minimum_size.y = 10
+	pv.add_child(el.pHp)
+	var pt := UiKit.hbox(6)
+	pt.custom_minimum_size.y = 20
+	pv.add_child(pt)
+	el.pTrait = UiKit.lbl("", "700", UiKit.T_S, UiKit.GOLD_HI, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	pt.add_child(el.pTrait)
+	el.pStat = UiKit.hbox(4)   # the lead's status, discount, reflect, next Strike, matchup: as many as fit
+	el.pStat.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pt.add_child(el.pStat)
+	el.railSep = ColorRect.new()
+	el.railSep.color = UiKit.HAIR
+	el.railSep.custom_minimum_size = Vector2(1, 44)
+	el.railSep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	el.railSep.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rh.add_child(el.railSep)
+	el.bench = UiKit.hbox(6)
+	el.bench.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rh.add_child(el.bench)
 
-	var energy := UiKit.hbox(10)
-	hud_bottom.add_child(energy)
-	var sg := UiKit.hbox(3)
-	sg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sg.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	energy.add_child(sg)
-	for i in Data.BAL.energy_max:
-		var s := Control.new()
-		s.custom_minimum_size.y = 12
-		s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var bgs := RRect.new({"radius": 3.0, "border_w": 1.0, "border_c": Color(170 / 255.0, 186 / 255.0, 1, 0.12)}).solid(Color(0, 0, 0, 0.5))
-		var f := RRect.new({"radius": 3.0, "c0": Color("#e3d6ff"), "c1": PURPLE_SEG, "angle": 180.0})
-		s.add_child(bgs)
-		s.add_child(f)
-		s.resized.connect(func(): bgs.size = s.size; f.size.y = s.size.y)
-		s.set_meta("fill", f)
-		sg.add_child(s)
-		segs.append(s)
-	var en := UiKit.hbox(0)
-	en.custom_minimum_size.x = 42
-	en.alignment = BoxContainer.ALIGNMENT_END
-	el.enN = UiKit.lbl("3", "display", 22, Color("#d9ccff"))
-	el.enMax = UiKit.lbl("/%d" % Data.BAL.energy_max, "700", 11, UiKit.MUTE, {"valign": VERTICAL_ALIGNMENT_BOTTOM})
-	el.enMax.size_flags_vertical = Control.SIZE_SHRINK_END
-	en.add_child(el.enN)
-	en.add_child(el.enMax)
-	energy.add_child(en)
-
+	var hrow := UiKit.hbox(2)
+	hud_bottom.add_child(hrow)
+	el.energy = Crystal.new()
+	hrow.add_child(el.energy)
 	hand = Control.new()
 	hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hand.resized.connect(_hand_resized)
-	hud_bottom.add_child(hand)
+	hrow.add_child(hand)
+	var tail := Control.new()   # keeps the fanned, tilted outer card (and its neighbour's nudge) on screen
+	tail.custom_minimum_size.x = 8
+	tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hrow.add_child(tail)
 	for i in Data.BAL.hand:
 		var b := HandSlot.new(i)
 		b.gui_input.connect(_slot_input.bind(i))
@@ -242,53 +307,18 @@ func _build_hud() -> void:
 	preview.visible = false
 	hud.add_child(preview)
 
-	# ---- pinned over the world: heavy telegraph and chain counter (outside #hud in TS)
-	heavy = UiKit.vbox(2)
-	heavy.alignment = BoxContainer.ALIGNMENT_CENTER
-	heavy.size = Vector2(160, 0)
-	heavy.visible = false
-	var hv_icon := Box.new(Vector2(44, 44))
-	el.heavyGlow = Box.fill(RRect.new({"radius": 999.0, "mode": "radial", "rc": Vector2(0.5, 0.5), "c0": Color(1, 1, 1, 0.5), "c1": Color(1, 1, 1, 0)}))
-	el.heavyGlow.set_meta("fill", true)
-	hv_icon.add_child(el.heavyGlow)
-	el.heavyIcon = UiKit.icon("ember", 44)
-	hv_icon.add_child(el.heavyIcon)
-	hv_icon.pivot_offset = Vector2(22, 22)
-	el.heavyPulse = hv_icon
-	heavy.add_child(hv_icon)
-	el.heavyName = UiKit.lbl("", "display", 17, Color.WHITE, {"align": "center", "shadow": Color.BLACK, "shadow_off": Vector2(0, 2), "outline": 6})
-	heavy.add_child(el.heavyName)
-	root.add_child(heavy)
-
-	chain = UiKit.vbox(2)
+	# ---- pinned over the world: the chain counter beside the lead (outside #hud in TS)
+	chain = UiKit.vbox(0)
 	chain.alignment = BoxContainer.ALIGNMENT_CENTER
-	chain.size = Vector2(60, 0)
+	chain.size = Vector2(64, 0)
 	chain.visible = false
-	el.chainN = UiKit.lbl("", "display", 26, UiKit.GOLD, {"align": "center", "shadow": Color.BLACK, "shadow_off": Vector2(0, 2),
-		"outline": 5, "outline_c": Color(1, 207 / 255.0, 107 / 255.0, 0.25), "lh": -6})
+	el.chainN = UiKit.lbl("", "display", UiKit.D_M, UiKit.GOLD_HI, {"align": "center", "shadow": Color.BLACK, "shadow_off": Vector2(0, 2),
+		"outline": 5, "outline_c": Color(0.04, 0.06, 0.14, 0.75), "lh": -8})
 	chain.add_child(el.chainN)
-	el.chainS = UiKit.lbl("", "800", 10, UiKit.GOLD, {"align": "center", "ls": 0.08, "shadow": Color.BLACK, "shadow_off": Vector2(0, 2), "lh": -6})
+	el.chainS = UiKit.lbl("", "700", UiKit.T_S, UiKit.GOLD_HI, {"align": "center", "shadow": Color.BLACK, "shadow_off": Vector2(0, 1),
+		"outline": 4, "outline_c": Color(0.04, 0.06, 0.14, 0.75), "lh": -6})
 	chain.add_child(el.chainS)
 	root.add_child(chain)
-
-const PURPLE_SEG := Color("#9b7bff")
-
-## A .plate: panel with a prow (element chip, name, level line) and a body column.
-func _plate() -> Dictionary:
-	var p := UiKit.panel(UiKit.flat(UiKit.PANEL, 16, 1, UiKit.LINE, Vector4(12, 9, 12, 10)))
-	var box := UiKit.vbox(6)
-	p.add_child(box)
-	var row := UiKit.hbox(8)
-	box.add_child(row)
-	var chip := UiKit.hbox(0)
-	row.add_child(chip)
-	var name := UiKit.lbl("", "display", 19, UiKit.INK, {"ellipsis": true})
-	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(name)
-	var lv := UiKit.hbox(0)
-	lv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(lv)
-	return {"panel": p, "box": box, "chip": chip, "name": name, "lv": lv}
 
 func paint_mute() -> void:
 	el.muteIcon.texture = Glyphs.tex("mute" if Sfx.is_muted() else "sound")
@@ -657,71 +687,146 @@ func _hand_up(pos: Vector2, use_handlers: bool) -> void:
 	_sel = -1
 	_layout_hand()   # back into the fan
 
-# ================================================================== plates
+# ================================================================== plates and the party rail
 
-func _chip_into(holder: HBoxContainer, el_key) -> void:
-	UiKit.clear(holder)
-	holder.add_child(UiKit.elchip(el_key, Data.ELEM[el_key].name))
+const BENCH := 56.0   # bench portrait diameter (the HP ring); the cell adds 2px each side for the guard glow
 
 func render_player_plate() -> void:
 	var c = S.act()
 	if c == null:
 		return
-	_chip_into(el.pEl, c.el)
+	var k := "%s|%s|%s" % [c.uid, c.key, c.el]
+	if el.pPor.get_meta("k", "") != k:
+		el.pPor.set_meta("k", k)
+		UiKit.clear(el.pPor)
+		el.pPor.add_child(UiKit.face_por(c.key, c.el, 44))
 	el.pName.text = c.name
-	UiKit.clear(el.pLv)
-	var role = Data.SPECIES[c.key].get("role", "")
-	el.pLv.add_child(UiKit.lbl(str(role if role else ""), "700", 12, UiKit.MUTE))
-	if c.trait_key:
-		el.pLv.add_child(UiKit.lbl(" · ", "700", 12, UiKit.MUTE))
-		el.pLv.add_child(UiKit.lbl(Data.TRAITS[c.trait_key].name, "700", 12, UiKit.GOLD))
+	el.pTrait.text = Data.TRAITS[c.trait_key].name if c.trait_key else ""
 	el.pHp.set_values(c.hp / float(c.max_hp), clampf(c.shield / float(c.max_hp), 0, 1), true)
+	_last_stat = ""
 
 func render_enemy_plate() -> void:
 	var e = S.enemy
 	if e == null:
 		return
-	_chip_into(el.eEl, e.el)
 	el.eName.text = e.name
-	UiKit.clear(el.eLv)
+	UiKit.clear(el.eEl)
 	var kind: String = {"boss": "Boss", "warden": "Warden", "alpha": "Alpha"}.get(e.kind, "Wild")
-	el.eLv.add_child(UiKit.lbl(kind, "700", 12, UiKit.MUTE))
-	el.floorT.text = str(S.floor)
+	el.eEl.add_child(UiKit.chip(str(e.el), UiKit.el_css(e.el), "%s · %s" % [kind, Data.ELEM[e.el].name]))
+	el.floorT.text = "%d/8" % S.floor
+	_last_stat = ""
 
+## The bench half of the party rail: one round portrait per benched creature (tap to swap).
 func render_bench() -> void:
 	UiKit.clear(el.bench)
+	var n := 0
 	for c in S.team():
 		if c.uid == S.active:
 			continue
-		var b := _bmon(c, "", true)
-		el.bench.add_child(b)
+		el.bench.add_child(_bench_cell(c))
+		n += 1
+	el.railSep.visible = n > 0
 
-## .bmon: element orb, name, mini HP bar; in the bench also the swap cooldown wedge and the guard/advantage marker.
-func _bmon(c, extra := "", interactive := false) -> PanelContainer:
+## A bench portrait: the creature's face inside an HP ring, the swap cooldown as a dark wedge with the
+## seconds in the middle, a shield marker (top left) while it resists the incoming heavy, and the
+## count of waiting hand cards it would unlock as an element chip (bottom right). All inside its box.
+func _bench_cell(c) -> Box:
+	var cell := Box.new(Vector2(BENCH + 4, BENCH + 4))
+	cell.mouse_filter = Control.MOUSE_FILTER_STOP
+	var ring := HpRing.new()
+	cell.add_child(Box.fill(ring))
+	var por := UiKit.face_por(c.key, c.el, BENCH - 8)
+	cell.add_child(por)
+	var cd := Pie.new()
+	cd.custom_minimum_size = Vector2(BENCH - 8, BENCH - 8)
+	cell.add_child(cd)
+	var secs := UiKit.lbl("", "display", UiKit.D_S, Color.WHITE, {"align": "center", "valign": VERTICAL_ALIGNMENT_CENTER,
+		"outline": 4, "outline_c": Color(0, 0, 0, 0.6)})
+	secs.visible = false
+	cell.add_child(secs)
+	var guard := Box.new(Vector2(20, 20))
+	guard.add_child(Box.fill(RRect.new({"radius": 999.0, "border_w": 1.5, "border_c": UiKit.GUARD}).solid(Color("#0b2635"))))
+	guard.add_child(UiKit.icon("shield", 12, UiKit.GUARD))
+	guard.visible = false
+	cell.add_child(Box.at(guard, "tl"))
+	var pips := Box.new()
+	cell.add_child(Box.at(pips, "br"))
+	cell.set_meta("uid", c.uid)
+	cell.set_meta("col", UiKit.el_css(c.el))
+	cell.set_meta("ring", ring)
+	cell.set_meta("por", por)
+	cell.set_meta("cd", cd)
+	cell.set_meta("secs", secs)
+	cell.set_meta("guard", guard)
+	cell.set_meta("pips", pips)
+	cell.gui_input.connect(func(e: InputEvent):
+		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			cell.accept_event()
+			if _h.has("swap"):
+				_h.swap.call(int(cell.get_meta("uid"))))
+	_bench_state(cell, c, false)
+	return cell
+
+func _bench_state(cell: Box, c, guard: bool) -> void:
+	var ring: HpRing = cell.get_meta("ring")
+	ring.hp = clampf(c.hp / float(c.max_hp), 0, 1) if c.alive else 0.0
+	ring.guard = guard
+	var k := "%s%s" % [c.alive, guard]
+	if cell.get_meta("state", "") == k:
+		return
+	cell.set_meta("state", k)
+	UiKit.set_face_ko(cell.get_meta("por"), not c.alive)
+	cell.get_meta("guard").visible = guard
+
+## Swap cooldown on a bench portrait: the wedge sweeps away, the seconds count down, and it pops when ready.
+func _bench_cd(b: Box, alive: bool) -> void:
+	var cd: bool = S.swap_cd > 0 and alive
+	b.get_meta("cd").p = clampf(S.swap_cd / Data.BAL.swap_cd, 0, 1) if cd else 0.0
+	var secs: Label = b.get_meta("secs")
+	secs.visible = cd
+	if cd:
+		secs.text = str(ceili(S.swap_cd))
+	if b.get_meta("cooling", false) and not cd and alive and S.mode == "battle":
+		b.pivot_offset = b.size / 2.0
+		Fx.kf(b, 0.3, [[0.0, {"s": 1.0}], [0.4, {"s": 1.14}], [1.0, {"s": 1.0}]], {"ease": [0.2, 1.4, 0.4, 1.0]})
+		Sfx.tick()
+	b.set_meta("cooling", cd)
+
+## Hand cards that are waiting for a swap and that `c` (a bench creature) could play once it leads.
+func _bench_playable(c) -> int:
+	if not c.alive:
+		return 0
+	var n := 0
+	for r in S.hand:
+		if r != null and S.card_benched(r) and S.card_el(r) == c.el:
+			n += 1
+	return n
+
+## .bmon for the map and end-of-run party rows: element orb, name, mini HP bar.
+func _bmon(c, extra := "") -> PanelContainer:
 	var col := UiKit.el_css(c.el)
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", UiKit.flat(UiKit.PANEL, 14, 1, UiKit.LINE))
 	p.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
-	p.mouse_filter = Control.MOUSE_FILTER_STOP if interactive else Control.MOUSE_FILTER_IGNORE
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	var bx := Box.new()
 	p.add_child(bx)
 	var m := MarginContainer.new()
 	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# the map/end rows fit three chips in a sheet, so their chips are tighter than the bench's
-	var pad := [6, 6, 20, 6] if interactive else [5, 5, 7, 5]   # bench: a right column for the unlock pips
+	# the map/end rows fit three chips in a sheet, so the chips are tight
+	var pad := [5, 5, 7, 5]
 	for i in 4:
 		m.add_theme_constant_override("margin_" + ["left", "top", "right", "bottom"][i], pad[i])
 	bx.add_child(Box.fill(m))
-	var h := UiKit.hbox(7 if interactive else 5)
+	var h := UiKit.hbox(5)
 	m.add_child(h)
-	h.add_child(UiKit.orb(col, 30, str(c.el), 14) if interactive else UiKit.orb(col, 24, str(c.el), 12))
+	h.add_child(UiKit.orb(col, 24, str(c.el), 12))
 	var t := UiKit.vbox(3)
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(t)
-	var nm := UiKit.lbl(c.name + extra, "display", 13 if interactive else 12, UiKit.INK, {"lh": -4} if interactive else {"ellipsis": true, "lh": -4})
-	t.add_child(nm)
+	t.add_child(UiKit.lbl(c.name + extra, "display", 12, UiKit.INK, {"ellipsis": true, "lh": -4}))
 	var mini := Control.new()
 	mini.custom_minimum_size = Vector2(56, 5)
 	mini.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -737,77 +842,17 @@ func _bmon(c, extra := "", interactive := false) -> PanelContainer:
 	mf.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mini.add_child(mf)
 	t.add_child(mini)
-	p.set_meta("uid", c.uid)
-	p.set_meta("mini", mf)
-	p.set_meta("col", col)
-	if interactive:
-		var cd := Pie.new()
-		bx.add_child(Box.fill(cd))
-		p.set_meta("cd", cd)
-		var secs := UiKit.lbl("", "display", 18, Color.WHITE, {"align": "center", "outline": 4, "outline_c": Color(0, 0, 0, 0.6)})
-		secs.visible = false
-		var over := Box.new(Vector2(30, 30))   # the countdown sits on the element orb
-		over.add_child(secs)
-		bx.add_child(Box.at(over, "tl", Vector2(6, 6)))
-		p.set_meta("secs", secs)
-		var adv := Box.new()
-		bx.add_child(Box.at(adv, "tr", Vector2(5, 3)))
-		p.set_meta("adv", adv)
-		var pips := Box.new()   # how many hand cards this creature would unlock if swapped in
-		bx.add_child(Box.at(pips, "br", Vector2(4, 3)))
-		p.set_meta("pips", pips)
-		p.gui_input.connect(func(e: InputEvent):
-			if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
-				p.accept_event()
-				if _h.has("swap"):
-					_h.swap.call(int(p.get_meta("uid"))))
-	_bmon_state(p, c.alive, false)
+	p.modulate = Color.WHITE if c.alive else Color(0.5, 0.5, 0.52)
 	return p
-
-func _bmon_state(p: PanelContainer, alive: bool, guard: bool) -> void:
-	var k := "%s%s" % [alive, guard]
-	if p.get_meta("state", "") == k:
-		return
-	p.set_meta("state", k)
-	var col: Color = p.get_meta("col")
-	var st := UiKit.flat(UiKit.PANEL, 14, 1, Color.WHITE if guard else UiKit.LINE)
-	if guard:
-		UiKit.glow_box(st, UiKit.alpha(col, 0.7), 10)
-	p.add_theme_stylebox_override("panel", st)
-	p.modulate = Color.WHITE if alive else Color(0.5, 0.5, 0.52)
-
-## Swap cooldown on a bench portrait: the wedge sweeps away, the seconds count down, and it pops when ready.
-func _bench_cd(b: PanelContainer, alive: bool) -> void:
-	var cd: bool = S.swap_cd > 0 and alive
-	b.get_meta("cd").p = clampf(S.swap_cd / Data.BAL.swap_cd, 0, 1) if cd else 0.0
-	var secs: Label = b.get_meta("secs")
-	secs.visible = cd
-	if cd:
-		secs.text = str(ceili(S.swap_cd))
-	if b.get_meta("cooling", false) and not cd and alive and S.mode == "battle":
-		b.pivot_offset = b.size / 2.0
-		Fx.kf(b, 0.3, [[0.0, {"s": 1.0}], [0.4, {"s": 1.12}], [1.0, {"s": 1.0}]], {"ease": [0.2, 1.4, 0.4, 1.0]})
-		Sfx.tick()
-	b.set_meta("cooling", cd)
-
-## Hand cards that are waiting for a swap and that `c` (a bench creature) could play once it leads.
-func _bench_playable(c) -> int:
-	if not c.alive:
-		return 0
-	var n := 0
-	for r in S.hand:
-		if r != null and S.card_benched(r) and S.card_el(r) == c.el:
-			n += 1
-	return n
 
 ## TS monChip: a non-interactive .bmon for the map/end party rows. `lead` puts a gold star on the
 ## orb (not after the name, where it cost the name its last letters).
 func mon_chip(c, lead := false) -> Control:
-	var b := _bmon(c, "", false)
+	var b := _bmon(c, "")
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if lead:
-		var star := UiKit.lbl("★", "800", 11, UiKit.GOLD, {"outline": 4, "outline_c": Color(0, 0, 0, 0.7)})
-		b.get_child(0).add_child(Box.at(star, "tl", Vector2(3, 1)))
+		var star := UiKit.lbl("★", "800", UiKit.T_S, UiKit.GOLD, {"outline": 4, "outline_c": Color(0, 0, 0, 0.7), "lh": -6})
+		b.get_child(0).add_child(Box.at(star, "tl", Vector2(3, 0)))
 	return b
 
 ## TS partyHTML: chips for the lineup (★ marks the lead).
@@ -825,11 +870,40 @@ func _tag_sig(list: Array) -> String:
 		s += t[0] + "#" + t[1].to_html() + ";"
 	return s
 
-func _fill_tags(box: Control, list: Array) -> void:
-	UiKit.clear(box)
+## Status tags in a one-line row: as many as fit `avail` px, in priority order (the row never wraps,
+## so the plate and the rail keep their height and the band doesn't move).
+## `used` = px already taken in the row. Returns the px used after placing.
+func _fit_tags(box: Control, list: Array, avail: float, used := 0.0) -> float:
+	if used == 0.0:
+		UiKit.clear(box)
 	for t in list:
+		var need := _text_w(t[0]) + 12.0 + (4.0 if used > 0.0 else 0.0)
+		if used + need > avail:
+			break
 		box.add_child(UiKit.tag(t[0], t[1]))
-	box.visible = not list.is_empty()
+		used += need
+	return used
+
+func _text_w(text: String) -> float:
+	return ceilf(UiKit.font("700").get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, UiKit.T_S).x)
+
+## The rail's last line: the lead's live tags first, then its Trait if there's room, then the matchup.
+func _fit_lead_line(hi: Array, lo: Array, avail: float) -> void:
+	var tw: float = _text_w(el.pTrait.text) + 6.0 if el.pTrait.text != "" else 0.0
+	var used := _fit_tags(el.pStat, hi, avail - tw)
+	var all_hi: bool = el.pStat.get_child_count() == hi.size()
+	if not all_hi:
+		used = _fit_tags(el.pStat, hi, avail)
+	el.pTrait.visible = all_hi and el.pTrait.text != ""
+	if all_hi:
+		_fit_tags(el.pStat, lo, avail - tw, maxf(used, 0.001))
+
+## The element that resists attacks of element `el` (the one that beats it).
+func _resister(el) -> String:
+	for k in Data.BEATS:
+		if Data.BEATS[k] == el:
+			return k
+	return ""
 
 func sync_hud() -> void:
 	var e = S.enemy
@@ -838,46 +912,44 @@ func sync_hud() -> void:
 		return
 	var battle: bool = S.mode == "battle"
 	el.eHp.set_values(e.hp / float(e.max))
-	el.eHp.txt.text = "%d / %d" % [ceili(e.hp), e.max]
+	el.eHpN.text = "%d/%d" % [ceili(e.hp), e.max]
 	var w: float = e.t / e.windup if e.windup > 0 else 0.0
 	var heavy_now: bool = S.is_heavy(e)
 	var hv = S.heavy_of(e)
 	var perfect: bool = battle and e.alive and S.in_perfect_window(e)
-	_paint_intent(clampf(w, 0, 1), w > 0.75, heavy_now, perfect, UiKit.el_css(hv.el if heavy_now else e.el))
+	var ring_el = hv.el if heavy_now else e.el
+	el.eRing.paint(clampf(w, 0, 1), w > 0.75, heavy_now, perfect, UiKit.el_css(ring_el), str(ring_el))
 
-	# heavy telegraph over the enemy
-	var show_hv: bool = battle and e.alive and heavy_now
-	heavy.visible = show_hv and S.em != null
-	if heavy.visible:
+	# heavy wind-up: the banner in the telegraph strip under the plate
+	var show_hv: bool = battle and e.alive and heavy_now and S.em != null
+	heavy.visible = show_hv
+	if show_hv:
 		var k := str(hv.name) + str(hv.el)
+		var c := UiKit.el_css(hv.el)
 		if _heavy_k != k:
 			_heavy_k = k
-			var c := UiKit.el_css(hv.el)
+			var res := _resister(hv.el)
 			el.heavyIcon.texture = Glyphs.tex(str(hv.el))
 			el.heavyName.text = hv.name
-			el.heavyName.add_theme_color_override("font_outline_color", UiKit.alpha(c, 0.45))
-			el.heavyGlow.look({"c0": UiKit.alpha(c, 0.55), "c1": UiKit.alpha(c, 0.0)})
-		var now: bool = S.in_perfect_window(e)
-		el.heavyIcon.self_modulate = Color.WHITE if now else UiKit.el_css(hv.el)
-		if now != _heavy_now or not Fx.animating(el.heavyPulse):
-			_heavy_now = now
-			Fx.kf(el.heavyPulse, 0.12 if now else 0.5, [[0.0, {"s": 1.0}], [1.0, {"s": 1.18}]], {"loop": "alternate", "ease": [0.42, 0, 0.58, 1]})
-		var hd: Vector2 = S.em.head()
-		var U: float = Layout.U
-		heavy.size = Vector2(160, heavy.get_combined_minimum_size().y)
-		heavy.position = (Vector2(hd.x - U * 2.3, hd.y - U * 0.2) - Vector2(80, 0)).round()
+			el.heavySub.text = "· %s resists" % Data.ELEM[res].name if res != "" else ""
+			heavy.col = c
+		el.heavySecs.text = "%.1fs" % maxf(0.0, e.windup - e.t)
+		if perfect != _heavy_now or not Fx.animating(el.heavyIcon):
+			_heavy_now = perfect
+			heavy.hot = perfect
+			el.heavyIcon.self_modulate = Color.WHITE if perfect else c
+			Fx.kf(el.heavyIcon, 0.12 if perfect else 0.5, [[0.0, {"s": 1.0}], [1.0, {"s": 1.25}]], {"loop": "alternate", "ease": [0.42, 0, 0.58, 1]})
+	elif _heavy_k != "":
+		_heavy_k = ""
+		Fx.stop(el.heavyIcon)
+		el.heavyIcon.scale = Vector2.ONE
 
 	var pp: float = me.hp / float(me.max_hp)
 	el.pHp.set_values(pp, clampf(me.shield / float(me.max_hp), 0, 1))
-	el.pHp.txt.text = "%d / %d" % [ceili(me.hp), me.max_hp] + ("  +%d" % floori(me.shield) if me.shield >= 1 else "")
+	el.pHpN.text = "%d/%d" % [ceili(me.hp), me.max_hp] + (" +%d" % floori(me.shield) if me.shield >= 1 else "")
 
 	var en: float = S.energy
-	for i in segs.size():
-		var f := clampf(en - i, 0, 1)
-		var fr: RRect = segs[i].get_meta("fill")
-		fr.size.x = segs[i].size.x * f
-		fr.visible = f > 0.001
-	el.enN.text = str(floori(en))
+	el.energy.set_energy(en, Data.BAL.energy_max)
 	for i in slots.size():
 		var r = S.hand[i] if i < S.hand.size() else null
 		if r == null:
@@ -892,10 +964,10 @@ func sync_hud() -> void:
 	var ps: Array = []
 	if e.status:
 		es.append(["%s %ss" % [Data.STATUS_NAME[e.status.k], "%.0f" % e.status.t], UiKit.el_css(Data.STATUS_EL[e.status.k])])
-	if e.shock_cd > 0:
-		es.append(["Shock immune %ds" % ceili(e.shock_cd), UiKit.MUTE])
 	if e.kind == "boss":
 		es.append(["Shifts in %ds" % ceili(e.shift_t), UiKit.GOLD])
+	if e.shock_cd > 0:
+		es.append(["Shock immune %ds" % ceili(e.shock_cd), UiKit.MUTE])
 	if not heavy_now and (e.count + 2) % int(Data.BAL.heavy_every) == 0:
 		es.append(["Heavy next", UiKit.FOE])
 	if me.status:
@@ -906,16 +978,19 @@ func sync_hud() -> void:
 		ps.append(["Reflect %d%%" % roundi(me.reflect * 100), UiKit.SHIELD])
 	if me.next_strike > 1:
 		ps.append(["Strike ×%s" % _num(me.next_strike), UiKit.GOLD])
+	var lo: Array = []   # the matchup ranks below the Trait (the cards and the bench chips show it too)
 	var a: float = Data.adv(me.el, e.el)
 	if a > 1:
-		ps.append(["Strong vs " + Data.ELEM[e.el].name, UiKit.GOLD])
+		lo.append(["Strong vs " + Data.ELEM[e.el].name, UiKit.GOLD])
 	elif a < 1:
-		ps.append(["Weak vs " + Data.ELEM[e.el].name, Color("#b8bdd6")])
-	var st := _tag_sig(es) + "|" + _tag_sig(ps)
+		lo.append(["Weak vs " + Data.ELEM[e.el].name, Color("#b8bdd6")])
+	var ew: float = floorf(el.eStat.size.x)
+	var pw: float = floorf(el.pStat.get_parent().size.x)
+	var st: String = _tag_sig(es) + "|" + _tag_sig(ps) + _tag_sig(lo) + el.pTrait.text + "|%d|%d" % [ew, pw]
 	if st != _last_stat:
 		_last_stat = st
-		_fill_tags(el.eStat, es)
-		_fill_tags(el.pStat, ps)
+		_fit_tags(el.eStat, es, ew)
+		_fit_lead_line(ps, lo, pw)
 
 	for b in el.bench.get_children():
 		if not b.has_meta("uid"):
@@ -924,27 +999,17 @@ func sync_hud() -> void:
 		if c == null:
 			continue
 		_bench_cd(b, c.alive)
-		b.get_meta("mini").size.x = 56.0 * clampf(c.hp / float(c.max_hp), 0, 1)
-		var guard: bool = c.alive and heavy_now and Data.resists(c.el, hv.el)
-		_bmon_state(b, c.alive, guard and battle)
-		var adv: Box = b.get_meta("adv")
-		var ak := "g" if guard else ("a" if (c.alive and Data.adv(c.el, e.el) > 1) else "")
-		if adv.get_meta("k", "-") != ak:
-			adv.set_meta("k", ak)
-			UiKit.clear(adv)
-			if ak == "g":
-				adv.add_child(UiKit.icon("shield", 12, Color.WHITE))
-			elif ak == "a":
-				adv.add_child(UiKit.lbl("▲", "800", 9, UiKit.GOLD))
+		_bench_state(b, c, battle and c.alive and heavy_now and Data.resists(c.el, hv.el))
 		var pips: Box = b.get_meta("pips")
 		var n := _bench_playable(c) if battle else 0
 		if pips.get_meta("n", -1) != n:
 			pips.set_meta("n", n)
 			UiKit.clear(pips)
-			if n > 0:   # a tiny card in its element colour with the count
+			if n > 0:   # an element-coloured chip with the count, inset in the portrait's corner
 				var col: Color = b.get_meta("col")
-				var chip := UiKit.panel(UiKit.flat(col, 3, 1, UiKit.mix(col, Color.WHITE, 0.5), Vector4(4, 1, 4, 0)))
-				chip.add_child(UiKit.lbl(str(n), "800", 9, Color("#1b1035"), {"align": "center", "lh": -6}))
+				var chip := UiKit.panel(UiKit.flat(col, 10, 1.5, UiKit.NAVY2, Vector4(5, 0, 5, 0)))
+				chip.custom_minimum_size = Vector2(20, 20)
+				chip.add_child(UiKit.lbl(str(n), "800", UiKit.T_S, UiKit.NAVY2, {"align": "center", "valign": VERTICAL_ALIGNMENT_CENTER, "lh": -6}))
 				pips.add_child(chip)
 
 	# chain counter beside the lead
@@ -969,41 +1034,136 @@ func sync_hud() -> void:
 				chain.modulate.a = 1.0
 		var p: Vector2 = Layout.ppos()
 		var U: float = Layout.U
-		chain.size = Vector2(60, chain.get_combined_minimum_size().y)
+		chain.size = Vector2(64, chain.get_combined_minimum_size().y)
 		chain.pivot_offset = chain.size / 2.0
-		chain.position = (Vector2(p.x + U * 1.2 - 30, p.y - U * 1.9)).round()
+		chain.position = (Vector2(p.x + U * 1.2 - 32, p.y - U * 1.9)).round()
 	else:
 		_chain_k = ""
 
 func _num(v: float) -> String:
 	return str(int(v)) if is_equal_approx(v, round(v)) else str(snappedf(v, 0.1))
 
-var _int_k := ""
-func _paint_intent(w: float, hot: bool, hv: bool, perfect: bool, c: Color) -> void:
-	var bar: Bar = el.eIntBar
-	bar.set_values(w)
-	var k := "%s%s%s%s" % [hot, hv, perfect, c.to_html()]
-	if k == _int_k:
-		return
-	_int_k = k
-	bar.custom_minimum_size.y = 9 if hv else 6
-	var f := {"c0": Color("#ff9d5c"), "c1": Color("#ff4d6a")}
-	var bgl := {"ring_w": 0.0, "glow": 0.0}
-	if hot:
-		f = {"c0": Color("#ffdd66"), "c1": Color("#ff3355")}
-		bgl = {"ring_w": 0.0, "glow": 10.0, "glow_c": Color(1, 0.2, 0.333, 0.6)}
-	if hv:
-		f = {"c0": UiKit.mix(c, Color.WHITE, 0.6), "c1": c}
-	if perfect:
-		f = {"c0": Color.WHITE, "c1": Color.WHITE}
-		bgl = {"ring_w": 2.0, "ring_c": Color.WHITE, "glow": 16.0, "glow_c": UiKit.alpha(c, 0.8)}
-	bar.fill.look(f)
-	bar.bg.look(bgl)
+# ================================================================== HUD pieces
 
-# ================================================================== swap cooldown wedge
+## The enemy's intent ring (replaces the wind-up bar): a dark track that fills clockwise from 12 o'clock
+## over the wind-up, around the element glyph. Hot (last quarter) glows; a heavy draws thicker in the
+## heavy's element; the Perfect Swap window turns it white.
+class IntentRing extends Control:
+	const SZ := 44.0
+	var w := 0.0
+	var col := Color.WHITE
+	var hot := false
+	var hv := false
+	var perfect := false
+	var icon: TextureRect
+	var _g := ""
 
+	func _init() -> void:
+		custom_minimum_size = Vector2(SZ, SZ)
+		mouse_filter = MOUSE_FILTER_IGNORE
+		size_flags_vertical = SIZE_SHRINK_CENTER
+		icon = UiKit.icon("ember", 18)
+		icon.position = Vector2.ONE * (SZ - 18.0) / 2.0
+		icon.size = Vector2(18, 18)
+		add_child(icon)
+
+	func paint(nw: float, nhot: bool, nhv: bool, nperf: bool, ncol: Color, glyph: String) -> void:
+		if glyph != _g:
+			_g = glyph
+			icon.texture = Glyphs.tex(glyph)
+		icon.self_modulate = Color.WHITE if nperf else ncol
+		if absf(nw - w) < 0.002 and nhot == hot and nhv == hv and nperf == perfect and ncol == col:
+			return
+		w = nw
+		hot = nhot
+		hv = nhv
+		perfect = nperf
+		col = ncol
+		queue_redraw()
+
+	func _draw() -> void:
+		var c := Vector2.ONE * SZ / 2.0
+		var fc := Color.WHITE if perfect else (UiKit.mix(col, Color.WHITE, 0.75) if hot else col)
+		if perfect or hot:
+			draw_circle(c, SZ / 2.0, Color(col, 0.4 if perfect else 0.22), true, -1.0, true)
+		var wd := 5.0 if hv else 4.0
+		draw_arc(c, 18.0, 0.0, TAU, 64, Color(0, 0, 0, 0.6), wd, true)
+		if w > 0.001:
+			draw_arc(c, 18.0, -PI / 2.0, -PI / 2.0 + TAU * w, maxi(4, int(64 * w)), fc, wd, true)
+		draw_circle(c, 15.5, UiKit.NAVY2, true, -1.0, true)
+
+## The heavy banner's backing: navy glass that fades out at both ends, with element-coloured rules
+## along the top and bottom (white during the Perfect Swap window).
+class BannerBg extends Control:
+	var col := Color.WHITE:
+		set(v):
+			col = v
+			queue_redraw()
+	var hot := false:
+		set(v):
+			hot = v
+			queue_redraw()
+
+	func _init() -> void:
+		mouse_filter = MOUSE_FILTER_IGNORE
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			queue_redraw()
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		var f := minf(48.0, w * 0.14)
+		var glass := Color(18 / 255.0, 26 / 255.0, 51 / 255.0, 0.95)
+		if hot:
+			glass = UiKit.mix(glass, col, 0.7)
+			glass.a = 0.95
+		var line := Color.WHITE if hot else col
+		var stops := [[0.0, 0.0], [f, 1.0], [w - f, 1.0], [w, 0.0]]
+		for i in 3:
+			var x0: float = stops[i][0]
+			var x1: float = stops[i + 1][0]
+			var a0: float = stops[i][1]
+			var a1: float = stops[i + 1][1]
+			draw_polygon(PackedVector2Array([Vector2(x0, 0), Vector2(x1, 0), Vector2(x1, h), Vector2(x0, h)]),
+				PackedColorArray([Color(glass, glass.a * a0), Color(glass, glass.a * a1), Color(glass, glass.a * a1), Color(glass, glass.a * a0)]))
+			for y in [0.0, h - 1.0]:
+				draw_polygon(PackedVector2Array([Vector2(x0, y), Vector2(x1, y), Vector2(x1, y + 1.0), Vector2(x0, y + 1.0)]),
+					PackedColorArray([Color(line, a0), Color(line, a1), Color(line, a1), Color(line, a0)]))
+
+## A bench portrait's HP ring (3px, clockwise from 12 o'clock; red under 30%), with a cyan glow behind
+## the portrait while it resists the incoming heavy.
+class HpRing extends Control:
+	var hp := 1.0:
+		set(v):
+			if absf(v - hp) > 0.002:
+				hp = v
+				queue_redraw()
+	var guard := false:
+		set(v):
+			if v != guard:
+				guard = v
+				queue_redraw()
+
+	func _init() -> void:
+		mouse_filter = MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var c := size / 2.0
+		var r := minf(size.x, size.y) / 2.0 - 3.5   # the 56px ring inside the 60px cell
+		if guard:
+			draw_circle(c, minf(size.x, size.y) / 2.0, Color(UiKit.GUARD, 0.45), true, -1.0, true)
+		draw_arc(c, r, 0.0, TAU, 64, Color(0.02, 0.03, 0.08, 0.85), 3.0, true)
+		if hp > 0.001:
+			var hc := UiKit.FOE if hp < 0.3 else UiKit.HP
+			draw_arc(c, r, -PI / 2.0, -PI / 2.0 + TAU * hp, maxi(4, int(64 * hp)), hc, 3.0, true)
+		if guard:
+			draw_arc(c, r + 2.0, 0.0, TAU, 64, UiKit.GUARD, 1.0, true)
+
+## The swap cooldown wedge: conic-gradient(rgba(10,15,31,.72) p, transparent 0), a clockwise circular
+## sector from 12 o'clock over the portrait.
 class Pie extends Control:
-	## conic-gradient(rgba(10,15,31,.72) p, transparent 0): a clockwise wedge from 12 o'clock.
 	var p := 0.0:
 		set(v):
 			if absf(v - p) > 0.001:
@@ -1015,10 +1175,10 @@ class Pie extends Control:
 		if p <= 0.001:
 			return
 		var c := size / 2.0
-		var r := size.length()
+		var r := minf(size.x, size.y) / 2.0
 		var pts := PackedVector2Array([c])
-		var n := maxi(2, int(48 * p))
+		var n := maxi(2, int(64 * p))
 		for k in n + 1:
 			var a := -PI / 2.0 + TAU * p * k / n
 			pts.append(c + Vector2(cos(a), sin(a)) * r)
-		draw_colored_polygon(pts, Color(10 / 255.0, 15 / 255.0, 31 / 255.0, 0.72))
+		draw_colored_polygon(pts, Color(5 / 255.0, 8 / 255.0, 18 / 255.0, 0.72))

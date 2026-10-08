@@ -1,7 +1,8 @@
 class_name Bar
 extends Control
-## .bar: HP bar with a ghost trail, a striped shield overlay (right-aligned) and a centred number;
-## or, with `intent = true`, the enemy's wind-up bar (no transitions, hot/heavy/perfect states).
+## .bar: HP bar with a ghost trail, a striped shield overlay (right-aligned) and an optional centred
+## number (`num`; the battle HUD puts its numbers outside the bar instead); or, with `intent = true`,
+## a plain wind-up bar (no transitions). The battle's intent is now the plate's ring (Ui.IntentRing).
 ## Widths ease like the CSS transitions (fill .18s ease-out; ghost .6s ease-out after .25s), in real time.
 
 var intent := false
@@ -21,7 +22,7 @@ var _f_anim := {}
 var _g_anim := {}
 var _s_anim := {}
 
-func _init(is_intent := false, top := Color.WHITE, bot := Color.WHITE) -> void:
+func _init(is_intent := false, top := Color.WHITE, bot := Color.WHITE, num := true) -> void:
 	intent = is_intent
 	mouse_filter = MOUSE_FILTER_IGNORE
 	custom_minimum_size.y = 6 if intent else 16
@@ -35,7 +36,8 @@ func _init(is_intent := false, top := Color.WHITE, bot := Color.WHITE) -> void:
 	if not intent:
 		shf.look({"radius": 7.0, "mode": "stripes", "c0": Color(143 / 255.0, 227 / 255.0, 1, 0.85), "c1": Color(143 / 255.0, 227 / 255.0, 1, 0.55)})
 		add_child(shf)
-		txt = UiKit.lbl("", "800", 11, UiKit.INK, {"align": "center", "shadow": Color(0, 0, 0, 0.9), "shadow_off": Vector2(0, 1),
+	if not intent and num:
+		txt = UiKit.lbl("", "800", UiKit.T_S, UiKit.INK, {"align": "center", "shadow": Color(0, 0, 0, 0.9), "shadow_off": Vector2(0, 1),
 			"shadow_outline": 1, "valign": VERTICAL_ALIGNMENT_CENTER, "lh": -4})
 		add_child(txt)
 	set_process(false)

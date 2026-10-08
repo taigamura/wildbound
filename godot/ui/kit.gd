@@ -85,9 +85,7 @@ static func font(k: String) -> Font:
 	if _fonts.has(k):
 		return _fonts[k]
 	var f: Font
-	if k.begins_with("old-"):   # Baloo 2, for body text below the type scale (see lbl)
-		f = _file("baloo2-%s.woff2" % k.substr(4), "lilita-one-400.woff2")
-	elif k == "display":
+	if k == "display":
 		var px := _file("pixelify-sans.ttf", "lilita-one-400.woff2")
 		px.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED   # keep its pixels on whole px
 		px.hinting = TextServer.HINTING_NONE
@@ -158,10 +156,7 @@ static func lbl(text: String, fk := "500", size := 14, color := INK, o := {}) ->
 	var l := Label.new()
 	l.text = text
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# body text under T_S belongs to pieces not yet redesigned (card faces, battle HUD micro-labels):
-	# it keeps Baloo 2, whose narrow set those layouts were measured with, until they move to 12px+
-	var old := fk != "display" and size < T_S
-	l.add_theme_font_override("font", spaced(("old-" + fk) if old else fk, size, o.get("ls", 0.0)))
+	l.add_theme_font_override("font", spaced(fk, size, o.get("ls", 0.0)))
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
 	if o.get("upper", false):
@@ -190,7 +185,7 @@ static func lbl(text: String, fk := "500", size := 14, color := INK, o := {}) ->
 		l.add_theme_color_override("font_outline_color", o.get("outline_c", Color.BLACK))
 	# `lh` was tuned for Baloo 2's tall line box (1.6 em); Atkinson's is 1.24 em, so body text gets
 	# BODY_LEAD back to land near 1.3-1.5 em. The display face is about as tall as Lilita was.
-	l.add_theme_constant_override("line_spacing", o.get("lh", -3) + (0 if fk == "display" or old else BODY_LEAD))
+	l.add_theme_constant_override("line_spacing", o.get("lh", -3) + (0 if fk == "display" else BODY_LEAD))
 	return l
 
 ## BBCode label for mixed text ([b] = Atkinson Bold). Fits its content height.
@@ -493,3 +488,53 @@ static func glyph_for(c, el) -> String:
 	if c.get("energy", 0):
 		return "spark"
 	return "star"
+
+# ---- battle HUD pieces (UI-QUEUE items 5-6) ----
+const FACE_SHADER := preload("res://ui/por_face.gdshader")
+const CRYSTAL := Color("#57c8ff")       # the cards' crystal blue (energy orb, energy particles)
+const CRYSTAL_HI := Color("#e6fbff")
+const CRYSTAL_LO := Color("#2178c2")
+const GUARD := Color("#9fe8ff")         # "this creature resists the incoming heavy" (shield marker)
+
+## A round creature portrait: the creature's face (its in-game sprite, recoloured as on stage) on a
+## lit element orb, inside a dark gap and a ring (`ring`; default a light tint of the element).
+## Everything is drawn inside `sz`. `set_face_ko(box, true)` greys it out.
+static func face_por(key: String, el: String, sz: float, ring := Color(0, 0, 0, 0)) -> Box:
+	var c := el_css(el)
+	var b := Box.new(Vector2(sz, sz))
+	var rim := RRect.new({"radius": 999.0}).solid(ring if ring.a > 0.0 else mix(c, Color.WHITE, 0.75))
+	b.add_child(Box.fill(rim))
+	var gap := RRect.new({"radius": 999.0}).solid(NAVY2)
+	gap.custom_minimum_size = Vector2(sz - 3, sz - 3)
+	b.add_child(gap)
+	var o := RRect.new({"radius": 999.0, "mode": "radial", "rc": Vector2(0.4, 0.35),
+		"c0": mix(mix(c, Color.WHITE, 0.6), c, 0.3), "c1": mix(c, NAVY2, 0.55)})
+	o.custom_minimum_size = Vector2(sz - 6, sz - 6)
+	b.add_child(o)
+	var f := TextureRect.new()
+	f.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	f.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	f.stretch_mode = TextureRect.STRETCH_SCALE
+	f.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	f.custom_minimum_size = Vector2(sz - 6, sz - 6)
+	var m := ShaderMaterial.new()
+	m.shader = FACE_SHADER
+	m.set_shader_parameter("rsize", Vector2(sz - 6, sz - 6))
+	f.material = m
+	if key != "":
+		f.texture = CardView.face_tex(key, el, 1.0, Vector2(0.5, 0.4))
+	b.add_child(f)
+	b.set_meta("face", f)
+	b.set_meta("rim", rim)
+	return b
+
+## Grey a face_por out (knocked out) or bring it back.
+static func set_face_ko(b: Box, ko: bool) -> void:
+	var m: ShaderMaterial = (b.get_meta("face") as TextureRect).material
+	m.set_shader_parameter("sat", 0.0 if ko else 1.0)
+	m.set_shader_parameter("bright", 0.55 if ko else 1.0)
+	b.modulate = Color(0.62, 0.62, 0.66) if ko else Color.WHITE
+
+## Small HUD frame over the scene (floor pill, mute, quit): navy glass with a brass hairline.
+static func hud_btn_style(radius := 8.0, pad := Vector4(0, 0, 0, 0)) -> StyleBoxFlat:
+	return glow_box(flat(alpha(NAVY, 0.9), radius, 1, LINE, pad), Color(0, 0, 0, 0.3), 4, Vector2(0, 2))
