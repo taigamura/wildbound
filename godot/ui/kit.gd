@@ -493,3 +493,51 @@ static func glyph_for(c, el) -> String:
 	if c.get("energy", 0):
 		return "spark"
 	return "star"
+
+# ---- title dock and bestiary pieces (UI Directions ideas 8 and 9) ----
+## A frame with no glass: the window's double brass border and studs around a see-through middle.
+## For a window onto the stage (the Collection's specimen window), where the 3D scene is the content.
+static func window_frame(studs := true) -> WinStyle:
+	var w := WinStyle.new(0)
+	w.studs = studs
+	w.shadow = false
+	w.top = Color(0, 0, 0, 0)
+	w.bottom = Color(0, 0, 0, 0)
+	return w.refresh()
+
+## Level pips (upgrade tracks): `n` of `total` fixed-size bars filled in `c`, the rest dark navy.
+static func pips(n: int, total: int, c := GOLD_HI, w := 22.0, h := 8.0, sep := 4.0) -> Control:
+	var m := Control.new()
+	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	m.custom_minimum_size = Vector2(total * w + (total - 1) * sep, h)
+	m.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	m.draw.connect(func():
+		for i in total:
+			var r := Rect2(i * (w + sep), 0, w, h)
+			m.draw_rect(r, c if i < n else Color("#2a3350"))
+			if i < n:   # a light top edge, like the plaque's bevel
+				m.draw_rect(Rect2(r.position, Vector2(w, 1)), mix(c, Color.WHITE, 0.5)))
+	return m
+
+## A tab strip: sentence-case labels over a brass hairline; the current tab is gold with a 2px gold
+## underline. `f.call(i)` runs when another tab is tapped.
+static func tabs(names: Array, cur: int, f: Callable) -> Control:
+	var wrap := Control.new()
+	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var h := hbox(0)
+	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	wrap.add_child(h)
+	for i in names.size():
+		var on := i == cur
+		var t := Tap.new(flat(Color(0, 0, 0, 0), 0, 0, Color(), Vector4(14, 6, 14, 8)))
+		t.press_scale = 1.0
+		t.add_child(lbl(str(names[i]), "700", T_M, GOLD_HI if on else INK2, {"align": "center"}))
+		if on:
+			t.draw.connect(func(): t.draw_rect(Rect2(0, t.size.y - 2, t.size.x, 2), GOLD_HI))
+		t.pressed.connect(func(): if not on: f.call(i))
+		h.add_child(t)
+	wrap.draw.connect(func(): wrap.draw_rect(Rect2(0, wrap.size.y - 1, wrap.size.x, 1), alpha(BRASS, 0.3)))
+	wrap.custom_minimum_size.y = h.get_combined_minimum_size().y
+	h.minimum_size_changed.connect(func(): wrap.custom_minimum_size.y = h.get_combined_minimum_size().y)
+	return wrap

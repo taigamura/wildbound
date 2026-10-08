@@ -307,14 +307,8 @@ static func build(ui) -> void:
 	el.packOk = big("Nice!")
 	_screen(ui, "scr-pack", pk_logo, [el.packCard, el.packTxt, el.packOk])
 
-	# ---- collection
-	var c_logo := logo(ui, "collH1", "Collection", UiKit.D_L, "collCount", "")
-	el.collEss = UiKit.flow(6, true)
-	c_logo.add_child(el.collEss)
-	el.collGrid = UiKit.grid(4, 6)
-	el.collDetail = UiKit.vbox(8)
-	el.collBack = ghost("Back")
-	_screen(ui, "scr-coll", c_logo, [el.collGrid, el.collDetail, el.collBack], 0.62)
+	# ---- collection (idea 9: a bestiary)
+	_coll(ui)
 
 	# ---- shop
 	var s_logo := logo(ui, "shopH1", "Item shop", UiKit.D_L, "", "Spend your loot")
@@ -465,6 +459,55 @@ static func set_dock_cell(t: Tap, label: String, sub: String, ready := false, di
 		var vh := v.get_combined_minimum_size().y
 		dot.set_meta("off", Vector2(21, -vh / 2.0 + 8.0))   # Box centres it, then nudges it to the icon's corner
 		b.add_child(dot)
+
+# ------------------------------------------------------------------ collection (idea 9)
+
+## The Collection as a bestiary: a compact header (title, how many found, Essence), a framed specimen
+## window over the stage band where the selected creature stands (so it never meets the header), and
+## one sheet with the six-wide portrait grid and the detail panel (name, tabs, tab body).
+static func _coll(ui) -> void:
+	var el: Dictionary = ui.el
+	# header: the title with Back at its right (Back lives up here so the sheet leaves the specimen
+	# window room), then how many are found with the Essence chips at the right
+	var head := UiKit.vbox(4)
+	var r1 := UiKit.hbox(12)
+	var h1 := _named(ui, "collH1", UiKit.disp("Collection", UiKit.D_M, UiKit.INK, {"shadow": UiKit.PLAQUE_INK, "shadow_off": Vector2(0, 3)}))
+	h1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	r1.add_child(h1)
+	el.collBack = ghost("Back")
+	el.collBack.mouse_filter = Control.MOUSE_FILTER_STOP
+	r1.add_child(el.collBack)
+	head.add_child(r1)
+	var r2 := UiKit.hbox(12)
+	var cnt := _named(ui, "collCount", UiKit.lbl("", "500", UiKit.T_M, UiKit.INK))
+	cnt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cnt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	r2.add_child(cnt)
+	el.collEss = UiKit.hbox(4)
+	r2.add_child(el.collEss)
+	head.add_child(r2)
+	el.collGrid = UiKit.grid(6, 8)
+	el.collDetail = UiKit.vbox(12)
+	_screen(ui, "scr-coll", head, [el.collGrid, el.collDetail], 0.74)
+	var scr: Control = ui.screens["scr-coll"]
+	var outer: Control = scr.get_meta("outer")
+	# the specimen window: a glassless frame over the stage band (Layout keeps the creature inside it)
+	var spec := Box.new()
+	spec.add_child(Box.fill(UiKit.panel(UiKit.window_frame())))
+	el.collSpecChip = UiKit.hbox(0)
+	spec.add_child(Box.at(el.collSpecChip, "bl", Vector2(10, 10)))
+	scr.add_child(spec)
+	scr.move_child(spec, 1)   # above the header scrim, under the header and sheet
+	el.collSpec = spec
+	var fit := func():
+		var t := head.get_rect().end.y + 8.0
+		var b := outer.get_rect().position.y - 8.0
+		spec.position = Vector2(outer.offset_left, t)
+		spec.size = Vector2(scr.size.x - outer.offset_left + outer.offset_right, maxf(b - t, 0.0))
+		spec.visible = b - t + 16.0 >= Layout.MIN_ROOM
+	for n in [head, outer, scr]:
+		n.item_rect_changed.connect(fit)
 
 # ------------------------------------------------------------------ pack flip card
 

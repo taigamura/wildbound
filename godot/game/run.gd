@@ -1020,39 +1020,18 @@ func _show_shop(back: Callable) -> void:
 	Ui.measure(true)
 
 # ================= collection & loadouts (§11, §16) =================
-var _coll := {"cur": "", "pending": null}
+var _coll := {"cur": "", "pending": null, "tab": "cards"}
+const COLL_TABS := ["cards", "trait", "upgrades"]
 
-func _show_collection() -> void:
+## The Collection (idea 9, a bestiary): the selected creature in the specimen window, a six-wide
+## portrait grid (silhouettes for creatures not found yet), and the detail panel with three tabs:
+## Cards (the loadout editor, §16.1), Trait (§16.2) and Upgrades (§5.2). `tab` opens on that tab.
+func _show_collection(tab := "cards") -> void:
 	var el := _el()
 	S.mode = "meta"
 	var own := Meta.owned()
-	var grid: Control = el.collGrid
-	UiKit.clear(grid)
-	el.collCount.text = "%d / %d" % [own.size(), Data.ROSTER.size()]
-	_coll = {"cur": "", "pending": null}
-	for k in Data.ROSTER:
-		var sp: Dictionary = Data.SPECIES[k]
-		var has: bool = k in own
-		var c := UiKit.el_css(sp.el) if has else UiKit.MUTE
-		var st := UiKit.flat(Color(0, 0, 0, 0.18), 4, 1, UiKit.HAIR, Vector4(2, 6, 2, 6))
-		var st_on := UiKit.row_style(true, Vector4(2, 6, 2, 6))
-		var t := Tap.new(st, st_on)
-		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var v := UiKit.vbox(4)
-		v.alignment = BoxContainer.ALIGNMENT_CENTER
-		if has:
-			v.add_child(UiKit.por(c, 30, sp.el))
-		else:
-			var q := UiKit.boxed(UiKit.lbl("?", "display", UiKit.NAME, UiKit.MUTE, {"align": "center"}), Vector2(30, 30),
-				RRect.new({"radius": 15.0, "border_w": 1.0, "border_c": UiKit.HAIR}).solid(UiKit.NAVY2))
-			v.add_child(q)
-		v.add_child(UiKit.lbl((sp.name if has else "???") + (" ✦" if Meta.is_shiny(k) else ""), "700", UiKit.T_S, UiKit.INK, {"align": "center", "ellipsis": true}))
-		t.add_child(v)
-		if not has:
-			t.modulate.a = 0.7
-		t.set_meta("k", k)
-		_btn(t, _coll_detail.bind(k))
-		grid.add_child(t)
+	el.collCount.text = "%d of %d found" % [own.size(), Data.ROSTER.size()]
+	_coll = {"cur": "", "pending": null, "tab": tab}
 	Ui.show("scr-coll")
 	Ui.measure(true)
 	_coll_detail(S.picks[0] if S.picks[0] in own else own[0])
@@ -1061,11 +1040,52 @@ func _coll_detail(k: String) -> void:
 	_coll.cur = k
 	_coll.pending = null
 	_show_title_actor(k, not Meta.is_owned(k))
-	for b in _el().collGrid.get_children():
-		b.on = b.get_meta("k") == k
+	_fit_specimen(S.title_actor)
+	_coll_grid()
 	_coll_render()
 
-## The unlock panel for a locked option: what it costs and an Unlock button (disabled if too poor).
+## Scale the Collection's creature to fill its specimen window: once Layout has placed it, grow it until
+## its head nears the top of the frame (it never leaves the stage band, so the art rule holds).
+func _fit_specimen(a) -> void:
+	var tok := S.tok
+	for i in 4:   # Ui.measure settles the band over 2 frames, then the main loop places the actor
+		await get_tree().process_frame
+	if tok != S.tok or a == null or not is_instance_valid(a) or a != S.title_actor or Ui.current != "scr-coll":
+		return
+	var spec: Control = _el().collSpec
+	var r: Rect2 = a.screen_rect()
+	if not spec.visible or r.size.y < 1.0:
+		return
+	var room: float = Layout.tpos().y - spec.position.y - 14.0   # head clear of the frame's border and studs
+	var wide := spec.size.x * 0.8
+	a.extra *= clampf(minf(room / r.size.y, wide / maxf(r.size.x, 1.0)), 0.5, 2.4)
+
+## The portrait grid: element orbs for owned creatures, dim "?" silhouettes for the rest, the selected
+## one ringed in gold. Names live only in the detail panel.
+func _coll_grid() -> void:
+	var grid: Control = _el().collGrid
+	UiKit.clear(grid)
+	var own := Meta.owned()
+	for k in Data.ROSTER:
+		var sp: Dictionary = Data.SPECIES[k]
+		var has: bool = k in own
+		var sel: bool = k == _coll.cur
+		var t := Tap.new()
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var b: Box
+		if has:
+			b = UiKit.por(UiKit.el_css(sp.el), 44, sp.el, sel)
+			if Meta.is_shiny(k):
+				b.add_child(Box.at(UiKit.lbl("✦", "700", UiKit.T_S, UiKit.GOLD_HI), "tr", Vector2(1, 0)))
+		else:
+			b = UiKit.por(Color("#3a3f55"), 44, "", sel)
+			b.add_child(UiKit.disp("?", 22, Color("#8a90a8")))
+			if not sel:
+				t.modulate.a = 0.6
+		t.add_child(b)
+		_btn(t, _coll_detail.bind(k))
+		grid.add_child(t)
+
 func _unlock_box(what_bb: String, c: Dictionary, on_unlock: Callable) -> Control:
 	var have: int = Meta.essence().get(c.el, 0)
 	var box := UiKit.panel(UiKit.inset(Vector4(12, 10, 12, 12), true))
@@ -1097,36 +1117,95 @@ func _sec(title: String) -> VBoxContainer:
 func _coll_render() -> void:
 	var el := _el()
 	var k: String = _coll.cur
-	var pending = _coll.pending
 	var sp: Dictionary = Data.SPECIES[k]
-	var own := Meta.owned()
-	var has: bool = k in own
+	var has := Meta.is_owned(k)
 	var lo := Meta.loadout(k)
 	var bo := Meta.boosts(k)
 	var col := UiKit.el_css(sp.el)
-	_fill(el.collEss, _ess_chips(Meta.essence()) + _loot_chips(Meta.wallet()))
+	# the header shows the currency the open tab spends: gold and materials for Upgrades, else Essence
+	_fill(el.collEss, _loot_chips(Meta.wallet()) if has and _coll.tab == "upgrades" else _ess_chips(Meta.essence()))
+	# specimen window caption: element, role, HP (on a solid chip, it sits over the scene)
+	var chip := UiKit.chip(sp.el, col, "%s · %s · %d HP" % [Data.ELEM[sp.el].name, sp.get("role", ""), roundi(sp.hp * bo.vital) if has else sp.hp])
+	chip.add_theme_stylebox_override("panel", UiKit.flat(UiKit.alpha(UiKit.NAVY2, 0.88), 11, 1, UiKit.alpha(col, 0.7), Vector4(8, 3, 8, 3)))
+	_fill(el.collSpecChip, [chip])
 	var d: Control = el.collDetail
 	UiKit.clear(d)
-	var prow := UiKit.hbox(8)
-	prow.add_child(UiKit.elchip(sp.el, Data.ELEM[sp.el].name))
-	var nm := UiKit.lbl(sp.name + (" ✦" if Meta.is_shiny(k) else ""), "display", UiKit.D_S, UiKit.INK, {"ellipsis": true})
+	# name row: the name, and the Trait it carries
+	var nrow := UiKit.hbox(8)
+	var nm := UiKit.disp(sp.name + (" ✦" if Meta.is_shiny(k) else ""), UiKit.D_S, UiKit.INK, {"ellipsis": true})
 	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	prow.add_child(nm)
-	prow.add_child(UiKit.lbl("%s · %d HP" % [sp.get("role", ""), roundi(sp.hp * bo.vital) if has else sp.hp], "500", UiKit.T_S, UiKit.INK2))
-	d.add_child(prow)
+	nrow.add_child(nm)
+	var t_on = lo["trait"] if has else sp.get("trait")
+	if t_on:
+		var tl := UiKit.eyebrow("Trait: " + Data.TRAITS[t_on].name)
+		tl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		nrow.add_child(tl)
+	d.add_child(nrow)
+	var ti := COLL_TABS.find(_coll.tab)
+	d.add_child(UiKit.tabs(["Cards", "Trait", "Upgrades"], ti, func(i: int):
+		Sfx.audio()
+		Sfx.pick()
+		Platform.haptic("select")
+		_coll.tab = COLL_TABS[i]
+		_coll.pending = null
+		_coll_render()))
+	# the tab body has one fixed height (scrolling inside), so switching tabs never moves the stage
+	var body := UiKit.vbox(10)
+	body.custom_minimum_size.y = _coll_body_h()
 	if not has:
-		d.add_child(UiKit.sub("Not found yet. Open a daily pack, or buy one in the item shop."))
-		var cards := UiKit.grid(3, 8)
-		for slot in Data.SLOTS:
-			var cv := CardView.new("coll").face(sp.cards[slot][0], sp.el)
-			cv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			cards.add_child(cv)
-		d.add_child(_pad_top(cards, 6))
-		return
-	# card slots: one row each, options in columns
+		_coll_unknown(body, k)
+	else:
+		match _coll.tab:
+			"trait": _coll_trait(body, k)
+			"upgrades": _coll_upgrades(body, k)
+			_: _coll_cards(body, k)
+	d.add_child(CapScroll.new(body, 0.0, -_coll_body_h()))
+	for x in d.find_children("*", "PanelContainer", true, false):
+		if x.has_meta("upchoice"):
+			_scroll_to(x)
+			break
+
+## Tab body for a creature not found yet: its default cards, its built-in Trait, how to find it.
+func _coll_unknown(body: Control, k: String) -> void:
+	var sp: Dictionary = Data.SPECIES[k]
+	var find := "Not found yet. Open a daily pack, or buy one in the item shop."
+	match _coll.tab:
+		"trait":
+			var x = sp.get("trait")
+			var tp := UiKit.panel(UiKit.inset())
+			var tv := UiKit.vbox(4)
+			tv.add_child(UiKit.lbl(Data.TRAITS[x].name, "display", UiKit.NAME, UiKit.INK, {"lh": -2}))
+			tv.add_child(UiKit.lbl(Data.TRAITS[x].text, "500", UiKit.T_M, UiKit.INK2, {"wrap": true, "lh": -2}))
+			tp.add_child(tv)
+			body.add_child(tp)
+			body.add_child(UiKit.note("Its built-in Trait. " + find))
+		"upgrades":
+			body.add_child(UiKit.sub(find))
+		_:
+			body.add_child(UiKit.note(find))
+			var cards := UiKit.hbox(8)
+			for slot in Data.SLOTS:
+				var cv := CardView.new("coll").face(sp.cards[slot][0], sp.el)
+				cv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				cards.add_child(cv)
+			body.add_child(cards)
+
+## Height of the Collection's tab body: about a quarter of the screen.
+func _coll_body_h() -> float:
+	return clampf(roundf(Layout.size.y * 0.25), 192.0, 212.0)
+
+## Cards tab: a column per slot (Strike, Skill, Signature), the default card over its alternate.
+## The equipped card is lit; tapping the other one equips it, or offers to unlock it with Essence.
+func _coll_cards(body: Control, k: String) -> void:
+	var sp: Dictionary = Data.SPECIES[k]
+	var lo := Meta.loadout(k)
+	var bo := Meta.boosts(k)
+	var pending = _coll.pending
+	var cols := UiKit.hbox(8)
 	for slot in Data.SLOTS:
-		var sec := _sec("Strike" if slot == "strike" else ("Skill" if slot == "skill" else "Signature"))
-		var cards := UiKit.grid(3, 8)
+		var cv_col := UiKit.vbox(6)
+		cv_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cv_col.add_child(UiKit.eyebrow("Strike" if slot == "strike" else ("Skill" if slot == "skill" else "Signature")))
 		var list: Array = sp.cards[slot]
 		for i in list.size():
 			var def: Dictionary = list[i]
@@ -1155,18 +1234,24 @@ func _coll_render() -> void:
 				else:
 					_coll.pending = {"slot": slot, "i": i}
 				_coll_render())
-			cards.add_child(t)
-		for i in range(list.size(), 3):
-			cards.add_child(UiKit.spacer())
-		sec.add_child(_pad_top(cards, 6))
-		if pending != null and pending.has("slot") and pending.slot == slot:
-			var p: Dictionary = pending
-			var pdef: Dictionary = list[p.i]
-			sec.add_child(_unlock_box("Unlock [b]%s[/b] for %s's %s slot." % [pdef.name, sp.name, "Skill" if slot == "skill" else "Signature"], Meta.move_cost(k),
-				func(): return Meta.unlock_move(k, p.slot, p.i) and Meta.set_move(k, p.slot, p.i)))
-		d.add_child(sec)
-	# Trait socket: built-in + learned Traits, then learnable ones (source owned) with their cost
-	var tsec := _sec("Trait")
+			cv_col.add_child(t)
+		if list.size() < 2:
+			cv_col.add_child(UiKit.lbl("One option", "500", UiKit.T_S, UiKit.MUTE, {"align": "center"}))
+		cols.add_child(cv_col)
+	body.add_child(cols)
+	if pending != null and pending.has("slot"):
+		var p: Dictionary = pending
+		var pdef: Dictionary = sp.cards[p.slot][p.i]
+		body.add_child(_unlock_box("Unlock [b]%s[/b] for %s's %s slot." % [pdef.name, sp.name, "Skill" if p.slot == "skill" else "Signature"], Meta.move_cost(k),
+			func(): return Meta.unlock_move(k, p.slot, p.i) and Meta.set_move(k, p.slot, p.i)))
+
+## Trait tab: the socketed Trait, then every usable Trait (built-in first) and the learnable ones with
+## their Essence cost. Tapping a usable one sockets it; a learnable one opens the Learn offer.
+func _coll_trait(body: Control, k: String) -> void:
+	var sp: Dictionary = Data.SPECIES[k]
+	var own := Meta.owned()
+	var lo := Meta.loadout(k)
+	var pending = _coll.pending
 	var t_on = lo["trait"]
 	if t_on:
 		var tc := UiKit.el_css(Data.SPECIES[Data.TRAITS[t_on]["from"]].el)
@@ -1178,7 +1263,7 @@ func _coll_render() -> void:
 		tv.add_child(th)
 		tv.add_child(UiKit.lbl(Data.TRAITS[t_on].text, "500", UiKit.T_M, UiKit.INK2, {"wrap": true, "lh": -2}))
 		tp.add_child(tv)
-		tsec.add_child(tp)
+		body.add_child(tp)
 	var opts := UiKit.grid(3, 6)
 	var keys: Array = Data.TRAITS.keys()
 	var builtin = sp.get("trait")
@@ -1204,8 +1289,6 @@ func _coll_render() -> void:
 			var cost := _cost(Meta.trait_cost(x), c)
 			cost.alignment = BoxContainer.ALIGNMENT_CENTER
 			v.add_child(cost)
-			if not (pending != null and pending.has("trait") and pending["trait"] == x):
-				b.modulate.a = 0.7
 		else:
 			var tag: String = "Built-in" if x == builtin else (("moves from " + Data.SPECIES[holder].name) if (holder != null and holder != k and x != t_on) else ("from " + Data.SPECIES[def["from"]].name))
 			v.add_child(UiKit.lbl(tag, "500", UiKit.T_S, UiKit.INK2, {"align": "center", "ellipsis": true}))
@@ -1223,66 +1306,78 @@ func _coll_render() -> void:
 				_coll.pending = {"trait": x}
 			_coll_render())
 		opts.add_child(b)
-	tsec.add_child(_pad_top(opts, 2))
+	body.add_child(opts)
 	var hidden := keys.filter(func(x): return not (Data.TRAITS[x]["from"] in own)).size()
 	if hidden:
-		tsec.add_child(_pad_top(UiKit.note("%d more Trait%s: own the creature to learn %s." % [hidden, "" if hidden == 1 else "s", "it" if hidden == 1 else "them"]), 6))
+		body.add_child(UiKit.note("%d more Trait%s: own the creature to learn %s." % [hidden, "" if hidden == 1 else "s", "it" if hidden == 1 else "them"]))
 	if pending != null and pending.has("trait"):
 		var x2: String = pending["trait"]
 		var def2: Dictionary = Data.TRAITS[x2]
-		tsec.add_child(_unlock_box("Learn [b]%s[/b]: %s. Any one creature can socket it besides %s." % [def2.name, def2.text, Data.SPECIES[def2["from"]].name],
+		body.add_child(_unlock_box("Learn [b]%s[/b]: %s. Any one creature can socket it besides %s." % [def2.name, def2.text, Data.SPECIES[def2["from"]].name],
 			Meta.trait_cost(x2), func(): return Meta.unlock_trait(x2) and Meta.set_trait(k, x2)))
-	d.add_child(tsec)
-	# permanent upgrades (§5.2): one track per material
-	var ups := _sec("Upgrades")
+
+## What each upgrade track adds per level: the BAL key and the words after "+N%".
+const UP_EFFECT := {"sword": ["up_dmg", "damage"], "orb": ["up_spirit", "shields and heals"], "jewel": ["up_hp", "max HP"]}
+
+## Upgrades tab (§5.2): one track per material (the header shows gold and materials): five pips, what it adds so far, and a
+## button with the next level and its cost (or what is missing).
+func _coll_upgrades(body: Control, k: String) -> void:
+	var w := Meta.wallet()   # shown in the header while this tab is open
+	var list := UiKit.rows()
 	var lv := Meta.upgrades(k)
-	var w := Meta.wallet()
 	for m in Data.MATS:
 		var def: Dictionary = Data.MAT_DEF[m]
 		var c: Color = MAT_COL[m]
 		var n: int = lv.get(m, 0)
 		var cost = Meta.upgrade_cost(k, m)
-		var row := UiKit.panel(UiKit.inset())
-		var v := UiKit.vbox(6)
-		row.add_child(v)
-		var pr := UiKit.hbox(8)
-		pr.add_child(UiKit.icon(m, 20, c))
-		var tl := UiKit.lbl(def.track, "display", UiKit.NAME, UiKit.INK)
-		tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pr.add_child(tl)
-		pr.add_child(UiKit.lbl("Lv %d / %d" % [n, Data.BAL.up_max], "700", UiKit.T_S, UiKit.INK2))
+		var row := UiKit.panel(UiKit.row_style(false, Vector4(0, 6, 0, 6)))
+		var h := UiKit.hbox(10)
+		row.add_child(h)
+		var v := UiKit.vbox(5)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var pr := UiKit.hbox(6)
+		pr.add_child(UiKit.icon(m, 16, c))
+		pr.add_child(UiKit.disp(def.track, UiKit.NAME, UiKit.INK))
 		v.add_child(pr)
-		var pips := UiKit.hbox(4)
-		for i in Data.BAL.up_max:
-			var pip := Panel.new()
-			pip.add_theme_stylebox_override("panel", UiKit.flat(c if i < n else Color(1, 1, 1, 0.1), 3))
-			pip.custom_minimum_size.y = 6
-			pip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			pips.add_child(pip)
-		v.add_child(pips)
-		v.add_child(UiKit.note(def.text))
-		var b := UiScreens.big("Upgrade", true)
-		if cost == null:
-			b.disabled = true
-			UiScreens.set_big(b, "Max level")
-		else:
-			b.disabled = w.gold < cost.gold or w[m] < cost[m]
-			UiScreens.set_big(b, "Upgrade", "· %d %s%s + %d gold" % [cost[m], def.name, "s" if cost[m] > 1 else "", cost.gold])
-			b.pressed.connect(func():
-				if not Meta.buy_upgrade(k, m):
-					return
-				Sfx.audio()
-				Sfx.caught()
-				Platform.haptic("success")
-				_coll_render())
-		v.add_child(b)
-		ups.add_child(row)
-	d.add_child(ups)
-	for x in d.find_children("*", "PanelContainer", true, false):
-		if x.has_meta("upchoice"):
-			_scroll_to(x)
-			break
+		v.add_child(UiKit.pips(n, Data.BAL.up_max))
+		var fx: Array = UP_EFFECT[m]
+		var pct := roundi(Data.BAL[fx[0]] * 100)
+		v.add_child(UiKit.note(("+%d%% %s" % [pct * n, fx[1]]) if n else ("+%d%% %s per level" % [pct, fx[1]])))
+		h.add_child(v)
+		h.add_child(_up_btn(k, m, n, cost, w))
+		list.add_child(row)
+	body.add_child(list)
+
+## The upgrade button: a quiet two-line button, gold-rimmed when affordable. Line 1 is the next level
+## (or what is missing), line 2 its cost.
+func _up_btn(k: String, m: String, n: int, cost, w: Dictionary) -> Tap:
+	var can: bool = cost != null and w.gold >= cost.gold and w[m] >= cost[m]
+	var t := Tap.new(UiKit.flat(Color(0, 0, 0, 0.18), 5, 1, UiKit.GOLD_HI if can else UiKit.LINE, Vector4(10, 6, 10, 6)))
+	t.dis_mod = Color.WHITE   # it says why it can't be bought instead of dimming
+	t.custom_minimum_size = Vector2(112, 44)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var v := UiKit.vbox(0)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	t.add_child(v)
+	if cost == null:
+		v.add_child(UiKit.lbl("Max level", "700", UiKit.T_S, UiKit.INK2, {"align": "center"}))
+		t.disabled = true
+		return t
+	var mname: String = Data.MAT_DEF[m].name
+	var line1 := "Level %d" % (n + 1)
+	if not can:
+		line1 = ("Need %d %s" % [cost[m] - w[m], mname]) if w[m] < cost[m] else ("Need %d gold" % (cost.gold - w.gold))
+	v.add_child(UiKit.lbl(line1, "700", UiKit.T_S, UiKit.GOLD_HI if can else UiKit.INK2, {"align": "center"}))
+	v.add_child(UiKit.lbl("%d %s · %d gold" % [cost[m], mname, cost.gold], "500", UiKit.T_S, UiKit.INK2, {"align": "center"}))
+	t.disabled = not can
+	t.pressed.connect(func():
+		if not Meta.buy_upgrade(k, m):
+			return
+		Sfx.audio()
+		Sfx.caught()
+		Platform.haptic("success")
+		_coll_render())
+	return t
 
 func _pad_top(c: Control, px: int) -> MarginContainer:
 	var m := MarginContainer.new()
@@ -1347,6 +1442,11 @@ func debug_show(id: String) -> void:
 			_render_picks()
 			_show_title_actor("cinderpip")
 		"coll": _show_collection()
+		"coll-trait": _show_collection("trait")
+		"coll-up":
+			if Platform.ui_check:   # scratch save: one Power level bought, so the shot shows a pip and a "Need" button
+				Meta.buy_upgrade(S.picks[0], "sword")
+			_show_collection("upgrades")
 		"shop": _show_shop(to_title)
 		"pack": _show_pack({"key": "sparkit", "shiny": false}, "Daily pack", "One new friend a day", to_title)
 		"map":
