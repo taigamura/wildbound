@@ -4,7 +4,7 @@ extends Node
 ##
 ## Debug screenshots: `godot --path godot --resolution 390x844 -- --shot=<screen>` shows a screen
 ## (title team team-swap map map-sel map-warden map-late reward reward-warden upgrade party end end-win pack coll
-## coll-trait coll-up shop battle battle-shared), waits a few frames, saves
+## coll-trait coll-up shop battle battle-shared battle-heavy), waits a few frames, saves
 ## /tmp/claude-1000/wb-<screen>.png and quits. Add `--shot-dir=<dir>` to save elsewhere.
 ## With `--ui-check` (scripts/ui-check.sh) the shot is deterministic and goes through tests/ui_check.gd:
 ## `--golden=<dir>` compares against <dir>/wb-<screen>.png, `--update` rewrites it, and the exit code
@@ -98,18 +98,22 @@ func _start_shot() -> void:
 	match _shot:
 		"title":
 			Run.to_title()
-		"battle", "flick", "inspect", "battle-shared":
+		"battle", "flick", "inspect", "battle-shared", "battle-heavy":
 			if _shot == "battle":
 				S.picks = ["emberwick", "bellspring", "truffmole"]
 			if _shot == "battle-shared":   # two Ember creatures share their cards (scratch save, not user://save.cfg)
 				Platform.use_save_path("user://shot-battle-shared.cfg")
 				Platform.store_set("owned", Array(Data.ROSTER))
 				S.picks = ["emberwick", "cinderpip", "bellspring"]
+			if _shot == "battle-heavy":   # a Tide heavy that Skiray resists (scratch save, not user://save.cfg)
+				Platform.use_save_path("user://shot-battle-heavy.cfg")
+				Platform.store_set("owned", Array(Data.ROSTER))
+				S.picks = ["emberwick", "skiray", "bellspring"]
 			Run.start_run()
-			Battle.start_battle(S.nodes[0])
+			Battle.start_battle(MapNode.new("wild", "puddlet") if _shot == "battle-heavy" else S.nodes[0])
 		_:
 			Run.debug_show(_shot)
-	_shot_frames = 150 if _shot in ["battle", "flick", "inspect", "battle-shared"] else 70
+	_shot_frames = 150 if _shot in ["battle", "flick", "inspect", "battle-shared", "battle-heavy"] else 70
 
 func _shot_tick() -> void:
 	if _shot == "" or _shot_frames <= 0:
@@ -119,6 +123,8 @@ func _shot_tick() -> void:
 		S.energy = 7.0
 	if _shot == "battle-shared" and _shot_frames == 40:
 		_shared_hand()
+	if _shot == "battle-heavy" and _shot_frames == 40:
+		_heavy_windup()
 	if _shot in ["flick", "inspect"]:
 		_drive_input()
 	if _shot_frames == 10 and _shot_scroll >= 0 and Ui.current != null:
@@ -149,6 +155,19 @@ func _shared_hand() -> void:
 	t[2].hp = 0
 	S.hand = [CardRef.new(t[0].uid, "sig"), CardRef.new(t[1].uid, "strike"), CardRef.new(t[2].uid, "strike"), CardRef.new(t[0].uid, "strike")]
 	S.energy = 2.0
+	Ui.render_bench()
+	Ui.refresh_hand()
+
+## battle-heavy: a heavy wind-up in progress (banner, ring, shield marker on the resisting Skiray),
+## a swap cooldown running on the bench and a waiting Volt card.
+func _heavy_windup() -> void:
+	Battle.debug.heavy.call()
+	var e = S.enemy
+	e.t = e.windup - 1.9   # about 1.4s left when the shot is taken
+	S.swap_cd = 2.5
+	S.energy = 7.4
+	var t := S.team()
+	S.hand = [CardRef.new(t[0].uid, "sig"), CardRef.new(t[0].uid, "skill"), CardRef.new(t[1].uid, "strike"), CardRef.new(t[2].uid, "skill")]
 	Ui.render_bench()
 	Ui.refresh_hand()
 

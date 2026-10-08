@@ -109,8 +109,8 @@ func pop_num(pos: Vector2, text, cls := "", label := "", color := Color(0, 0, 0,
 		"outline": 6 if "crit" in cl else 3, "outline_c": UiKit.alpha(c, 0.35) if "crit" in cl else Color(0, 0, 0, 0.35), "lh": -6})
 	d.add_child(main)
 	if str(label) != "":
-		d.add_child(UiKit.lbl(str(label), "800", 11, c, {"align": "center", "upper": true, "ls": 0.14, "shadow": Color.BLACK,
-			"shadow_off": Vector2(0, 1), "lh": -6}))
+		d.add_child(UiKit.lbl(str(label), "700", UiKit.T_S, c, {"align": "center", "shadow": Color.BLACK,
+			"shadow_off": Vector2(0, 1), "outline": 4, "outline_c": Color(0, 0, 0, 0.45), "lh": -6}))
 	fx.add_child(d)
 	var m := d.get_combined_minimum_size()
 	d.size = m
