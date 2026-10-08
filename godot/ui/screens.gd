@@ -268,34 +268,55 @@ static func build(ui) -> void:
 	el.teamDone = big("Done")
 	_screen(ui, "scr-team", null, [tm_head, el.teamOrder, tm_info, CapScroll.new(st_m, 0.31), el.teamDone], 0.74)
 
-	# ---- map
-	el.trail = UiKit.hbox(5)
-	var mhead := _vbox_with(6, [_named(ui, "mapEyebrow", UiKit.eyebrow("Floor 1 of 8")), UiKit.h2("Pick a path")])
-	el.nodes = UiKit.rows()
-	el.mapParty = UiKit.hbox(8)
-	var gold := UiKit.hbox(5)
-	gold.add_child(UiKit.icon("coin", 13, UiKit.GOLD_HI))
-	el.mapGold = UiKit.lbl("", "500", UiKit.T_S, UiKit.INK2, {"wrap": true, "lh": -3})
-	el.mapGold.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	gold.add_child(el.mapGold)
+	# ---- map (UI-QUEUE item 8: a trail of medallions, one detail strip, party portraits, wallet row)
+	var mtitle := _vbox_with(2, [_named(ui, "mapEyebrow", UiKit.eyebrow("Floor 1 of 8")),
+		_named(ui, "mapTitle", UiKit.disp("Pick a path", UiKit.D_S))])
+	mtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	el.lineupBtn = ghost("Lineup")
 	el.mapQuit = ghost("Quit")
-	var mrow := row(gold, el.lineupBtn)
-	mrow.add_child(el.mapQuit)
-	_screen(ui, "scr-map", null, [el.trail, mhead, el.nodes, el.mapParty, mrow])
+	var mhead := UiKit.hbox(8)
+	for n in [mtitle, el.lineupBtn, el.mapQuit]:
+		mhead.add_child(n)
+	el.trail = MapTrail.new()
+	# the detail strip: the selected medallion's name, element, what it pays, and Travel
+	el.mapInfo = UiKit.panel(UiKit.inset(Vector4(12, 8, 8, 10)))
+	var info := UiKit.vbox(4)
+	el.mapInfoHead = UiKit.hbox(8)
+	el.mapInfoSub = UiKit.lbl("", "500", 13, UiKit.INK2, {"wrap": true, "lh": -4})
+	el.mapGo = big("Travel", true)
+	el.mapGo.size_flags_horizontal = Control.SIZE_SHRINK_END
+	var ihead := UiKit.hbox(8)
+	el.mapInfoHead.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ihead.add_child(el.mapInfoHead)
+	ihead.add_child(el.mapGo)
+	info.add_child(ihead)
+	info.add_child(el.mapInfoSub)
+	el.mapInfo.add_child(info)
+	el.mapParty = UiKit.hbox(8)
+	el.mapGold = UiKit.hbox(0)
+	var mfoot := UiKit.hbox(8)
+	el.mapParty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mfoot.add_child(el.mapParty)
+	mfoot.add_child(el.mapGold)
+	_screen(ui, "scr-map", null, [mhead, el.trail, el.mapInfo, mfoot], 0.74)
 
-	# ---- reward
-	el.rwSubLoot = UiKit.flow(6)
-	var rhead := _vbox_with(6, [_named(ui, "rwEyebrow", UiKit.eyebrow("Victory")), _named(ui, "rwTitle", UiKit.h2("Take a card")),
-		el.rwSubLoot, _named(ui, "rwSub", UiKit.sub(""))])
+	# ---- reward (UI-QUEUE item 10): "Victory" and the loot ribbon sit on a band just above the sheet
+	var rtitle := UiKit.hbox(8)
+	var rt := _named(ui, "rwTitle", UiKit.disp("Choose a reward", UiKit.D_S))
+	rt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	el.rwPips = UiKit.hbox(6)
+	el.rwPips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rtitle.add_child(rt)
+	rtitle.add_child(el.rwPips)
+	var rhead := _vbox_with(6, [rtitle, _named(ui, "rwSub", UiKit.lbl("", "500", 13, UiKit.INK2, {"wrap": true, "lh": -4}))])
 	el.rewards = UiKit.grid(3, 10)
-	var rw_m := MarginContainer.new()
-	rw_m.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	rw_m.add_theme_constant_override("margin_top", 14)
-	rw_m.add_child(el.rewards)
-	el.rwDeck = UiKit.lbl("", "500", UiKit.T_S, UiKit.INK2, {"wrap": true, "lh": -3})
+	el.rwDeck = UiKit.hbox(0)
+	el.rwDeck.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	el.skipBtn = ghost("Skip")
-	_screen(ui, "scr-reward", null, [rhead, rw_m, row(el.rwDeck, el.skipBtn)])
+	_screen(ui, "scr-reward", null, [rhead, el.rewards, row(el.rwDeck, el.skipBtn)])
+	var rw_rib := _ribbon(ui, "rwEyebrow", "rwSubLoot", "Victory")
+	_above_sheet(ui, "scr-reward", rw_rib)
 
 	# ---- upgrade
 	var uhead := _vbox_with(6, [UiKit.eyebrow("Upgrade a card"), UiKit.h2("Pick a card"),
@@ -339,12 +360,23 @@ static func build(ui) -> void:
 	el.shopBack = ghost("Back")
 	_screen(ui, "scr-shop", s_logo, [_vbox_with(4, [UiKit.eyebrow("Buy"), el.shopBuy]), _vbox_with(4, [UiKit.eyebrow("Sell"), el.shopSell]), el.shopBack], 0.70)
 
-	# ---- end
+	# ---- end (UI-QUEUE item 10): big pixel numbers, the run's loot ribbon, the party, Run again
 	var e_logo := logo(ui, "endH", "Run over", UiKit.D_L, "endP", "")
-	el.endStats = UiKit.grid(4, 8)
-	el.endEss = UiKit.flow(6, true)
-	el.endLoot = UiKit.flow(6, true)
-	el.endParty = UiKit.hbox(8)
+	el.endStats = UiKit.grid(4, 4)
+	el.endEss = UiKit.flow(6, true)   # kept for callers; the ribbon (endLoot) now carries the Essence too
+	el.endEss.visible = false
+	var e_rib := Box.new()
+	e_rib.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	e_rib.add_child(Box.fill(UiKit.ribbon_band()))
+	var e_pad := MarginContainer.new()
+	e_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	e_pad.add_theme_constant_override("margin_top", 10)
+	e_pad.add_theme_constant_override("margin_bottom", 10)
+	el.endLoot = UiKit.flow(8, true)
+	e_pad.add_child(_vbox_with(8, [_named(ui, "endLootH", UiKit.lbl("Loot banked", "700", UiKit.T_S, UiKit.GOLD_HI, {"align": "center"})), el.endLoot]))
+	e_rib.add_child(Box.fill(e_pad))
+	el.endRibbon = e_rib
+	el.endParty = UiKit.hbox(12, BoxContainer.ALIGNMENT_CENTER)
 	el.againBtn = big("Run again")
 	el.endShopBtn = ghost("Item shop")
 	el.titleBtn = ghost("Title")
@@ -352,7 +384,45 @@ static func build(ui) -> void:
 	for b in [el.endShopBtn, el.titleBtn]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		r2.add_child(b)
-	_screen(ui, "scr-end", e_logo, [el.endStats, el.endEss, el.endLoot, el.endParty, el.againBtn, r2])
+	_screen(ui, "scr-end", e_logo, [el.endStats, e_rib, el.endParty, el.againBtn, r2], 0.74)
+
+# ------------------------------------------------------------------ reward ribbon
+
+## A display title over a loot row on a ribbon band (mockup idea 10). Registers the title as `title_key`
+## and the loot row (a centred flow, filled by Run) as `loot_key`.
+static func _ribbon(ui, title_key: String, loot_key: String, title: String) -> Box:
+	var b := Box.new()
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.add_child(Box.fill(UiKit.ribbon_band()))
+	var m := MarginContainer.new()
+	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for k in ["top", "bottom"]:
+		m.add_theme_constant_override("margin_" + k, 10)
+	for k in ["left", "right"]:
+		m.add_theme_constant_override("margin_" + k, 16)
+	var h := UiKit.disp(title, UiKit.D_M, UiKit.INK, {"align": "center", "shadow": UiKit.PLAQUE_INK, "shadow_off": Vector2(0, 3)})
+	ui.el[title_key] = h
+	var loot := UiKit.flow(8, true)
+	ui.el[loot_key] = loot
+	m.add_child(_vbox_with(8, [h, loot]))
+	b.add_child(Box.fill(m))
+	return b
+
+## Pin `c` just above the sheet window (same width, 12px gap) and make it the band's bottom edge, so
+## the stage (and the creature) ends above it.
+static func _above_sheet(ui, id: String, c: Control) -> void:
+	var scr: Control = ui.screens[id]
+	var outer: Control = scr.get_meta("outer")
+	scr.add_child(c)
+	var pin := func():
+		var r := outer.get_rect()
+		var h := c.get_combined_minimum_size().y
+		c.position = Vector2(r.position.x, r.position.y - h - 12.0)
+		c.size = Vector2(r.size.x, h)
+	outer.item_rect_changed.connect(pin)
+	c.minimum_size_changed.connect(pin)
+	ui.band[id].bottom = c
+	c.resized.connect(func(): if ui.current == id: ui.measure())
 
 # ------------------------------------------------------------------ pack flip card
 

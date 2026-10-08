@@ -16,7 +16,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-ALL=(title team team-swap map reward upgrade party end pack coll shop battle inspect battle-shared)
+ALL=(title team team-swap map map-sel map-warden map-late reward reward-warden upgrade party end end-win pack coll shop battle inspect battle-shared)
 # size and simulated safe-area insets (top,bottom): iPhone 12-16 class, and the SE (no notch)
 SIZES=("390x844:47,34" "375x667:20,0")
 ROOT="$PWD"

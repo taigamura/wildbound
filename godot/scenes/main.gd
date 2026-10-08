@@ -3,7 +3,8 @@ extends Node
 ## UI, opens the title screen and drives the per-frame update in TS order.
 ##
 ## Debug screenshots: `godot --path godot --resolution 390x844 -- --shot=<screen>` shows a screen
-## (title team team-swap map reward upgrade party end pack coll shop battle battle-shared), waits a few frames, saves
+## (title team team-swap map map-sel map-warden map-late reward reward-warden upgrade party end end-win pack coll
+## shop battle battle-shared), waits a few frames, saves
 ## /tmp/claude-1000/wb-<screen>.png and quits. Add `--shot-dir=<dir>` to save elsewhere.
 ## With `--ui-check` (scripts/ui-check.sh) the shot is deterministic and goes through tests/ui_check.gd:
 ## `--golden=<dir>` compares against <dir>/wb-<screen>.png, `--update` rewrites it, and the exit code
