@@ -376,7 +376,7 @@ func _show_reward(picks: int, loot) -> void:
 	var got: Array = _loot_chips(loot, true) if loot != null else []
 	_fill(el.rwSubLoot, got)
 	el.rwSubLoot.visible = not got.is_empty()
-	el.rwSub.text = "Knocked-out partners are back on their feet at 25%."
+	el.rwSub.text = "HP carries over. Knocked-out creatures stay down until a Spring or a Heal."
 	var box: Control = el.rewards
 	UiKit.clear(box)
 	var next := func(): _show_reward(picks - 1, loot)
