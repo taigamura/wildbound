@@ -61,7 +61,7 @@ Play-success signal for the card UI: `play_card` adds the TS `'play'` class in T
 
 **Layout** (stage): `U: float`, `size: Vector2`, `measure_band(top_px: float, bottom_px: float, snap := false)` (the UI calls this whenever the HUD band changes; TS measured DOM `[data-band-*]` itself), `ease_layout(dt)`, `epos() ppos() tpos() -> Vector2`, `horizon() -> float`.
 
-**Feel** (stage): `trauma`, `shake(v)`, `hit_stop(t)`, `slow_mo(t, scale)`, `reduced: bool`. Implements hit-stop/slow-mo through `Engine.time_scale` driven by real time (`Time.get_ticks_usec`), and camera shake.
+**Feel** (stage): `trauma`, `shake(v)`, `hit_stop(t)`, `slow_mo(t, scale)`, `reduced: bool`. Implements hit-stop/slow-mo through `Engine.time_scale` driven by real time (`Platform.ticks_usec`), and camera shake.
 
 **Particles** (stage): `emit(x, y, opts: Dictionary)`, `ring(x, y, color, scale := 2.0, dur := 0.5, flat := true)`, `light_flash(color, pos: Vector2, v := 4.0)`, `burst(pos: Vector2, el, power := 1.0)`, `ambient(dt, fireflies, leaves)`. Screen-space positions; the stage renders them in 3D (or on a 2D layer over the 3D view — stage's choice) so they read as part of the diorama.
 
@@ -105,6 +105,7 @@ Stage owns the 3D world, camera, lights, WorldEnvironment (glow, DOF), the diora
 - **Actor (stage), requested:** each battle frame Battle calls `S.em.set_aura(color: Color, alpha: float)` if the Actor has that method (TS `m.aura.tint/alpha`: the wind-up glow that pulses in the last 25% of an enemy's wind-up, heavy colour during heavies). Without it the glow is skipped.
 - `Battle.card_denied(i, "busy")` fires when a card is played outside `mode == "battle"` (TS returned silently; no SFX). When the last creature of an element faints, that element's cards stay in the hand and deck as dead cards; playing one discards it and emits `Battle.card_discarded(i)` instead of `card_played(i)`.
 - `Platform.use_save_path(path)` points the store at another file (tests). `haptic()` also accepts TS's `"select"` and `"error"`.
+- `Platform.ticks_usec()` / `ticks_msec()` are the game's only clock (never call `Time.get_ticks_*` elsewhere). In UI check mode (`-- --ui-check`, `Platform.ui_check`) they advance exactly 1/60 s per frame, the RNG is seeded and the save is a blank scratch file, so screenshots are deterministic. `Platform.safe_insets` (`-- --safe=<top>,<bottom>`) overrides `Ui.safe()`'s insets.
 - `Sfx.stream(name) -> AudioStreamWAV` and `Sfx.NAMES` expose the pre-rendered sounds (rendered on a worker thread at startup).
 - `tests/test_core.gd` swaps `tests/core_stubs/module_stub.gd` onto Layout/Feel/Particles/Stage/Fx/Ui/Run at runtime, so it needs every autoload to parse, but not to work.
 
@@ -123,5 +124,5 @@ Stage owns the 3D world, camera, lights, WorldEnvironment (glow, DOF), the diora
 - `Stage.ambience` = `{fireflies, leaves, neutral}` replaces `getStyle().ambience` (HD-2D is the only style).
 - Pedestals are positioned by `Stage.update_scene(t, dt)` itself: it reads `S.em`, `S.mode`, `S.title_actor` and `S.active_actor()`, so the main loop doesn't port TS main.ts's pedestal block. `Stage.debug_peds` overrides that for tests.
 - Stage owns a vignette plus upper-left key-light wash on `CanvasLayer -1`, which sits above the 3D view and under the UI's layers 5 and 10.
-- Stage mapping helpers for anyone who needs 3D: `Stage.world` (the Node3D root), `STAND_Y`, `to_height(p, h)`, `to_stage(p)`, `to_screen(w)`, `wpp(w)`, `at_z`, `at_depth`, `cam_right/up/back()`. `Layout.measure_band(top, bottom)` treats a negative `bottom` as "no bottom HUD". `Layout.band_spots(top, bottom)` returns where the spots would be.
-- Actor extras: `set_aura(color, alpha)` (the core request: a wind-up glow behind the creature), tweenable `flash`, `k`, `art_scale()`, `root_point(art_xy)`, `feet()` and `static prebake(key)` (Noctyrm prebakes all four element recolours on create). `Actor.create(key, el := "")`: an empty `el` means the species' own element.
+- Stage mapping helpers for anyone who needs 3D: `Stage.world` (the Node3D root), `STAND_Y`, `to_height(p, h)`, `to_stage(p)`, `to_screen(w)`, `wpp(w)`, `at_z`, `at_depth`, `cam_right/up/back()`. `Layout.measure_band(top, bottom)` treats a negative `bottom` as "no bottom HUD". `Layout.band_spots(top, bottom)` returns where the spots would be. Spots always stay inside the free band; `Layout.room` is false when the band is shorter than `MIN_ROOM` and the title creature is then hidden instead of drawn under a panel.
+- Actor extras: `set_aura(color, alpha)` (the core request: a wind-up glow behind the creature), tweenable `flash`, `k`, `art_scale()`, `root_point(art_xy)`, `feet()`, `screen_rect()` (the sprite's screen-px box, for the UI check) and `static prebake(key)` (Noctyrm prebakes all four element recolours on create). `Actor.create(key, el := "")`: an empty `el` means the species' own element.

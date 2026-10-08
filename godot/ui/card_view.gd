@@ -47,12 +47,12 @@ func face(def: Dictionary, el, o := {}) -> CardView:
 	dead = o.get("dead", false)
 	c = DEAD_C if dead else UiKit.el_css(el)
 	_reset()
-	_deco(_cost_bubble(str(o.get("cost", def.cost))), "tl", Vector2(-6, -7))
+	_deco(_cost_bubble(str(o.get("cost", def.cost))), "tl", Vector2(4, 4))
 	if o.get("chip", false) and el != null and str(el) != "":   # cards belong to an element, not a creature
-		_deco(UiKit.orb(c, 22, str(el), 13), "tr", Vector2(-5, -6))
+		_deco(UiKit.orb(c, 22, str(el), 13), "tr", Vector2(5, 5))
 	if o.get("bench", false) and not dead:   # swap to a creature of this element first
 		var s := UiKit.icon("swap", 14, UiKit.mix(c, Color.WHITE, 0.35))
-		_deco(s, "tr", Vector2(5, 22))
+		_deco(s, "tr", Vector2(9, 31))
 	if o.get("strong", false) and not dead:
 		_deco(_badge("STRONG", Vector4(4, 3, 4, 2), 4), "bl", Vector2(5, 5))
 	if str(o.get("upgraded", "")) != "" and not dead:
@@ -108,6 +108,7 @@ func _body(glyph: String, name: String, text: String) -> void:
 	queue_sort()
 
 func _deco(n: Control, corner: String, off: Vector2) -> void:
+	n.set_meta("deco", corner)   # tests/ui_check.gd: corner pieces must not cover the card's text
 	add_child(n)
 	decos.append([n, corner, off])
 	queue_sort()
@@ -164,7 +165,16 @@ func _get_minimum_size() -> Vector2:
 	if v.aspect:
 		return Vector2(0, round(size.x * 4.0 / 3.0))
 	var p: Vector4 = v.pad
-	return Vector2(0, maxf(v.get("min_h", 0), p.y + box.get_combined_minimum_size().y + p.w))
+	return Vector2(0, maxf(v.get("min_h", 0), p.y + box.get_combined_minimum_size().y + p.w + _strip()))
+
+## Extra bottom padding so a bottom badge (STRONG, upgrade tag) gets its own strip instead of
+## sitting on the rules text.
+func _strip() -> float:
+	var strip := 0.0
+	for x in decos:
+		if x[1] in ["bl", "br"]:
+			strip = maxf(strip, x[0].get_combined_minimum_size().y + x[2].y + 2.0 - v.pad.w)
+	return strip
 
 func _notification(what: int) -> void:
 	if what != NOTIFICATION_SORT_CHILDREN:
@@ -173,8 +183,12 @@ func _notification(what: int) -> void:
 	var w := size.x
 	fit_child_in_rect(bg, Rect2(Vector2.ZERO, size))
 	var inner := maxf(1.0, w - p.x - p.z)
+	var strip := _strip()
+	p.w += strip
 	if gl:
 		var g := roundf(inner * v.gl)
+		if v.aspect:   # fixed-size card: the glyph shrinks to pay for the badge strip
+			g = maxf(12.0, g - strip)
 		gl.custom_minimum_size = Vector2(g, g)
 	if nm:
 		var f: Font = nm.get_theme_font("font")

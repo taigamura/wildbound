@@ -24,7 +24,7 @@ var _s_anim := {}
 func _init(is_intent := false, top := Color.WHITE, bot := Color.WHITE) -> void:
 	intent = is_intent
 	mouse_filter = MOUSE_FILTER_IGNORE
-	custom_minimum_size.y = 6 if intent else 14
+	custom_minimum_size.y = 6 if intent else 16
 	bg.look({"radius": 7.0, "c0": Color(0, 0, 0, 0.45), "c1": Color(0, 0, 0, 0.45), "border_w": 1.0, "border_c": Color(0, 0, 0, 0.25)})
 	add_child(bg)
 	if not intent:
@@ -36,7 +36,7 @@ func _init(is_intent := false, top := Color.WHITE, bot := Color.WHITE) -> void:
 		shf.look({"radius": 7.0, "mode": "stripes", "c0": Color(143 / 255.0, 227 / 255.0, 1, 0.85), "c1": Color(143 / 255.0, 227 / 255.0, 1, 0.55)})
 		add_child(shf)
 		txt = UiKit.lbl("", "800", 11, UiKit.INK, {"align": "center", "shadow": Color(0, 0, 0, 0.9), "shadow_off": Vector2(0, 1),
-			"shadow_outline": 1, "valign": VERTICAL_ALIGNMENT_CENTER})
+			"shadow_outline": 1, "valign": VERTICAL_ALIGNMENT_CENTER, "lh": -4})
 		add_child(txt)
 	set_process(false)
 
@@ -99,6 +99,7 @@ func _layout() -> void:
 		n.size = Vector2(ww, h)
 		n.position = Vector2(w - ww if p[2] else 0.0, 0)
 		n.look({"radius": minf(r, 7.0)})
-	if txt:
-		txt.position = Vector2(0, -1)
-		txt.size = size
+	if txt:   # centred on the bar; the label's line box is a little taller than the bar
+		var th := txt.get_combined_minimum_size().y
+		txt.position = Vector2(0, roundf((size.y - th) / 2.0))
+		txt.size = Vector2(size.x, th)

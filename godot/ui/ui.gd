@@ -72,6 +72,9 @@ func safe() -> Dictionary:
 		var k := vp.y / float(win.y)
 		top = sa.position.y * k
 		bottom = maxf(0.0, (win.y - sa.end.y) * k)
+	if Platform.safe_insets.x >= 0.0:
+		top = Platform.safe_insets.x
+		bottom = Platform.safe_insets.y
 	return {"top": top, "bottom": bottom, "side": maxf(0.0, (vp.x - 460.0) / 2.0)}
 
 func _on_resize() -> void:
@@ -501,7 +504,7 @@ func _hand_down(i: int, pos: Vector2) -> void:
 	Sfx.audio()
 	_select(i)
 	_drag = {"b": b, "i": i, "x0": pos.x, "y0": pos.y, "lifted": false, "dy0": 0.0, "base": _poses()[i],
-		"trail": [{"y": pos.y, "t": Time.get_ticks_msec()}]}
+		"trail": [{"y": pos.y, "t": Platform.ticks_msec()}]}
 
 func _select(i: int) -> void:
 	_sel = i
@@ -540,7 +543,7 @@ func _scrub(d: Dictionary, pos: Vector2) -> void:
 	d.b = slots[best]
 	d.x0 = pos.x
 	d.y0 = pos.y
-	d.trail = [{"y": pos.y, "t": Time.get_ticks_msec()}]
+	d.trail = [{"y": pos.y, "t": Platform.ticks_msec()}]
 	_select(best)
 	d.base = _poses()[best]
 	Sfx.tick()
@@ -551,14 +554,14 @@ func _flicked(d: Dictionary, pos: Vector2) -> bool:
 	var ch: float = d.b.size.y
 	var up: float = d.y0 - pos.y
 	var t0: Dictionary = d.trail[0]
-	var vel: float = (t0.y - pos.y) / maxf(1.0, Time.get_ticks_msec() - t0.t)
+	var vel: float = (t0.y - pos.y) / maxf(1.0, Platform.ticks_msec() - t0.t)
 	return up > ch * FLICK_DIST or (up > ch * FLICK_MIN and vel > FLICK_VEL)
 
 func _hand_move(pos: Vector2) -> void:
 	var d = _drag
 	if d == null:
 		return
-	var now := Time.get_ticks_msec()
+	var now := Platform.ticks_msec()
 	d.trail.append({"y": pos.y, "t": now})
 	while d.trail.size() > 2 and now - d.trail[0].t > 90:
 		d.trail.pop_front()
@@ -666,17 +669,19 @@ func _bmon(c, extra := "", interactive := false) -> PanelContainer:
 	p.add_child(bx)
 	var m := MarginContainer.new()
 	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for s in [["left", 6], ["top", 6], ["right", 10], ["bottom", 6]]:
-		m.add_theme_constant_override("margin_" + s[0], s[1])
+	# the map/end rows fit three chips in a sheet, so their chips are tighter than the bench's
+	var pad := [6, 6, 20, 6] if interactive else [5, 5, 7, 5]   # bench: a right column for the unlock pips
+	for i in 4:
+		m.add_theme_constant_override("margin_" + ["left", "top", "right", "bottom"][i], pad[i])
 	bx.add_child(Box.fill(m))
-	var h := UiKit.hbox(7)
+	var h := UiKit.hbox(7 if interactive else 5)
 	m.add_child(h)
-	h.add_child(UiKit.orb(col, 30, str(c.el), 14))
+	h.add_child(UiKit.orb(col, 30, str(c.el), 14) if interactive else UiKit.orb(col, 24, str(c.el), 12))
 	var t := UiKit.vbox(3)
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(t)
-	var nm := UiKit.lbl(c.name + extra, "display", 13, UiKit.INK, {"lh": -4} if interactive else {"ellipsis": true, "lh": -4})
+	var nm := UiKit.lbl(c.name + extra, "display", 13 if interactive else 12, UiKit.INK, {"lh": -4} if interactive else {"ellipsis": true, "lh": -4})
 	t.add_child(nm)
 	var mini := Control.new()
 	mini.custom_minimum_size = Vector2(56, 5)
@@ -756,17 +761,21 @@ func _bench_playable(c) -> int:
 			n += 1
 	return n
 
-## TS monChip: a non-interactive .bmon for the map/end party rows.
-func mon_chip(c, extra := "") -> Control:
-	var b := _bmon(c, extra, false)
+## TS monChip: a non-interactive .bmon for the map/end party rows. `lead` puts a gold star on the
+## orb (not after the name, where it cost the name its last letters).
+func mon_chip(c, lead := false) -> Control:
+	var b := _bmon(c, "", false)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if lead:
+		var star := UiKit.lbl("★", "800", 11, UiKit.GOLD, {"outline": 4, "outline_c": Color(0, 0, 0, 0.7)})
+		b.get_child(0).add_child(Box.at(star, "tl", Vector2(3, 1)))
 	return b
 
 ## TS partyHTML: chips for the lineup (★ marks the lead).
 func party_html(list = null) -> Array:
 	var out: Array = []
 	for c in (list if list != null else S.team()):
-		out.append(mon_chip(c, " ★" if (S.lineup.size() > 0 and c.uid == S.lineup[0]) else ""))
+		out.append(mon_chip(c, S.lineup.size() > 0 and c.uid == S.lineup[0]))
 	return out
 
 # ================================================================== per-frame sync

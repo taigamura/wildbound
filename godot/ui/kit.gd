@@ -283,7 +283,7 @@ static func ess(glyph: String, c: Color, text: String) -> PanelContainer:
 	var p := panel(flat(alpha(c, 0.14), 7, 1, alpha(c, 0.35), Vector4(8, 4, 8, 3)))
 	var h := hbox(4)
 	h.add_child(icon(glyph, 11, c))
-	h.add_child(lbl(text, "800", 12, c))
+	h.add_child(lbl(text, "800", 12, mix(c, Color.WHITE, 0.45)))   # 12px saturated text alone reads too dark
 	p.add_child(h)
 	return p
 
@@ -309,7 +309,7 @@ static func clear(n: Node) -> void:
 
 ## Real seconds since boot (UI motion that ignores hit-stop and slow-mo, like CSS in the TS build).
 static func now() -> float:
-	return Time.get_ticks_usec() / 1e6
+	return Platform.ticks_usec() / 1e6
 
 ## CSS cubic-bezier(x1,y1,x2,y2) evaluated at progress t.
 static func bezier(t: float, x1: float, y1: float, x2: float, y2: float) -> float:

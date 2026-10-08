@@ -26,7 +26,7 @@ var _last_us := 0
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	process_priority = -100   # before everything else, so this frame's time_scale is set first
-	_last_us = Time.get_ticks_usec()
+	_last_us = Platform.ticks_usec()
 
 
 func shake(v: float) -> void:
@@ -46,7 +46,7 @@ func slow_mo(t: float, scale: float) -> void:
 
 
 func _process(_delta: float) -> void:
-	var now := Time.get_ticks_usec()
+	var now := Platform.ticks_usec()
 	var real := minf((now - _last_us) / 1000000.0, 0.05)
 	_last_us = now
 	real_dt = real

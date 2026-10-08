@@ -146,8 +146,17 @@ static func _screen(ui, id: String, top: Control, items: Array, frac := 0.68) ->
 	ui.root.add_child(scr)
 	ui.screens[id] = scr
 	if top:
+		# scrim: a dark fade behind the header so its text reads over the bright diorama
+		var scrim := RRect.new({"radius": 0.0, "angle": 180.0, "c0": Color(0.04, 0.03, 0.09, 0.82),
+			"c1": Color(0.04, 0.03, 0.09, 0.72), "s1": 0.75, "c2": Color(0.04, 0.03, 0.09, 0.0)})
+		scrim.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+		scr.add_child(scrim)
 		top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 		scr.add_child(top)
+		top.item_rect_changed.connect(func():   # full strength down to the header's last line, then fade
+			var hb := top.get_rect().end.y
+			scrim.offset_bottom = hb + 44.0
+			scrim.look({"s1": hb / (hb + 44.0)}))
 	var outer := MarginContainer.new()
 	outer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	outer.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
@@ -164,6 +173,10 @@ static func _screen(ui, id: String, top: Control, items: Array, frac := 0.68) ->
 	scr.set_meta("outer", outer)
 	scr.set_meta("inner", inner)
 	ui.band[id] = {"top": top, "bottom": outer}
+	# content changes (a longer hint, a new row) move the band edges; keep the stage spots in step
+	for n in [top, outer]:
+		if n:
+			n.resized.connect(func(): if ui.current == id: ui.measure())
 
 ## Re-apply safe-area padding and the 460px max width (on resize).
 static func frame(ui, s: Dictionary) -> void:

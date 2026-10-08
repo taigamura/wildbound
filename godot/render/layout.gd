@@ -10,6 +10,10 @@ var size := Vector2(390, 844)
 
 var _t := {"u": 60.0, "ex": 0.0, "ey": 0.0, "px": 0.0, "py": 0.0, "tx": 0.0, "ty": 0.0}
 var _c := _t.duplicate()
+## Free band height (px) below which the title creature is hidden instead of drawn over panels.
+const MIN_ROOM := 90.0
+## Whether the free band is tall enough for the title creature.
+var room := true
 var _band := Vector2(0, -1)   # last (top, bottom) passed to measure_band; bottom < 0 = full height
 
 
@@ -30,15 +34,14 @@ func measure_band(top_px: float, bottom_px: float, snap := false) -> void:
 	size = _view_size()
 	var w := size.x
 	var h := size.y
+	# Spots stay inside the free band, even a short one: running the stage up under the header or
+	# down under the sheet put the title creature behind panels (tests/ui_check.gd "art").
 	var top := maxf(0.0, top_px)
 	var bot := h if bottom_px < 0.0 else minf(h, bottom_px)
-	if bot - top < h * 0.22:
-		top = 0.0   # tall sheet: let the stage run up under the header
-	if bot - top < h * 0.22:
-		bot = h * 0.5
-	var bh := bot - top
+	var bh := maxf(bot - top, 1.0)
+	room = bh >= MIN_ROOM
 	var cx := w / 2.0
-	_t.u = clampf(minf(bh / 4.8, w / 5.0), 34.0, 110.0)
+	_t.u = clampf(minf(bh / 4.8, w / 5.0), 20.0, 110.0)
 	var spread := minf(w * 0.19, _t.u * 1.6)
 	_t.ex = cx + spread; _t.ey = top + bh * 0.5    # enemy: upper right
 	_t.px = cx - spread; _t.py = top + bh * 0.92   # partner: lower left

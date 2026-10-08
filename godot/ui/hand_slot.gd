@@ -24,6 +24,7 @@ var _t0 := 0.0
 func _init(idx: int) -> void:
 	i = idx
 	mouse_filter = MOUSE_FILTER_STOP
+	set_meta("ui_check_free", true)   # the fan lifts and magnifies slots past the hand's box on purpose
 	add_child(face)
 	set_process(false)
 

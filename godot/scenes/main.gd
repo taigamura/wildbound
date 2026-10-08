@@ -5,6 +5,9 @@ extends Node
 ## Debug screenshots: `godot --path godot --resolution 390x844 -- --shot=<screen>` shows a screen
 ## (title team team-swap map reward upgrade party end pack coll shop battle), waits a few frames, saves
 ## /tmp/claude-1000/wb-<screen>.png and quits. Add `--shot-dir=<dir>` to save elsewhere.
+## With `--ui-check` (scripts/ui-check.sh) the shot is deterministic and goes through tests/ui_check.gd:
+## `--golden=<dir>` compares against <dir>/wb-<screen>.png, `--update` rewrites it, and the exit code
+## is 1 if any check failed.
 
 var T := 0.0
 var _last_us := 0
@@ -12,6 +15,9 @@ var _shot := ""
 var _shot_dir := "/tmp/claude-1000"
 var _shot_frames := 0
 var _shot_scroll := -1
+var _golden := ""
+var _update := false
+var _no_golden := false
 
 func _ready() -> void:
 	process_priority = -10   # before the autoloads' own _process (TS order: layout, battle, scene, HUD)
@@ -23,7 +29,7 @@ func _ready() -> void:
 	Run.to_title()
 	if Platform.has_method("notify_ready"):
 		Platform.notify_ready()
-	_last_us = Time.get_ticks_usec()
+	_last_us = Platform.ticks_usec()
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="):
 			_shot = a.substr(7)
@@ -31,6 +37,12 @@ func _ready() -> void:
 			_shot_scroll = int(a.substr(14))
 		elif a.begins_with("--shot-dir="):
 			_shot_dir = a.substr(11)
+		elif a.begins_with("--golden="):
+			_golden = a.substr(9)
+		elif a == "--update":
+			_update = true
+		elif a == "--no-golden":
+			_no_golden = true
 	if _shot != "":
 		_start_shot.call_deferred()
 
@@ -39,7 +51,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		Sfx.audio()
 
 func _process(_delta: float) -> void:
-	var now := Time.get_ticks_usec()
+	var now := Platform.ticks_usec()
 	var real := minf((now - _last_us) / 1e6, 0.05)
 	_last_us = now
 	# hit-stop and slow-mo live in Feel (Engine.time_scale); the world runs at that scale
@@ -65,6 +77,7 @@ func _process(_delta: float) -> void:
 		a.update(dt)
 	if S.title_actor != null and is_instance_valid(S.title_actor):
 		var t: Vector2 = Layout.tpos()
+		S.title_actor.visible = Layout.room
 		S.title_actor.place(t.x, t.y, 1 if sin(T * 0.6) > 0 else -1)
 		S.title_actor.update(dt)
 	var me = S.act()
@@ -77,9 +90,13 @@ func _process(_delta: float) -> void:
 # ------------------------------------------------------------------ debug screenshots
 
 func _start_shot() -> void:
+	if Platform.ui_check:   # a lived-in save: full team and some loot, so long names and numbers show
+		Platform.store_set("lineup", ["emberwick", "bellspring", "truffmole"])
+		Platform.store_set("loot", {"gold": 240, "sword": 2, "orb": 1, "jewel": 3})
+		S.picks = Meta.last_lineup()
 	match _shot:
 		"title":
-			pass
+			Run.to_title()
 		"battle", "flick", "inspect":
 			if _shot == "battle":
 				S.picks = ["emberwick", "bellspring", "truffmole"]
@@ -106,6 +123,14 @@ func _shot_tick() -> void:
 		var path := "%s/wb-%s.png" % [_shot_dir, _shot]
 		img.save_png(path)
 		print("shot saved: ", path)
+		if Platform.ui_check:
+			var chk: GDScript = load("res://tests/ui_check.gd")
+			if chk == null or not chk.can_instantiate():   # a broken check must fail fast, not hang
+				print("UICHECK EXIT the check script failed to load")
+				get_tree().quit(2)
+				return
+			get_tree().quit(chk.new().check(_shot, img, _shot_dir, "" if _no_golden else _golden, _update))
+			return
 		get_tree().quit()
 
 ## Synthetic pointer input: press card 1, scrub right onto card 2, then (flick) swipe it up to play,

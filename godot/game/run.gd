@@ -79,7 +79,7 @@ func start_run() -> void:
 		S.lineup.append(c.uid)
 	S.active = S.lineup[0]
 	S.floor = 1
-	S.stats = {"start": Time.get_ticks_msec(), "dealt": 0, "perfects": 0}
+	S.stats = {"start": Platform.ticks_msec(), "dealt": 0, "perfects": 0}
 	run_ess = Meta.empty_essence()
 	run_loot = Data.no_loot()
 	Stage.set_biome(0)
@@ -564,7 +564,7 @@ func quit_tap(t: Tap) -> void:
 	Sfx.audio()
 	if not (S.mode in ["map", "battle", "anim", "intro", "reward"]):
 		return
-	var now := Time.get_ticks_msec()
+	var now := Platform.ticks_msec()
 	if t.has_meta("armed") and now - int(t.get_meta("armed")) < 2000:
 		t.remove_meta("armed")
 		t.modulate = Color.WHITE
@@ -578,7 +578,7 @@ func quit_tap(t: Tap) -> void:
 	Platform.haptic("warning")
 	Fx.toast("Tap again to quit the run")
 	get_tree().create_timer(2.0, true, false, true).timeout.connect(func():
-		if is_instance_valid(t) and t.has_meta("armed") and Time.get_ticks_msec() - int(t.get_meta("armed")) >= 1990:
+		if is_instance_valid(t) and t.has_meta("armed") and Platform.ticks_msec() - int(t.get_meta("armed")) >= 1990:
 			t.remove_meta("armed")
 			t.modulate = Color.WHITE
 			if t.has_meta("lbl"):
@@ -598,7 +598,7 @@ func end_run(won: bool, quit := false) -> void:
 	S.tok += 1
 	if won:
 		_bank({"gold": Data.BAL.win_gold})
-	var secs := roundi((Time.get_ticks_msec() - float(S.stats.start)) / 1000.0)
+	var secs := roundi((Platform.ticks_msec() - float(S.stats.start)) / 1000.0)
 	var reached: int = Data.BAL.floors if won else S.floor
 	Meta.record_run(won, reached)
 	el.endH.text = "Expedition won" if won else ("Retreated" if quit else "Run over")

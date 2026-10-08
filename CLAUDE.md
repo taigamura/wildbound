@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**This file is the single source of truth for Wildbound:** what the game is (design spec), how the code is laid out, and the rules for changing it. If code and this file disagree, one of them is a bug; fix whichever is wrong and keep them in sync in the same change. `README.md` covers setup and shipping only. `docs/HD2D.md` is the ChatGPT template and normalizer guide for HD-2D sprites; it follows the art rules here. `godot/CONTRACT.md` is the module contract from the Godot port.
+**This file is the single source of truth for Wildbound:** what the game is (design spec), how the code is laid out, and the rules for changing it. If code and this file disagree, one of them is a bug; fix whichever is wrong and keep them in sync in the same change. `README.md` covers setup and shipping only. `docs/UI-QUEUE.md` is the approved UI redesign work waiting to be applied, in order. `docs/HD2D.md` is the ChatGPT template and normalizer guide for HD-2D sprites; it follows the art rules here. `godot/CONTRACT.md` is the module contract from the Godot port.
 
 All numbers below are **starting values**. They live in `godot/core/data.gd` (`BAL` and the roster) and are tuned by playing. When you change a number there, change it here too.
 
@@ -310,6 +310,7 @@ It was ported from a PixiJS web app in an Expo WebView (TestFlight builds up to 
 - **Shipped:** v0.3.0 build 9 on TestFlight (build 6 was the first Godot build). Everything in Part 1 is implemented, including element-mapped cards and the Team screen's pending-replace picker: real-time card combat with the fanned hand, statuses, Perfect Swap, chain, 12 creatures with alternate cards and Traits, the 8-floor run with Warden and Noctyrm, loot, permanent upgrades, item shop, daily and bought packs, Collection with the loadout editor.
 - **Art is mostly placeholder:** 4 of 14 creatures have real sprites (Brinecrab, Puddlet, Brambat, Bellspring); the 3 HD-2D anchors (Sable, ember fox, dragon) stand in for the rest, recoloured per element (§13). The anchors are painted in Ember, so the Ember placeholders (Emberwick = fox, Cinderpip = Sable, Kilnback = dragon) show unrecoloured and look finished, but they aren't: a species is done only when `godot/art/hd2d/<key>.png` exists. `/hd2d-batch` generates the remainder a few per day.
 - **Unverified on device:** frame rate on a real iPhone (the 3D stage was only measured on a software renderer; first lever if it drops below 60 fps: render the 3D scene at ~0.75 resolution), haptics, safe-area insets.
+- **UI redesign queued:** all ten mockup ideas are approved and listed in order in `docs/UI-QUEUE.md`; the card look is Crystal Foil with the faces of every teammate who can play the card (§4.3's element rule stays).
 - **Known gaps from the port:** no background blur on panels; a card that turns dead repaints in place instead of flying off; the HUD band isn't re-measured when status tags change its height.
 - **Balance is untuned** for the loot economy and 3-creature teams from floor 1 (§15).
 - **Saves:** the Godot app's save file (`user://save.cfg`) starts fresh; progress from the web builds (≤ 0.2.0) does not carry over.
@@ -320,6 +321,7 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 - `godot --headless --audio-driver Dummy --path godot --quit`: load check (parse errors show here)
 - `godot --headless --audio-driver Dummy --path godot --script res://tests/test_core.gd`: core logic tests (all must pass)
 - `godot --audio-driver Dummy --path godot --resolution 390x844 -- --shot=<title|team|map|reward|upgrade|party|end|pack|coll|shop|battle|inspect|flick> --shot-dir=DIR`: render one screen to `DIR/wb-<screen>.png` and quit (`--shot-scroll=PX` scrolls a sheet). `--shot=team-swap` shows the Team screen with every creature owned, a full team and Cinderpip pending (it uses a scratch save, `user://shot-team-swap.cfg`, never `save.cfg`). Renders for real here (Vulkan llvmpipe).
+- `scripts/ui-check.sh [screen...]`: the screenshot UI check. Renders every `--shot` screen at 390×844 (simulated 47/34 px notch insets) and 375×667 (20/0) in deterministic mode, lints the layout (`godot/tests/ui_check.gd`: offscreen or outside the safe area, a box spilling out of its parent, squashed boxes, wrapped text overflowing, ellipsis truncation, a corner badge covering text, creature art under a panel, low-contrast text over the scene, header/sheet overlap) and diffs against the goldens in `godot/tests/golden/<size>/`. Shots, `.fail.png` (findings outlined) and `.diff.png` land in `/tmp/claude-1000/ui-check/`. `--update` accepts the current renders as goldens; only do that after looking at them. Takes about 2 minutes.
 - `godot --audio-driver Dummy --path godot --script res://tests/stage_preview.gd`: stage-only visual test (both biomes, effects); `-- --pair=<enemy>,<partner>` puts two species on the biome 0 pedestals instead (checks a new sprite)
 - `godot --path godot -e`: the editor
 
@@ -342,7 +344,8 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 - **Stale callbacks:** `S.tok` is bumped when a battle or run ends. Every delayed callback (tween callbacks, `create_timer`) captures `tok` and bails if it changed.
 - **Timing:** game-time effects use tweens/timers in scaled time so they obey hit-stop and slow-mo (`Feel` drives `Engine.time_scale` from real time). UI motion (the card fan, screens) runs in real time.
 - **Input:** the hand uses touch/mouse press-drag-release. Press magnifies instantly; horizontal movement scrubs the magnification between cards (hysteresis `SCRUB_HYST`); upward travel past `LIFT_LOCK` commits a swipe on that card; release plays it if the `FLICK_*` thresholds are met, otherwise the card returns to the fan. Constants are in `ui/ui.gd`.
-- **Storage and native calls** only in `core/platform.gd`.
+- **Storage and native calls** only in `core/platform.gd`. So is the clock: use `Platform.ticks_usec()`/`ticks_msec()`, never `Time.get_ticks_*`, or the UI check's screenshots stop being deterministic.
+- **UI layout:** nothing hangs off its box (badges and tags sit inside the card or chip), text never runs under a corner piece, and creature art never sits under a header or sheet. `scripts/ui-check.sh` enforces this; a deliberate exception sets `ui_check_skip` (or `ui_check_free` for a freely placed node like a lifted hand card) with a comment saying why.
 - **Reserved word:** `trait` is reserved in GDScript; the field is `Mon.trait_key`, and dictionary keys `"trait"` are read with brackets.
 - **Assets:** pixel art uses nearest filtering; the only image files are the HD-2D sprites in `godot/art/hd2d/` (everything else is procedural). Keep it that way unless a real asset is approved.
 
@@ -363,7 +366,7 @@ Run from the repo root. On this machine always pass `--audio-driver Dummy` (Godo
 
 ## Verifying changes
 - Load check and `tests/test_core.gd` (see Commands): zero script errors, all tests pass.
-- Render the screens you touched with `--shot` at 390×844 (and 375×667 for layout changes) and look at them.
+- UI changes: `scripts/ui-check.sh` must pass. When a golden diff is an intended change, look at the new shots, then rerun with `--update` and commit the goldens with the change.
 - For stage or art changes, also run `tests/stage_preview.gd` and check both biomes.
 - Debug helpers: `Battle.debug` (`hurt`, `energy`, `add`, `essence`, `loot`, `trait`, `heavy`).
 - Before a release, `scripts/ship-ios-godot.sh --no-submit` proves the signed iOS build.
