@@ -7,4 +7,6 @@ GODOT_BIN="${GODOT_BIN:-$(command -v godot)}"
 if [ -n "${GODOT_WINDOW:-}" ] || [[ " $* " == *" --headless "* ]] || ! command -v xvfb-run >/dev/null; then
   exec "$GODOT_BIN" "$@"
 fi
-exec env -u WAYLAND_DISPLAY xvfb-run -a -s "-screen 0 1600x1200x24" "$GODOT_BIN" --display-driver x11 "$@"
+# Parallel runs (ui-check's jobs) start their display search at different numbers: `xvfb-run -a`
+# alone races when two runs pick the same free display at once.
+exec env -u WAYLAND_DISPLAY xvfb-run -a -n $((100 + $$ % 800)) -s "-screen 0 1600x1200x24" "$GODOT_BIN" --display-driver x11 "$@"
