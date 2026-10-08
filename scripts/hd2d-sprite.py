@@ -10,6 +10,7 @@ drops stray specks (baked-in particles), crops, scales up by a whole number
   python3 scripts/hd2d-sprite.py raw.png out.png                                # humanoid
   python3 scripts/hd2d-sprite.py raw.png out.png --kind monster --size 1.22     # Kilnback
   python3 scripts/hd2d-sprite.py raw.png out.png --palette-from docs/hd2d/anchors/humanoid.png
+  python3 scripts/hd2d-sprite.py raw.png godot/art/hd2d/kilnback.png --kind monster --size 1.22 --scale 1   # game copy
 
 --kind/--size set the in-game height (the manifest `height`), not the pixel count, so a
 sprite drawn on a finer grid shows the same size, just with smaller pixels.
@@ -177,6 +178,7 @@ def main():
     ap.add_argument('--palette-from', help='lock to this anchor PNG\'s colours (optional)')
     ap.add_argument('--colors', type=int, default=64, help='adaptive palette size when no --palette-from (default 64)')
     ap.add_argument('--keep-islands', action='store_true', help='keep small detached pieces')
+    ap.add_argument('--scale', type=int, help='whole-number upscale of the output (default: about 512 px tall; 1 = true pixel grid, as game sprites are stored)')
     ap.add_argument('--tol', type=int, default=24, help='background key tolerance per channel (default 24)')
     a = ap.parse_args()
     units = HUMANOID_UNITS if a.kind == 'humanoid' else MONSTER_UNITS * a.size
@@ -210,7 +212,7 @@ def main():
     m = max(2, round(fh * MARGIN))
     canvas = Image.new('RGBA', (w + 2 * m, fh + 2 * m), (0, 0, 0, 0))
     canvas.paste(sprite, (m, m))
-    k = max(1, TARGET // canvas.height)
+    k = a.scale or max(1, TARGET // canvas.height)
     canvas.resize((canvas.width * k, canvas.height * k), Image.Resampling.NEAREST).save(a.out)
 
     # manifest numbers: feet = centre of the lowest opaque row; head ~ upper sixth of the figure;
