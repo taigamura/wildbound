@@ -514,8 +514,17 @@ func test_element_cards() -> void:
 	pip.ups["strike"] = "cost"
 	eq(St.card_of(scorch).def.cost, 0, "upgrade follows the card")
 	pip.ups.clear()
+	# face window: living teammates of the card's element, the source first; swaps don't change it
+	eq(St.card_faces(scorch), [pip, wick], "Scorch: Cinderpip, then Emberwick")
+	eq(St.card_faces(wsig), [wick, pip], "Wickflare: Emberwick first")
+	eq(St.card_faces(splash), [bell], "the only Tide creature")
+	St.active = bell.uid
+	eq(St.card_faces(scorch), [pip, wick], "a swap keeps the faces")
+	St.active = wick.uid
 	# dead only when every creature of the element is down
 	wick.alive = false
+	eq(St.card_faces(wsig), [pip], "a KO drops its face; the card shows who's left")
+	eq(St.card_faces(scorch), [pip], "and from every card it shared")
 	St.active = bell.uid
 	check(not St.card_dead(scorch), "Cinderpip alive: Ember cards live on")
 	check(not St.card_dead(wsig), "the fainted source's card lives on")
@@ -527,9 +536,12 @@ func test_element_cards() -> void:
 	check(St.card_dead(scorch), "all Ember down: dead")
 	check(St.card_dead(wsig), "all Ember down: dead (other source)")
 	check(not St.card_benched(scorch), "dead isn't benched")
+	eq(St.card_faces(wsig), [wick], "dead card: just its source")
+	eq(St.card_faces(scorch), [pip], "dead card: just its source (other)")
 	eq(St.card_block(scorch), "", "dead card can be discarded")
 	wick.alive = true
 	pip.alive = true
+	eq(St.card_faces(wsig), [wick, pip], "a revive brings the faces back")
 	# Thirst on the lead heals the lead on another creature's Strike
 	e = _battle(["truffmole", "brambat"], "puddlet")
 	var mole: Mon = St.party[0]

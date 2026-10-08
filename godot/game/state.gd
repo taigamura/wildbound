@@ -129,6 +129,23 @@ func card_benched(r: CardRef) -> bool:
 	var lead := act()
 	return lead == null or not lead.alive or lead.el != card_el(r)
 
+## Who the card's face window shows: every living lineup member of its element (any of them can lead
+## and play it), its source first. A dead card shows just its source. Changes on a KO or a revive, never on a swap.
+func card_faces(r: CardRef) -> Array[Mon]:
+	var src := mon(r.uid)
+	var out: Array[Mon] = []
+	if src == null:
+		return out
+	for c in team():
+		if c.alive and c.el == src.el:
+			if c == src:
+				out.push_front(c)
+			else:
+				out.append(c)
+	if out.is_empty():
+		out.append(src)
+	return out
+
 ## Why a card can't be played right now ("" = playable, "energy", "bench", "busy").
 ## Only cards of the lead's element play; the rest wait for a swap to a living creature of their element.
 func card_block(r: CardRef) -> String:

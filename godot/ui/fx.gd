@@ -62,18 +62,18 @@ func _build_banner() -> void:
 	banner_box = UiKit.vbox(6)
 	banner_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	var stack := Box.new()
-	banner_glow = UiKit.lbl("", "display", 46, Color(1, 1, 1, 0), {"align": "center", "outline": 18})
-	banner_main = UiKit.lbl("", "display", 46, Color.WHITE, {"align": "center", "shadow": Color(0, 0, 0, 0.55), "shadow_off": Vector2(0, 4)})
+	banner_glow = UiKit.lbl("", "display", UiKit.D_L, Color(1, 1, 1, 0), {"align": "center", "outline": 18})
+	banner_main = UiKit.lbl("", "display", UiKit.D_L, UiKit.INK, {"align": "center", "shadow": Color(0, 0, 0, 0.55), "shadow_off": Vector2(0, 4)})
 	stack.add_child(banner_glow)
 	stack.add_child(banner_main)
 	banner_box.add_child(stack)
-	banner_small = UiKit.lbl("", "800", 13, Color.WHITE, {"align": "center", "upper": true, "ls": 0.24})
+	banner_small = UiKit.lbl("", "700", UiKit.T_L, Color.WHITE, {"align": "center", "shadow": Color(0, 0, 0, 0.6), "shadow_off": Vector2(0, 2)})
 	banner_box.add_child(banner_small)
 	banner_box.modulate.a = 0.0
 	root.add_child(banner_box)
 
 func _build_toast() -> void:
-	toast_box = UiKit.panel(UiKit.flat(UiKit.PANEL, 12, 1, UiKit.LINE, Vector4(14, 10, 14, 10)))
+	toast_box = UiKit.panel(UiKit.window(12, false))
 	toast_lbl = UiKit.lbl("", "700", 14, UiKit.INK, {"align": "center", "wrap": true, "lh": 0})
 	toast_box.add_child(toast_lbl)
 	toast_box.modulate.a = 0.0
@@ -109,8 +109,8 @@ func pop_num(pos: Vector2, text, cls := "", label := "", color := Color(0, 0, 0,
 		"outline": 6 if "crit" in cl else 3, "outline_c": UiKit.alpha(c, 0.35) if "crit" in cl else Color(0, 0, 0, 0.35), "lh": -6})
 	d.add_child(main)
 	if str(label) != "":
-		d.add_child(UiKit.lbl(str(label), "800", 11, c, {"align": "center", "upper": true, "ls": 0.14, "shadow": Color.BLACK,
-			"shadow_off": Vector2(0, 1), "lh": -6}))
+		d.add_child(UiKit.lbl(str(label), "700", UiKit.T_S, c, {"align": "center", "shadow": Color.BLACK,
+			"shadow_off": Vector2(0, 1), "outline": 4, "outline_c": Color(0, 0, 0, 0.45), "lh": -6}))
 	fx.add_child(d)
 	var m := d.get_combined_minimum_size()
 	d.size = m
@@ -127,8 +127,8 @@ func pop_num(pos: Vector2, text, cls := "", label := "", color := Color(0, 0, 0,
 	], {"base": base, "ease": [0.0, 0.0, 0.58, 1.0], "free": true})
 
 ## Big centred word with a sub line (enemy name, Victory, fainted).
-func banner(text: String, sub := "", color := Color("#9b7bff")) -> void:
-	color = UiKit.col(color, Color("#9b7bff"))
+func banner(text: String, sub := "", color := UiKit.GOLD_HI) -> void:
+	color = UiKit.col(color, UiKit.GOLD_HI)
 	banner_main.text = text
 	banner_glow.text = text
 	banner_glow.add_theme_color_override("font_outline_color", UiKit.alpha(color, 0.28))
@@ -188,6 +188,31 @@ func callout(text: String, color := Color("#ffcf6b")) -> void:
 		[0.8, {"a": 1.0}],
 		[1.0, {"a": 0.0, "s": 1.1, "r": -3.0, "y": -30.0}],
 	], {"base": base, "ease": [0.2, 1.4, 0.3, 1.0], "free": true})
+
+# ------------------------------------------------------------------ loot reveal (real time)
+
+## Pop `items` (Controls, e.g. loot chips in a row) in one after another: each scales up from 0.4 with a
+## small overshoot while fading in, with a coin tick (Sfx.tick) and a light haptic as it lands. Real time,
+## like the rest of the UI motion. o: delay (before the first, default 0.2), step (between items, 0.12;
+## shortened so the whole row lands within 0.5s of the first). The end state is the plain, fully visible
+## layout, so a still frame after ~1s shows everything.
+func reveal(items: Array, o := {}) -> void:
+	var t0: float = o.get("delay", 0.2)
+	var step: float = minf(o.get("step", 0.12), 0.5 / maxf(1.0, items.size() - 1.0))
+	for i in items.size():
+		var n: Control = items[i]
+		if not is_instance_valid(n):
+			continue
+		var centre := func(): n.pivot_offset = n.size / 2.0
+		centre.call()
+		n.resized.connect(centre)
+		var d := t0 + i * step
+		kf(n, 0.34, [[0.0, {"s": 0.4, "a": 0.0}], [0.55, {"s": 1.12, "a": 1.0}], [1.0, {"s": 1.0, "a": 1.0}]],
+			{"delay": d, "ease": [0.3, 0.0, 0.4, 1.0]})
+		get_tree().create_timer(d + 0.12, true, false, true).timeout.connect(func():
+			if is_instance_valid(n) and n.is_visible_in_tree():
+				Sfx.tick()
+				Platform.haptic("light"))
 
 # ------------------------------------------------------------------ keyframe animator (real time)
 

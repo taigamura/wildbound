@@ -7,33 +7,45 @@
 # To add a real sprite: drop `<species>.png` into this folder and give it a `painted` entry.
 #
 # Fields (fractions of the image): anchor = feet, head = projectile target, emitters = ambient
-# element particles. height = drawn canvas height in art units (56 art units = 1 world unit U).
+# element particles, face = the card face window's crop (Rect2, a pixel square; CardView.face_tex).
+# height = drawn canvas height in art units (56 art units = 1 world unit U).
 # recolor: {} = defaults, a Dictionary = options (see recolor.gd), null = keep the painted colours.
 extends RefCounted
 
 ## Sable keeps her skin and gold trim: only the hair, coat lining and lantern glass shift.
 const HUMAN := {"max_hue": 10.0, "min_sat": 0.55}
 
+## Face crops: a square of side 0.30 × image height centred on `head`, clamped inside the image
+## (CardView.face_rect computes the same for an entry without one). Painted sprites that read better
+## with a wider crop carry their own; tune them when a real sprite lands.
+const FOX_FACE := Rect2(0.366, 0.19, 0.548, 0.3)
+const SABLE_FACE := Rect2(0.326, 0.1, 0.489, 0.3)
+const DRAGON_FACE := Rect2(0.613, 0.18, 0.314, 0.3)
+
 
 static func fox() -> Dictionary:
-	return {"image": "fox", "anchor": Vector2(0.606, 0.904), "height": 124.0, "head": Vector2(0.64, 0.34),
+	return {"image": "fox", "anchor": Vector2(0.606, 0.904), "height": 124.0, "head": Vector2(0.64, 0.34), "face": FOX_FACE,
 		"emitters": [Vector2(0.52, 0.1), Vector2(0.23, 0.55)], "recolor": {}}
 
 
 static func sable() -> Dictionary:
-	return {"image": "sable", "anchor": Vector2(0.469, 0.905), "height": 158.0, "head": Vector2(0.57, 0.25),
+	return {"image": "sable", "anchor": Vector2(0.469, 0.905), "height": 158.0, "head": Vector2(0.57, 0.25), "face": SABLE_FACE,
 		"emitters": [Vector2(0.38, 0.69)], "recolor": HUMAN}
 
 
 ## The anchor script puts the dragon's feet at its front claws (0.762); 0.6 centres the body on the pedestal.
 static func dragon(recolor: Dictionary = {}, height := 124.0) -> Dictionary:
 	return {"image": "dragon", "anchor": Vector2(0.6, 0.904), "height": height, "head": Vector2(0.77, 0.33),
-		"emitters": [], "recolor": recolor}
+		"face": DRAGON_FACE, "emitters": [], "recolor": recolor}
 
 
-## A species' own sprite, painted in its colours. Numbers come from the normalizer's output.
-static func painted(image: String, anchor: Vector2, height: float, head: Vector2) -> Dictionary:
-	return {"image": image, "anchor": anchor, "height": height, "head": head, "emitters": [], "recolor": null}
+## A species' own sprite, painted in its colours. Numbers come from the normalizer's output; `face`
+## is optional: left out, the card face uses the default crop above.
+static func painted(image: String, anchor: Vector2, height: float, head: Vector2, face := Rect2()) -> Dictionary:
+	var e := {"image": image, "anchor": anchor, "height": height, "head": head, "emitters": [], "recolor": null}
+	if face.has_area():
+		e.face = face
+	return e
 
 
 static var _creatures: Dictionary = {}
@@ -44,11 +56,13 @@ static func creatures() -> Dictionary:
 		_creatures = {
 			"emberwick": fox(), "cinderpip": sable(), "kilnback": dragon(),
 			# Anchor x is the body's centre, not the normalizer's lowest-row guess (claw or tail tips).
-			"bellspring": painted("bellspring", Vector2(0.56, 0.901), 119.0, Vector2(0.678, 0.3)),
-			"puddlet": painted("puddlet", Vector2(0.48, 0.901), 106.0, Vector2(0.55, 0.45)),
-			"brinecrab": painted("brinecrab", Vector2(0.5, 0.903), 146.0, Vector2(0.55, 0.35)),
+			# Face crops wider than the default: side 0.42 (bellspring, brinecrab), 0.38 (brambat);
+			# Puddlet's face sits low, so its crop is side 0.60 around (0.52, 0.65).
+			"bellspring": painted("bellspring", Vector2(0.56, 0.901), 119.0, Vector2(0.678, 0.3), Rect2(0.509, 0.09, 0.339, 0.42)),
+			"puddlet": painted("puddlet", Vector2(0.48, 0.901), 106.0, Vector2(0.55, 0.45), Rect2(0.213, 0.35, 0.613, 0.6)),
+			"brinecrab": painted("brinecrab", Vector2(0.5, 0.903), 146.0, Vector2(0.55, 0.35), Rect2(0.376, 0.14, 0.348, 0.42)),
 			"truffmole": fox(),
-			"brambat": painted("brambat", Vector2(0.51, 0.906), 111.0, Vector2(0.6, 0.4)),
+			"brambat": painted("brambat", Vector2(0.51, 0.906), 111.0, Vector2(0.6, 0.4), Rect2(0.463, 0.21, 0.273, 0.38)),
 			"mossling": dragon(),
 			"skiray": fox(), "sparkit": sable(), "coilsnail": dragon(),
 			# Gravewood: deeper, mossier green than Mossling, and 8% larger on top of its species size.

@@ -51,6 +51,7 @@ var _shadow: MeshInstance3D
 var _aura: MeshInstance3D
 var _aura_mat: ShaderMaterial
 var _head_art := Vector2.ZERO
+var _art_rect := Rect2()   # the sprite quad in art space (x toward the facing, y down, origin at the feet)
 var _emitters: Array[Vector2] = []
 var _shiny := false
 var _silhouette := false
@@ -176,6 +177,7 @@ func set_element(element: String) -> void:
 	_mesh.mesh = q
 	var to_art := func(f: Vector2) -> Vector2: return Vector2((f.x - anc.x) * w, (f.y - anc.y) * hgt)
 	_head_art = to_art.call(_entry.get("head", Vector2(0.55, 0.45)))
+	_art_rect = Rect2(to_art.call(Vector2.ZERO), Vector2(w, hgt))
 	_emitters.clear()
 	for e in _entry.get("emitters", []):
 		_emitters.append(to_art.call(e))
@@ -236,6 +238,14 @@ func root_point(art: Vector2) -> Vector3:
 ## Head position in screen px (projectile target, damage numbers).
 func head() -> Vector2:
 	return Stage.to_screen(root_point(_head_art))
+
+
+## The sprite's bounding box in screen px (UI check: art must not sit under panels).
+func screen_rect() -> Rect2:
+	var r := Rect2(Stage.to_screen(root_point(_art_rect.position)), Vector2.ZERO)
+	for c in [Vector2(_art_rect.end.x, _art_rect.position.y), _art_rect.end, Vector2(_art_rect.position.x, _art_rect.end.y)]:
+		r = r.expand(Stage.to_screen(root_point(c)))
+	return r
 
 
 ## Feet position in screen px (including off).

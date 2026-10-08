@@ -59,6 +59,7 @@ In `godot/art/hd2d/manifest.gd` `creatures()`, replace the species' placeholder 
 
 - `ay` and `height` as printed. Set `ax` to the **body's horizontal centre**, not the printed value: the normalizer takes the centre of the lowest pixel row, which lands on a claw or tail tip for many creatures. Judge it from the image (fraction of the width).
 - `head` (the projectile target) should sit on the face or upper body, as a fraction of the image.
+- Optional 5th argument `Rect2(x, y, w, h)`: the card face crop (fractions of the image, a square in pixels). Left out, cards crop a square of side 0.30 × image height around `head`; add one when the face is cut off or too small on the cards (`--shot=battle`).
 - Special cases (from the notes in `prompts.md`):
   - `warden`: `painted(...)` as usual, which drops its old ramps and wash.
   - `noctyrm`: it must stay recoloured per element, so use `painted(...)` and then set `"recolor": {}` on the result (e.g. `painted(...).merged({"recolor": {}}, true)`), without the night wash.

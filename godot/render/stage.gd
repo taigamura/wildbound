@@ -273,7 +273,7 @@ func _update_pedestals(t: float) -> void:
 func _process(_delta: float) -> void:
 	_update_projection()
 	# camera: reference * breath * shake (real time, so it keeps breathing through hit-stop)
-	var rt := Time.get_ticks_msec() / 1000.0
+	var rt := Platform.ticks_msec() / 1000.0
 	var breath := Transform3D(Basis.from_euler(Vector3(sin(rt * 0.23) * 0.0025, sin(rt * 0.17) * 0.004, 0.0)),
 		Vector3(sin(rt * 0.19) * 0.06, sin(rt * 0.27) * 0.03, 0.0))
 	var focus := 24.0 / _f

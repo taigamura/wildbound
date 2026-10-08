@@ -3,8 +3,8 @@ extends Node
 ## map, nodes, loot, rewards, lineup, end of run. Spec: ../CLAUDE.md §2, §5–§7, §11, §16.
 ## Screens are the frames Ui builds (Ui.el ids = index.html ids); this fills and wires them.
 
-## UI colours of the materials (TS MAT_DEF.color: var(--ember) / var(--tide) / var(--thorn)).
-const MAT_COL := {"sword": Color("#ff7a45"), "orb": Color("#3fb6ff"), "jewel": Color("#5fd36a")}
+## UI colours of the materials (the Ember / Tide / Thorn accents).
+const MAT_COL := {"sword": UiKit.EL.ember, "orb": UiKit.EL.tide, "jewel": UiKit.EL.thorn}
 
 var run_ess := {}
 var run_loot := {}
@@ -31,19 +31,11 @@ func _btn(t: Tap, f: Callable) -> Tap:
 		f.call())
 	return t
 
-## .node: glyph tile, title, sub line.
-func _node_btn(g: String, title: String, sub: String, c: Color, f: Callable, raw := false) -> Tap:
-	var t := Tap.new(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.10), 16, 1.5, UiKit.alpha(c, 0.35), Vector4(12, 12, 12, 12)))
-	var h := UiKit.hbox(12)
-	t.add_child(h)
-	h.add_child(UiKit.tile(c, 44, 12, g, 24))
-	var v := UiKit.vbox(3)
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	v.add_child(UiKit.lbl(title, "display", 18, UiKit.INK, {"wrap": true, "lh": -4}))
-	if sub != "":
-		v.add_child(UiKit.lbl(sub, "700", 12, UiKit.MUTE, {"wrap": true, "lh": 0}))
-	h.add_child(v)
+## A list row (map node, shop item): portrait, name, sub line, optional trailing piece. Flat; the
+## Rows list it sits in draws the hairlines between rows.
+func _node_btn(g: String, title: String, sub: String, c: Color, f: Callable, raw := false, trail: Control = null) -> Tap:
+	var t := Tap.new(UiKit.row_style())
+	t.add_child(UiKit.list_row(UiKit.por(c, 40, g), title, sub, trail))
 	if raw:
 		t.pressed.connect(f)
 	else:
@@ -79,7 +71,7 @@ func start_run() -> void:
 		S.lineup.append(c.uid)
 	S.active = S.lineup[0]
 	S.floor = 1
-	S.stats = {"start": Time.get_ticks_msec(), "dealt": 0, "perfects": 0}
+	S.stats = {"start": Platform.ticks_msec(), "dealt": 0, "perfects": 0}
 	run_ess = Meta.empty_essence()
 	run_loot = Data.no_loot()
 	Stage.set_biome(0)
@@ -118,8 +110,8 @@ func _ess_chips(e: Dictionary, plus := false) -> Array:
 func _cost(c: Dictionary, color := Color(0, 0, 0, 0)) -> HBoxContainer:
 	var col := color if color.a > 0 else UiKit.el_css(c.el)
 	var h := UiKit.hbox(2)
-	h.add_child(UiKit.lbl(str(c.n), "700", 10, col))
-	h.add_child(UiKit.icon(c.el, 11, col))
+	h.add_child(UiKit.lbl(str(c.n), "700", UiKit.T_S, UiKit.INK))
+	h.add_child(UiKit.icon(c.el, 12, col))
 	return h
 
 # ================= loot (§5.1) =================
@@ -170,13 +162,6 @@ func _loot_chips(l: Dictionary, plus := false) -> Array:
 	for m in Data.MATS:
 		chip.call(m, MAT_COL[m], l.get(m, 0), Data.MAT_DEF[m].name)
 	return out
-
-func _wallet_text() -> String:
-	var w := Meta.wallet()
-	var parts: Array = ["%d gold" % w.gold]
-	for m in Data.MATS:
-		parts.append("%d %s" % [w[m], Data.MAT_DEF[m].name])
-	return " · ".join(parts)
 
 func _fill(box: Control, items: Array) -> void:
 	UiKit.clear(box)
@@ -242,6 +227,9 @@ func _gen_nodes(f: int) -> Array:
 		out2.append(MapNode.new("spring"))
 	return out2
 
+## What a node shows: colour, glyph, medallion label `m`, strip title `t`, element (or ""), and the
+## strip's sub line `s` (§6: Wilds and Alphas show gold range and material chance; the Warden and
+## the boss show only their icon and name).
 func _node_view(n: MapNode) -> Dictionary:
 	if n.type == "wild" or n.type == "alpha":
 		var sp: Dictionary = Data.SPECIES[n.sp]
@@ -249,20 +237,24 @@ func _node_view(n: MapNode) -> Dictionary:
 		var a: float = Data.adv(S.act().el, el)
 		var f: float = _floor_gold() * (Data.BAL.alpha_gold_mul if n.type == "alpha" else 1)
 		var gold := "%d–%d gold" % [roundi(Data.BAL.wild_gold[0] * f), roundi(Data.BAL.wild_gold[1] * f)]
-		var parts: Array = [Data.ELEM[el].name,
-			("tougher · 2 picks · %s + %d material" % [gold, Data.BAL.alpha_mats]) if n.type == "alpha" else ("%s · %d%% material" % [gold, roundi(Data.BAL.wild_mat_chance * 100)])]
+		var parts: Array = [("Tougher · 2 picks · %s · %d material" % [gold, Data.BAL.alpha_mats]) if n.type == "alpha" \
+			else ("%s · %d%% material" % [gold, roundi(Data.BAL.wild_mat_chance * 100)])]
 		if a > 1:
-			parts.append("your lead is strong here")
+			parts.append("%s is strong here" % S.act().name)
 		elif a < 1:
-			parts.append("your lead is weak here")
-		return {"c": UiKit.el_css(el), "g": "skull" if n.type == "alpha" else "paw", "t": ("Alpha " if n.type == "alpha" else "Wild ") + sp.name, "s": " · ".join(parts)}
+			parts.append("%s is weak here" % S.act().name)
+		return {"c": UiKit.el_css(el), "g": "skull" if n.type == "alpha" else "paw", "m": sp.name,
+			"t": ("Alpha " if n.type == "alpha" else "Wild ") + sp.name, "el": el, "s": " · ".join(parts)}
 	if n.type == "spring":
-		return {"c": UiKit.HP, "g": "moon", "t": "Moon Spring", "s": "Heal the party to full"}
+		return {"c": UiKit.HP, "g": "moon", "m": "Spring", "t": "Moon Spring", "el": "", "s": "Heal the party to full"}
 	if n.type == "warden":
-		return {"c": UiKit.EL.thorn, "g": "crown", "t": "Gravewood", "s": ""}
-	return {"c": UiKit.FOE, "g": "crown", "t": "Noctyrm", "s": ""}
+		return {"c": UiKit.EL.thorn, "g": "crown", "m": "Gravewood", "t": "Gravewood", "el": "", "s": ""}
+	return {"c": UiKit.FOE, "g": "crown", "m": "Noctyrm", "t": "Noctyrm", "el": "", "s": ""}
 
-## `reroll` = false keeps this floor's nodes (coming back from the lineup screen).
+## The selected medallion on this floor's map (a first tap selects, a second tap travels).
+var _map_sel := 0
+
+## `reroll` = false keeps this floor's nodes and selection (coming back from the lineup screen).
 func show_map(reroll := true) -> void:
 	var el := _el()
 	S.mode = "map"
@@ -275,36 +267,78 @@ func show_map(reroll := true) -> void:
 	place_player(false)
 	if reroll or S.nodes.is_empty():
 		S.nodes = _gen_nodes(S.floor)
-	el.mapEyebrow.text = ("Final floor" if S.floor == Data.BAL.floors else "Floor %d of %d" % [S.floor, Data.BAL.floors]) \
+		_map_sel = 0
+	_map_sel = clampi(_map_sel, 0, S.nodes.size() - 1)
+	var last: int = Data.BAL.floors
+	el.mapEyebrow.text = ("Final floor" if S.floor == last else "Floor %d of %d" % [S.floor, last]) \
 		+ (" · The Dusklands" if Data.biome_of(S.floor) else " · The Greenwood")
-	UiKit.clear(el.trail)
-	for i in Data.BAL.floors:
-		var f: int = i + 1
-		var st: StyleBoxFlat
-		if f < S.floor:
-			st = UiKit.flat(UiKit.PURPLE, 3)
-		elif f == S.floor:
-			st = UiKit.glow_box(UiKit.flat(UiKit.GOLD, 3), UiKit.alpha(UiKit.GOLD, 0.6), 4)
-		elif f == Data.BAL.floors or f == 4:
-			st = UiKit.flat(Color(1, 90 / 255.0, 110 / 255.0, 0.35), 3)
-		else:
-			st = UiKit.flat(Color(1, 1, 1, 0.1), 3)
-		var bar := Panel.new()
-		bar.add_theme_stylebox_override("panel", st)
-		bar.custom_minimum_size.y = 6
-		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bar.size_flags_stretch_ratio = 1.6 if (f >= S.floor and (f == Data.BAL.floors or f == 4) and f != S.floor) else 1.0
-		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		el.trail.add_child(bar)
-	UiKit.clear(el.nodes)
+	var kind: String = S.nodes[0].type if S.nodes.size() == 1 else ""
+	el.mapTitle.text = "Face the Warden" if kind == "warden" else ("Face Noctyrm" if kind == "boss" else "Pick a path")
+	# the trail: the floors still to walk fade up toward the next boss (floor 4, then the last floor)
+	var goal_f := 4 if S.floor < 4 else last
+	var goal := {}
+	var between: Array = []
+	if goal_f > S.floor:
+		goal = {"t": "Floor %d · %s" % [goal_f, "Warden" if goal_f == 4 else "Noctyrm"], "g": "crown"}
+		for f in range(goal_f - 1, S.floor, -1):
+			between.append("Floor %d" % f)
+	var views: Array = []
 	for n in S.nodes:
 		var h := _node_view(n)
-		el.nodes.add_child(_node_btn(h.g, h.t, h.s, h.c, _choose_node.bind(n)))
-	_fill(el.mapParty, Ui.party_html())
-	el.mapGold.text = _wallet_text()
+		views.append({"c": h.c, "g": h.g, "t": h.m})
+	var trail: MapTrail = el.trail
+	trail.set_trail(views, goal, " · ".join(between), _map_sel)
+	for c in trail.tapped.get_connections():
+		trail.tapped.disconnect(c.callable)
+	trail.tapped.connect(_map_tap)
+	_on(el.mapGo, func():
+		_click()
+		_travel())
+	_map_info()
+	UiKit.clear(el.mapParty)
+	for i in S.lineup.size():
+		var c = S.mon(S.lineup[i])
+		if c != null:
+			el.mapParty.add_child(UiKit.party_por(c, 30, i == 0))
+	_fill(el.mapGold, [UiKit.wallet_row(Meta.wallet())])
 	el.lineupBtn.visible = S.party.size() >= 2
 	Ui.show("scr-map")
+
+## A medallion tap: select it, or travel if it already is.
+func _map_tap(i: int) -> void:
+	if S.mode != "map" or i >= S.nodes.size():
+		return
+	if i == _map_sel:
+		_click()
+		_travel()
+		return
+	Sfx.audio()
+	Sfx.pick()
+	Platform.haptic("select")
+	_map_sel = i
+	_el().trail.select(i)
+	_map_info()
+
+## Fill the detail strip for the selected node.
+func _map_info() -> void:
+	var el := _el()
+	var h := _node_view(S.nodes[_map_sel])
+	var head: HBoxContainer = el.mapInfoHead
+	UiKit.clear(head)
+	var nm := UiKit.lbl(h.t, "display", UiKit.NAME, UiKit.INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(nm)
+	if h.el != "":
+		head.add_child(UiKit.elchip(h.el, Data.ELEM[h.el].name))
+	elif h.s == "":   # Warden and boss: icon and name only
+		head.add_child(UiKit.icon(h.g, 14, h.c))
+	el.mapInfoSub.text = h.s
+	el.mapInfoSub.visible = h.s != ""
+
+func _travel() -> void:
+	if S.mode != "map" or S.nodes.is_empty():
+		return
+	_choose_node(S.nodes[clampi(_map_sel, 0, S.nodes.size() - 1)])
 
 func _choose_node(n: MapNode) -> void:
 	if n.type == "spring":
@@ -344,6 +378,7 @@ func after_fight() -> void:
 		if h != null:
 			S.active = h.uid
 	var loot = null
+	var before := run_ess.duplicate()
 	if e != null:
 		_fight_essence(e)
 		loot = _roll_loot(e)
@@ -355,7 +390,11 @@ func after_fight() -> void:
 		S.em.destroy()
 	S.em = null
 	place_player(false)
-	_show_reward(2 if (e != null and e.kind == "alpha") else 1, loot)
+	var ess := {}
+	for k in run_ess:
+		if run_ess[k] - before.get(k, 0) > 0:
+			ess[k] = run_ess[k] - before.get(k, 0)
+	_show_reward(2 if (e != null and e.kind == "alpha") else 1, loot, ess)
 
 # ================= rewards =================
 func _upgradable() -> bool:
@@ -365,27 +404,65 @@ func _upgradable() -> bool:
 				return true
 	return false
 
-func _show_reward(picks: int, loot) -> void:
+## Picks this reward screen started with (Alphas give 2), for the pip row.
+var _rw_total := 1
+
+## The loot ribbon's chips: gold, each material, then each element's Essence (`ess`), skipping zeros.
+func _ribbon_chips(l: Dictionary, ess: Dictionary) -> Array:
+	var out: Array = []
+	if l.get("gold", 0):
+		out.append(UiKit.loot_chip("coin", UiKit.GOLD_HI, "+%d gold" % l.gold))
+	for m in Data.MATS:
+		if l.get(m, 0):
+			out.append(UiKit.loot_chip(m, MAT_COL[m], "+%d %s" % [l[m], Data.MAT_DEF[m].name]))
+	# Essence: one chip; a single element reads "+2 Essence", several share one chip
+	var pairs: Array = []
+	for e in Data.EL_KEYS:
+		if ess.get(e, 0):
+			pairs.append([e, UiKit.el_css(e), "+%d" % ess[e]])
+	if pairs.size() == 1:
+		out.append(UiKit.loot_chip(pairs[0][0], pairs[0][1], "%s Essence" % pairs[0][2]))
+	elif pairs.size() > 1:
+		out.append(UiKit.multi_chip("Essence", pairs))
+	return out
+
+## `ess` = the Essence this fight earned; `fresh` = first showing (the ribbon pops in; later picks and
+## coming back from the upgrade screen show it at rest).
+func _show_reward(picks: int, loot, ess := {}, fresh := true) -> void:
 	var el := _el()
 	S.mode = "reward"
 	if picks <= 0:
 		_next_floor()
 		return
-	el.rwEyebrow.text = ("Victory · %d picks" % picks) if picks > 1 else "Victory"
+	if fresh:
+		_rw_total = picks
+	el.rwEyebrow.text = "Victory"
 	el.rwTitle.text = "Choose a reward"
-	var got: Array = _loot_chips(loot, true) if loot != null else []
+	var got: Array = _ribbon_chips(loot if loot != null else {}, ess)
 	_fill(el.rwSubLoot, got)
 	el.rwSubLoot.visible = not got.is_empty()
-	el.rwSub.text = "Knocked-out partners are back on their feet at 25%."
+	if fresh:
+		Fx.reveal(got)
+	UiKit.clear(el.rwPips)
+	el.rwPips.add_child(UiKit.pick_pips(picks, _rw_total))
+	el.rwPips.add_child(UiKit.lbl("%d pick%s" % [picks, "s" if picks > 1 else ""], "700", UiKit.T_S, UiKit.INK, {"valign": VERTICAL_ALIGNMENT_CENTER}))
+	el.rwSub.text = "HP carries over. Knocked-out creatures stay down until a Spring or a Heal."
 	var box: Control = el.rewards
 	UiKit.clear(box)
-	var next := func(): _show_reward(picks - 1, loot)
+	var next := func(): _show_reward(picks - 1, loot, ess, false)
 	var opt := func(g: String, name: String, txt: String, color: Color, ok: bool, on_pick: Callable):
 		var t := Tap.new()
 		t.press_scale = 0.97
 		t.dis_mod = Color(1, 1, 1, 0.45)
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t.custom_minimum_size.y = 168   # tall cards (the card face stretches to fill)
 		var cv := CardView.new("reward").option(g, name, txt, color)
+		# readable rules text: the body face at 12px (the card's own size is below the type scale)
+		var tx = cv.get("tx")
+		if tx is Label:
+			tx.add_theme_font_override("font", UiKit.font("700"))
+			tx.add_theme_font_size_override("font_size", UiKit.T_S)
+			tx.add_theme_color_override("font_color", UiKit.INK2)
 		t.add_child(cv)
 		t.disabled = not ok
 		t.pressed.connect(func():
@@ -393,23 +470,24 @@ func _show_reward(picks: int, loot) -> void:
 			on_pick.call())
 		box.add_child(t)
 		cv.pivot_offset = Vector2(0, 0)
-		Fx.kf(cv, 0.32, [[0.0, {"y": 60.0, "s": 0.6, "r": 8.0, "a": 0.0}], [1.0, {"y": 0.0, "s": 1.0, "r": 0.0, "a": 1.0}]],
-			{"ease": [0.2, 1.4, 0.4, 1.0], "delay": (box.get_child_count() - 1) * 0.08})
+		if fresh:
+			Fx.kf(cv, 0.32, [[0.0, {"y": 60.0, "s": 0.6, "r": 8.0, "a": 0.0}], [1.0, {"y": 0.0, "s": 1.0, "r": 0.0, "a": 1.0}]],
+				{"ease": [0.2, 1.4, 0.4, 1.0], "delay": 0.1 + (box.get_child_count() - 1) * 0.08})
 	opt.call("up", "Upgrade", "One card: +30% effect or −1 cost", UiKit.GOLD, _upgradable(), func():
-		_show_upgrade(next, func(): _show_reward(picks, loot)))
-	opt.call("heart", "Heal", "Whole party +%d%% HP" % roundi(Data.BAL.heal_reward * 100), UiKit.HP, true, func():
+		_show_upgrade(next, func(): _show_reward(picks, loot, ess, false)))
+	opt.call("heart", "Heal", "Whole party +%d%% HP, revives KOs" % roundi(Data.BAL.heal_reward * 100), UiKit.HP, true, func():
 		for c in S.party:
 			c.alive = true
 			c.hp = minf(c.max_hp, c.hp + roundi(c.max_hp * Data.BAL.heal_reward))
 		Sfx.heal()
 		next.call())
-	opt.call("jewel", "Scavenge", "+1 random material: Sword, Orb or Jewel", UiKit.NEUTRAL, true, func():
+	opt.call("jewel", "Scavenge", "+1 random Sword, Orb or Jewel", UiKit.NEUTRAL, true, func():
 		var m: String = Meta.random_mat()
 		_bank({m: 1})
 		Sfx.caught()
 		Fx.toast("+1 %s" % Data.MAT_DEF[m].name)
 		next.call())
-	el.rwDeck.text = _wallet_text()
+	_fill(el.rwDeck, [UiKit.wallet_row(Meta.wallet())])
 	_on(el.skipBtn, func():
 		Sfx.pick()
 		next.call())
@@ -437,7 +515,8 @@ func _show_upgrade(on_done: Callable, on_back: Callable) -> void:
 			t.press_scale = 0.97
 			t.dis_mod = Color(1, 1, 1, 0.45)
 			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var cv := CardView.new("mini").face(co.def, c.el, {"pow": co.pow, "upgraded": "+30%" if up == "power" else ("−1" if up == "cost" else "")})
+			var faces := S.card_faces(CardRef.new(c.uid, slot)).map(func(m: Mon): return [m.key, m.el])
+			var cv := CardView.new("mini").face(co.def, c.el, {"slot": slot, "base": S.base_card(c, slot).cost, "faces": faces, "pow": co.pow, "upgraded": up if up != null else ""})
 			t.add_child(cv)
 			t.disabled = up != null and up != ""
 			cards_all.append(cv)
@@ -528,43 +607,36 @@ func _render_party() -> void:
 			S.lineup.remove_at(S.lineup.find(c.uid))
 			S.lineup.insert(0, c.uid)
 			_render_party()
-		var row := UiKit.hbox(8)
-		var main := Tap.new(UiKit.flat(UiKit.mix(col, UiKit.DEEP, 0.16), 14, 1.5, UiKit.alpha(col, 0.7), Vector4(10, 10, 10, 10)))
-		main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# one row per creature in the lineup's Rows list; the lead is the selected row (gold outline)
+		var main := Tap.new(UiKit.row_style(false), UiKit.row_style(true))
+		main.on = lead
 		var h := UiKit.hbox(12)
 		main.add_child(h)
-		h.add_child(UiKit.tile(col, 36, 10, c.el, 20))
-		var v := UiKit.vbox(3)
+		h.add_child(UiKit.por(col, 40, c.el, lead))
+		var v := UiKit.vbox(4)
 		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		v.add_child(UiKit.lbl(c.name + (" ✦" if c.shiny else ""), "display", 16, UiKit.INK, {"lh": -4}))
+		var top := UiKit.hbox(8)
+		var nm := UiKit.lbl(c.name + (" ✦" if c.shiny else ""), "display", UiKit.NAME, UiKit.INK, {"lh": -2})
+		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		top.add_child(nm)
 		var role = Data.SPECIES[c.key].get("role", "")
-		var line := "%s · %s · %d/%d HP" % [Data.ELEM[c.el].name, role if role else "", ceili(c.hp), c.max_hp]
-		if c.trait_key:
-			line += " · " + Data.TRAITS[c.trait_key].name
-		v.add_child(UiKit.lbl(line, "700", 11, UiKit.MUTE, {"wrap": true, "lh": 0}))
+		var right: String = "★ Lead" if lead else (Data.TRAITS[c.trait_key].name if c.trait_key else role)
+		top.add_child(UiKit.lbl(right, "700", UiKit.T_S, UiKit.GOLD_HI if lead else UiKit.INK2, {"valign": VERTICAL_ALIGNMENT_CENTER}))
+		v.add_child(top)
+		var hp := UiKit.hbox(8)
+		hp.add_child(UiKit.meter(c.hp / float(c.max_hp), UiKit.HP if c.hp > 0 else UiKit.FOE))
+		hp.add_child(UiKit.lbl("%d/%d" % [ceili(c.hp), c.max_hp], "500", UiKit.T_S, UiKit.INK2))
+		v.add_child(hp)
 		h.add_child(v)
-		var pill := UiKit.panel(UiKit.flat(UiKit.PANEL, 99, 1, UiKit.LINE, Vector4(10, 6, 10, 6)))
-		pill.add_child(UiKit.lbl("Lead" if lead else "Bench", "700", 12, UiKit.MUTE, {"upper": true, "ls": 0.06}))
-		pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		h.add_child(pill)
 		_btn(main, func(): if not lead: to_lead.call())
-		row.add_child(main)
-		if not lead:
-			var star := Tap.new(UiKit.flat(Color(1, 1, 1, 0.04), 14, 1.5, UiKit.LINE))
-			star.custom_minimum_size.x = 46
-			star.add_child(UiKit.lbl("★", "800", 20, UiKit.GOLD, {"align": "center", "valign": VERTICAL_ALIGNMENT_CENTER}))
-			_btn(star, to_lead)
-			row.add_child(star)
-		list.add_child(row)
+		list.add_child(main)
 
-# ================= quitting =================
-## Quit button (battle HUD and map): the first tap arms it for 2s, the second ends the run. No pause.
 func quit_tap(t: Tap) -> void:
 	Sfx.audio()
 	if not (S.mode in ["map", "battle", "anim", "intro", "reward"]):
 		return
-	var now := Time.get_ticks_msec()
+	var now := Platform.ticks_msec()
 	if t.has_meta("armed") and now - int(t.get_meta("armed")) < 2000:
 		t.remove_meta("armed")
 		t.modulate = Color.WHITE
@@ -578,7 +650,7 @@ func quit_tap(t: Tap) -> void:
 	Platform.haptic("warning")
 	Fx.toast("Tap again to quit the run")
 	get_tree().create_timer(2.0, true, false, true).timeout.connect(func():
-		if is_instance_valid(t) and t.has_meta("armed") and Time.get_ticks_msec() - int(t.get_meta("armed")) >= 1990:
+		if is_instance_valid(t) and t.has_meta("armed") and Platform.ticks_msec() - int(t.get_meta("armed")) >= 1990:
 			t.remove_meta("armed")
 			t.modulate = Color.WHITE
 			if t.has_meta("lbl"):
@@ -598,32 +670,33 @@ func end_run(won: bool, quit := false) -> void:
 	S.tok += 1
 	if won:
 		_bank({"gold": Data.BAL.win_gold})
-	var secs := roundi((Time.get_ticks_msec() - float(S.stats.start)) / 1000.0)
+	var secs := roundi((Platform.ticks_msec() - float(S.stats.start)) / 1000.0)
 	var reached: int = Data.BAL.floors if won else S.floor
 	Meta.record_run(won, reached)
 	el.endH.text = "Expedition won" if won else ("Retreated" if quit else "Run over")
 	el.endP.text = ("Noctyrm is sealed. Your party walks out of the wild (+%d gold)." % Data.BAL.win_gold) if won \
 		else ("You left on floor %d. Your loot is safe." % S.floor) if quit \
 		else ("Your party fell on floor %d. Your loot is safe." % S.floor)
+	# floor, gold, Perfect Swaps and time as large pixel numbers
 	UiKit.clear(el.endStats)
-	for s in [[str(reached), "Floor"], [str(run_loot.get("gold", 0)), "Gold"], [str(S.stats.perfects), "Perfect"], ["%d:%02d" % [secs / 60, secs % 60], "Time"]]:
-		var p := UiKit.panel(UiKit.flat(Color(0, 0, 0, 0.25), 12, 0, Color(), Vector4(6, 10, 6, 10)))
-		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for s in [[str(reached), "Floor"], [str(run_loot.get("gold", 0)), "Gold"], [str(S.stats.perfects), "Perfect swaps"],
+			["%d:%02d" % [secs / 60, secs % 60], "Time"]]:
 		var v := UiKit.vbox(2)
-		v.add_child(UiKit.lbl(s[0], "display", 26, UiKit.INK, {"align": "center", "lh": -6}))
-		v.add_child(UiKit.lbl(s[1], "700", 10, UiKit.MUTE, {"align": "center", "upper": true, "ls": 0.1}))
-		p.add_child(v)
-		el.endStats.add_child(p)
-	_fill(el.endParty, Ui.party_html(S.party))
-	var any_ess := false
-	for k in Data.EL_KEYS:
-		if run_ess.get(k, 0):
-			any_ess = true
-	_fill(el.endEss, ([UiKit.eyebrow("Essence")] + _ess_chips(run_ess, true)) if any_ess else [])
-	el.endEss.visible = any_ess
-	var got := _loot_chips(run_loot, true)
-	_fill(el.endLoot, ([UiKit.eyebrow("Loot")] + got) if got.size() else [])
-	el.endLoot.visible = got.size() > 0
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(UiKit.disp(s[0], UiKit.D_M, UiKit.GOLD_HI if s[1] == "Gold" else UiKit.INK, {"align": "center"}))
+		v.add_child(UiKit.lbl(s[1], "700", UiKit.T_S, UiKit.INK2, {"align": "center", "wrap": true, "lh": -4}))
+		el.endStats.add_child(v)
+	# the run's loot ribbon: everything banked this run, Essence included, popping in one by one
+	var got := _ribbon_chips(run_loot, run_ess)
+	if got.is_empty():
+		got = [UiKit.lbl("Nothing this time", "500", UiKit.T_M, UiKit.INK2)]
+	_fill(el.endLoot, got)
+	Fx.reveal(got)
+	UiKit.clear(el.endParty)
+	for i in S.lineup.size():
+		var c = S.mon(S.lineup[i])
+		if c != null:
+			el.endParty.add_child(UiKit.party_por(c, 40, i == 0))
 	if won:
 		Sfx.win()
 		Platform.haptic("success")
@@ -632,7 +705,7 @@ func end_run(won: bool, quit := false) -> void:
 			_later(k * 0.25, func():
 				var x := randf_range(vp.x * 0.15, vp.x * 0.85)
 				var y := randf_range(vp.y * 0.1, vp.y * 0.35)
-				Particles.emit(x, y, {"n": 60, "color": [Color("#ffcf6b"), Color("#ff7a45"), Color("#3fb6ff"), Color("#5fd36a"), Color("#ffd23f"), Color("#c8b4ff")], "spd": 5, "life": 1.6, "size": 0.2, "grav": 3, "drag": 1})
+				Particles.emit(x, y, {"n": 60, "color": [Color("#ffcf6b"), Color("#ff7a45"), Color("#3fb6ff"), Color("#5fd36a"), Color("#ffd23f"), Color("#f2d68c")], "spd": 5, "life": 1.6, "size": 0.2, "grav": 3, "drag": 1})
 				Particles.emit(x, y, {"n": 10, "color": [Color("#ffcf6b"), Color("#ffffff")], "spd": 4, "life": 1.6, "size": 0.35, "grav": 2, "drag": 1, "tex": "star", "spin": 6})
 				Particles.ring(x, y, Color("#ffcf6b"), 2.5, 0.6, false))
 	else:
@@ -654,41 +727,44 @@ func _back_to_end() -> void:
 	Ui.show("scr-end")
 
 # ================= title =================
-## Home screen: the current team as a summary, Start, and the meta buttons. The team is edited on scr-team.
+## Home screen (idea 8): the lead alone on the stage; the team as a pill of portraits over the Start
+## plaque (tap = the Team screen); Team, Daily pack, Collection and Item shop in the dock.
 func _render_title() -> void:
 	var el := _el()
 	S.picks = _valid_picks()
 	var own := Meta.owned()
 	UiKit.clear(el.teamRow)
 	for i in S.picks.size():
-		el.teamRow.add_child(_team_chip(S.picks[i], i == 0))
-	el.pickEyebrow.text = "Your team · %d/%d" % [S.picks.size(), Data.BAL.lineup]
+		var sp: Dictionary = Data.SPECIES[S.picks[i]]
+		el.teamRow.add_child(UiKit.por(UiKit.el_css(sp.el), 30, sp.el, i == 0))
+	el.pickEyebrow.text = "%s leads" % Data.SPECIES[S.picks[0]].name
 	var best := Meta.best()
 	var wins := Meta.wins()
-	el.bestT.text = ("Expeditions won: %d · best floor %d" % [wins, best]) if wins else (("Best run: floor %d" % best) if best else "Runs take about five minutes")
+	el.bestT.text = ("Won %d · best floor %d" % [wins, best]) if wins else (("Best run: floor %d" % best) if best else "Runs take about five minutes")
+	UiScreens.set_dock_cell(el.dockTeam, "Team", "%d/%d" % [S.picks.size(), Data.BAL.lineup])
 	var ready := Meta.pack_ready()
-	UiScreens.set_meta_btn(el.packBtn, "Daily pack", "Ready to open" if ready else "Next in " + Meta.next_pack_in(), ready)
+	UiScreens.set_dock_cell(el.packBtn, "Daily pack", "Ready" if ready else "in " + Meta.next_pack_in(), ready, not ready)
 	el.packBtn.disabled = not ready
 	var sh := Meta.shinies().size()
-	UiScreens.set_meta_btn(el.collBtn, "Collection", "%d / %d%s" % [own.size(), Data.ROSTER.size(), (" · %d ✦" % sh) if sh else ""])
-	UiScreens.set_meta_btn(el.shopBtn, "Item shop", "%d gold" % Meta.wallet().gold)
+	UiScreens.set_dock_cell(el.collBtn, "Collection", "%d/%d%s" % [own.size(), Data.ROSTER.size(), (" · %d ✦" % sh) if sh else ""])
+	UiScreens.set_dock_cell(el.shopBtn, "Item shop", "%d gold" % Meta.wallet().gold)
 
 ## A compact team member: element orb, name, "Lead" marked in gold. `replace_c` set (team screen,
 ## a pending pick): the status line reads "Tap to replace" in the incoming creature's colour.
 func _team_chip(k: String, lead: bool, replace_c := Color(0, 0, 0, 0)) -> Control:
 	var sp: Dictionary = Data.SPECIES[k]
 	var c := UiKit.el_css(sp.el)
-	var p := UiKit.panel(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.18 if lead else 0.10), 12, 1.5,
-		c if lead else UiKit.alpha(c, 0.3), Vector4(6, 6, 6, 6)))
+	# the lead is the selected one: gold outline and wash; the others sit in a brass hairline
+	var p := UiKit.panel(UiKit.row_style(true, Vector4(6, 8, 6, 8)) if lead else UiKit.flat(Color(0, 0, 0, 0.18), 4, 1, UiKit.HAIR, Vector4(6, 8, 6, 8)))
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var v := UiKit.vbox(2)
+	var v := UiKit.vbox(4)
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.add_child(UiKit.orb(c, 26, sp.el, 13))
-	v.add_child(UiKit.lbl(sp.name + (" ✦" if Meta.is_shiny(k) else ""), "display", 13, UiKit.INK, {"align": "center", "lh": -4}))
+	v.add_child(UiKit.por(c, 32, sp.el, lead))
+	v.add_child(UiKit.lbl(sp.name + (" ✦" if Meta.is_shiny(k) else ""), "display", UiKit.NAME, UiKit.INK, {"align": "center", "lh": -2}))
 	if replace_c.a > 0:
-		v.add_child(UiKit.lbl("Tap to replace", "800", 10, replace_c, {"align": "center"}))
+		v.add_child(UiKit.lbl("Tap to replace", "700", UiKit.T_S, UiKit.mix(replace_c, UiKit.INK, 0.6), {"align": "center"}))
 	else:
-		v.add_child(UiKit.lbl("★ Lead" if lead else "Bench", "700", 10, UiKit.GOLD if lead else UiKit.MUTE, {"align": "center"}))
+		v.add_child(UiKit.lbl("★ Lead" if lead else "Bench", "700", UiKit.T_S, UiKit.GOLD_HI if lead else UiKit.INK2, {"align": "center"}))
 	p.add_child(v)
 	return p
 
@@ -708,8 +784,13 @@ func show_team() -> void:
 
 ## Lineup-slot badge, shared by the slot and its picker card so they read as a pair: "1 ★", "2", "3".
 func _slot_badge(i: int, c: Color) -> Control:
-	var p := UiKit.panel(UiKit.glow_box(UiKit.flat(c, 8, 1.5, UiKit.mix(c, Color.WHITE, 0.5), Vector4(6, 1, 6, 0)), UiKit.alpha(Color.BLACK, 0.35), 3))
-	p.add_child(UiKit.lbl(("%d ★" % (i + 1)) if i == 0 else str(i + 1), "800", 11, UiKit.DEEP, {"align": "center"}))
+	# mockup .num-b: a dark tab with an element rim; the lead's star is gold
+	var p := UiKit.panel(UiKit.flat(UiKit.NAVY2, 3, 1, UiKit.mix(c, Color.BLACK, 0.2), Vector4(5, 1, 5, 1)))
+	var h := UiKit.hbox(2)
+	h.add_child(UiKit.lbl(str(i + 1), "700", UiKit.T_S, UiKit.INK, {"align": "center"}))
+	if i == 0:
+		h.add_child(UiKit.lbl("★", "700", UiKit.T_S, UiKit.GOLD_HI))
+	p.add_child(h)
 	return p
 
 ## Border-only ring that pulses (real time) over a card: the pending pick and the slots it can replace.
@@ -773,9 +854,9 @@ func _render_picks() -> void:
 	UiKit.clear(el.teamOrder)
 	for i in Data.BAL.lineup:
 		if i >= S.picks.size():
-			var empty := UiKit.panel(UiKit.flat(Color(1, 1, 1, 0.02), 12, 1.5, UiKit.LINE, Vector4(6, 6, 6, 6)))
+			var empty := UiKit.panel(UiKit.flat(Color(0, 0, 0, 0.18), 4, 1, UiKit.HAIR, Vector4(6, 6, 6, 6)))
 			empty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			empty.add_child(UiKit.lbl("Empty", "700", 11, UiKit.MUTE, {"align": "center", "valign": VERTICAL_ALIGNMENT_CENTER}))
+			empty.add_child(UiKit.lbl("Empty", "500", UiKit.T_S, UiKit.INK2, {"align": "center", "valign": VERTICAL_ALIGNMENT_CENTER}))
 			el.teamOrder.add_child(empty)
 			slots[i] = empty
 			continue
@@ -786,7 +867,7 @@ func _render_picks() -> void:
 		var b := Box.new()
 		b.add_child(Box.fill(_team_chip(k, i == 0, pc if pend != "" else Color(0, 0, 0, 0))))
 		if pend != "":   # replace mode: every slot is a target, outlined in the incoming creature's colour
-			b.add_child(_pulse_ring(pc, 12))
+			b.add_child(_pulse_ring(pc, 4))
 		b.add_child(Box.at(_slot_badge(i, c), "tr", Vector2(4, 4)))
 		t.add_child(b)
 		_btn(t, func():
@@ -809,24 +890,24 @@ func _render_picks() -> void:
 		var c := UiKit.el_css(sp.el)
 		var pad := Vector4.ZERO   # content padding lives in a MarginContainer so the pulse ring can hug the border
 		var st: StyleBoxFlat
-		if i >= 0:   # in the team: bright element border + glow
-			st = UiKit.glow_box(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.30), 16, 3, c, pad), UiKit.alpha(c, 0.55), 12)
-		elif is_pend:   # waiting for a slot
-			st = UiKit.glow_box(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.20), 16, 2, UiKit.mix(c, Color.WHITE, 0.4), pad), UiKit.alpha(c, 0.4), 10)
-		else:   # owned but not picked: dim
-			st = UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.05), 16, 1, UiKit.alpha(c, 0.18), pad)
+		if i >= 0:   # in the team: selected, a gold outline with a soft gold glow (the only glow here)
+			st = UiKit.glow_box(UiKit.flat(UiKit.SEL_BG, 5, 1.5, UiKit.GOLD_HI, pad), UiKit.alpha(UiKit.GOLD_HI, 0.25), 6)
+		elif is_pend:   # waiting for a slot: an element outline (the pulse ring marks it too)
+			st = UiKit.flat(UiKit.alpha(c, 0.10), 5, 1.5, UiKit.mix(c, Color.WHITE, 0.3), pad)
+		else:   # owned but not picked: flat in a hairline, dimmed below
+			st = UiKit.flat(Color(0, 0, 0, 0.18), 5, 1, UiKit.HAIR, pad)
 		var t := Tap.new(st)
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var b := Box.new()
 		var v := UiKit.vbox(6)
 		v.alignment = BoxContainer.ALIGNMENT_CENTER
-		v.add_child(UiKit.orb(c, 40, sp.el, 18))
-		v.add_child(UiKit.lbl(sp.name + (" ✦" if shiny else ""), "display", 16, UiKit.INK, {"align": "center", "lh": -4}))
+		v.add_child(UiKit.por(c, 40, sp.el, i >= 0))
+		v.add_child(UiKit.lbl(sp.name + (" ✦" if shiny else ""), "display", UiKit.NAME, UiKit.INK, {"align": "center", "lh": -2}))
 		var status: String = "Lead" if i == 0 else ("Bench" if i > 0 else ("Pick a slot" if is_pend else sp.get("role", "")))
-		var status_c: Color = UiKit.GOLD if i == 0 else (c if i > 0 else (UiKit.INK if is_pend else UiKit.MUTE))
-		v.add_child(UiKit.lbl(status, "700", 11, status_c, {"align": "center"}))
+		var status_c: Color = UiKit.GOLD_HI if i == 0 else (UiKit.INK2 if i > 0 else (UiKit.INK if is_pend else UiKit.INK2))
+		v.add_child(UiKit.lbl(status, "700", UiKit.T_S, status_c, {"align": "center"}))
 		if i < 0 and not is_pend:
-			v.modulate = Color(0.75, 0.75, 0.8, 0.6)
+			v.modulate = Color(1, 1, 1, 0.55)
 		var m := MarginContainer.new()
 		m.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var mg := {"left": 6, "top": 12, "right": 6, "bottom": 10}
@@ -835,7 +916,7 @@ func _render_picks() -> void:
 		m.add_child(v)
 		b.add_child(Box.fill(m))
 		if is_pend:
-			b.add_child(_pulse_ring(Color.WHITE, 16))
+			b.add_child(_pulse_ring(Color.WHITE, 5))
 		if i >= 0:
 			b.add_child(Box.at(_slot_badge(i, c), "tr", Vector2(6, 6)))
 		t.add_child(b)
@@ -878,7 +959,7 @@ func _render_picks() -> void:
 	else:
 		var spare: bool = own.any(func(o): return not (o in S.picks))
 		el.teamHint.text = "Tap a slot to make it lead. Tap a creature to %s." % (("swap it in" if spare else "remove it") if full else "add or remove it")
-		el.teamHint.add_theme_color_override("font_color", UiKit.MUTE)
+		el.teamHint.add_theme_color_override("font_color", UiKit.INK2)
 	if _team_pop.has("slot"):
 		_team_pop_fx(slots.get(_team_pop.slot))
 	if _team_pop.has("pick"):
@@ -986,28 +1067,40 @@ func _show_shop(back: Callable) -> void:
 	var sell: Control = el.shopSell
 	UiKit.clear(buy)
 	UiKit.clear(sell)
-	var add := func(box: Control, g: String, t: String, sub: String, c: Color, ok: bool, fn: Callable):
-		var b := _node_btn(g, t, sub, c, fn)
-		b.disabled = not ok
+	# one row per trade; the price sits on the right. A trade you can't make keeps its text at full
+	# strength and says why under the price, instead of dimming the row.
+	var add := func(box: Control, g: String, t: String, sub: String, c: Color, price: String, why: String, fn: Callable):
+		var pv := UiKit.vbox(0)
+		var ph := UiKit.hbox(4, BoxContainer.ALIGNMENT_END)
+		ph.add_child(UiKit.icon("coin", 13, UiKit.GOLD_HI))
+		ph.add_child(UiKit.disp(price, UiKit.NAME, UiKit.GOLD_HI if why == "" else UiKit.INK))
+		pv.add_child(ph)
+		if why != "":
+			pv.add_child(UiKit.lbl(why, "700", UiKit.T_S, UiKit.INK2, {"align": "right"}))
+		var b := _node_btn(g, t, sub, c, fn, false, pv)
+		b.disabled = why != ""
+		b.dis_mod = Color.WHITE
 		box.add_child(b)
+	var short := func(n: int) -> String: return "Need %d more" % n
 	var paid := func():
 		Sfx.caught()
 		Platform.haptic("success")
 		again.call()
 	for m in Data.MATS:
 		var d: Dictionary = Data.MAT_DEF[m]
-		add.call(buy, m, "%s · %d gold" % [d.name, Data.BAL.shop_mat], "%s upgrades · you have %d" % [d.track, w[m]], MAT_COL[m],
-			w.gold >= Data.BAL.shop_mat, func(): if Meta.buy_mat(m): paid.call())
+		add.call(buy, m, d.name, "%s upgrades · you have %d" % [d.track, w[m]], MAT_COL[m], str(Data.BAL.shop_mat),
+			"" if w.gold >= Data.BAL.shop_mat else short.call(Data.BAL.shop_mat - w.gold), func(): if Meta.buy_mat(m): paid.call())
 	var empty := Meta.pack_empty()
-	add.call(buy, "star", "Creature pack · %d gold" % Data.BAL.shop_pack, "You own every creature and every shiny" if empty else "A creature you don’t own, else a shiny",
-		UiKit.GOLD, not empty and w.gold >= Data.BAL.shop_pack, func():
+	add.call(buy, "star", "Creature pack", "You own every creature and every shiny" if empty else "A creature you don’t own, else a shiny",
+		UiKit.GOLD_HI, str(Data.BAL.shop_pack), "All collected" if empty else ("" if w.gold >= Data.BAL.shop_pack else short.call(Data.BAL.shop_pack - w.gold)),
+		func():
 			var r = Meta.buy_pack()
 			if r != null:
 				_show_pack(r, "Creature pack", "Fresh from the shop", again))
 	for m in Data.MATS:
 		var d: Dictionary = Data.MAT_DEF[m]
-		add.call(sell, m, "Sell a %s · +%d gold" % [d.name, Data.BAL.shop_sell], "You have %d" % w[m], MAT_COL[m],
-			w[m] > 0, func(): if Meta.sell_mat(m): paid.call())
+		add.call(sell, m, "Sell a %s" % d.name, "You have %d" % w[m], MAT_COL[m], "+%d" % Data.BAL.shop_sell,
+			"" if w[m] > 0 else "None to sell", func(): if Meta.sell_mat(m): paid.call())
 	_on(el.shopBack, func():
 		Sfx.pick()
 		back.call())
@@ -1015,39 +1108,18 @@ func _show_shop(back: Callable) -> void:
 	Ui.measure(true)
 
 # ================= collection & loadouts (§11, §16) =================
-var _coll := {"cur": "", "pending": null}
+var _coll := {"cur": "", "pending": null, "tab": "cards"}
+const COLL_TABS := ["cards", "trait", "upgrades"]
 
-func _show_collection() -> void:
+## The Collection (idea 9, a bestiary): the selected creature in the specimen window, a six-wide
+## portrait grid (silhouettes for creatures not found yet), and the detail panel with three tabs:
+## Cards (the loadout editor, §16.1), Trait (§16.2) and Upgrades (§5.2). `tab` opens on that tab.
+func _show_collection(tab := "cards") -> void:
 	var el := _el()
 	S.mode = "meta"
 	var own := Meta.owned()
-	var grid: Control = el.collGrid
-	UiKit.clear(grid)
-	el.collCount.text = "%d / %d" % [own.size(), Data.ROSTER.size()]
-	_coll = {"cur": "", "pending": null}
-	for k in Data.ROSTER:
-		var sp: Dictionary = Data.SPECIES[k]
-		var has: bool = k in own
-		var c := UiKit.el_css(sp.el) if has else UiKit.MUTE
-		var st := UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.08), 12, 1.5, UiKit.LINE, Vector4(2, 6, 2, 6))
-		var st_on := UiKit.glow_box(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.08), 12, 1.5, c, Vector4(2, 6, 2, 6)), UiKit.alpha(c, 0.4), 6)
-		var t := Tap.new(st, st_on)
-		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var v := UiKit.vbox(4)
-		v.alignment = BoxContainer.ALIGNMENT_CENTER
-		if has:
-			v.add_child(UiKit.orb(c, 30, sp.el, 14))
-		else:
-			var q := UiKit.boxed(UiKit.lbl("?", "display", 16, Color("#5a6088"), {"align": "center"}), Vector2(30, 30),
-				RRect.new({"radius": 15.0}).solid(Color("#1a2040")))
-			v.add_child(q)
-		v.add_child(UiKit.lbl((sp.name if has else "???") + (" ✦" if Meta.is_shiny(k) else ""), "display", 11, UiKit.INK, {"align": "center", "ellipsis": true}))
-		t.add_child(v)
-		if not has:
-			t.modulate.a = 0.7
-		t.set_meta("k", k)
-		_btn(t, _coll_detail.bind(k))
-		grid.add_child(t)
+	el.collCount.text = "%d of %d found" % [own.size(), Data.ROSTER.size()]
+	_coll = {"cur": "", "pending": null, "tab": tab}
 	Ui.show("scr-coll")
 	Ui.measure(true)
 	_coll_detail(S.picks[0] if S.picks[0] in own else own[0])
@@ -1056,17 +1128,58 @@ func _coll_detail(k: String) -> void:
 	_coll.cur = k
 	_coll.pending = null
 	_show_title_actor(k, not Meta.is_owned(k))
-	for b in _el().collGrid.get_children():
-		b.on = b.get_meta("k") == k
+	_fit_specimen(S.title_actor)
+	_coll_grid()
 	_coll_render()
 
-## The unlock panel for a locked option: what it costs and an Unlock button (disabled if too poor).
+## Scale the Collection's creature to fill its specimen window: once Layout has placed it, grow it until
+## its head nears the top of the frame (it never leaves the stage band, so the art rule holds).
+func _fit_specimen(a) -> void:
+	var tok := S.tok
+	for i in 4:   # Ui.measure settles the band over 2 frames, then the main loop places the actor
+		await get_tree().process_frame
+	if tok != S.tok or a == null or not is_instance_valid(a) or a != S.title_actor or Ui.current != "scr-coll":
+		return
+	var spec: Control = _el().collSpec
+	var r: Rect2 = a.screen_rect()
+	if not spec.visible or r.size.y < 1.0:
+		return
+	var room: float = Layout.tpos().y - spec.position.y - 14.0   # head clear of the frame's border and studs
+	var wide := spec.size.x * 0.8
+	a.extra *= clampf(minf(room / r.size.y, wide / maxf(r.size.x, 1.0)), 0.5, 2.4)
+
+## The portrait grid: element orbs for owned creatures, dim "?" silhouettes for the rest, the selected
+## one ringed in gold. Names live only in the detail panel.
+func _coll_grid() -> void:
+	var grid: Control = _el().collGrid
+	UiKit.clear(grid)
+	var own := Meta.owned()
+	for k in Data.ROSTER:
+		var sp: Dictionary = Data.SPECIES[k]
+		var has: bool = k in own
+		var sel: bool = k == _coll.cur
+		var t := Tap.new()
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var b: Box
+		if has:
+			b = UiKit.por(UiKit.el_css(sp.el), 44, sp.el, sel)
+			if Meta.is_shiny(k):
+				b.add_child(Box.at(UiKit.lbl("✦", "700", UiKit.T_S, UiKit.GOLD_HI), "tr", Vector2(1, 0)))
+		else:
+			b = UiKit.por(Color("#3a3f55"), 44, "", sel)
+			b.add_child(UiKit.disp("?", 22, Color("#8a90a8")))
+			if not sel:
+				t.modulate.a = 0.6
+		t.add_child(b)
+		_btn(t, _coll_detail.bind(k))
+		grid.add_child(t)
+
 func _unlock_box(what_bb: String, c: Dictionary, on_unlock: Callable) -> Control:
 	var have: int = Meta.essence().get(c.el, 0)
-	var box := UiKit.panel(UiKit.flat(Color(1, 207 / 255.0, 107 / 255.0, 0.08), 14, 1, Color(1, 207 / 255.0, 107 / 255.0, 0.3), Vector4(10, 10, 10, 10)))
+	var box := UiKit.panel(UiKit.inset(Vector4(12, 10, 12, 12), true))
 	var v := UiKit.vbox(8)
 	box.add_child(v)
-	v.add_child(UiKit.rich(what_bb, 14, UiKit.MUTE))
+	v.add_child(UiKit.rich(what_bb, UiKit.T_M, UiKit.INK2))
 	var b := UiScreens.big("Unlock", true)
 	if have < c.n:
 		UiScreens.set_big(b, "Unlock", "· need %d more %s" % [c.n - have, Data.ELEM[c.el].name])
@@ -1092,36 +1205,95 @@ func _sec(title: String) -> VBoxContainer:
 func _coll_render() -> void:
 	var el := _el()
 	var k: String = _coll.cur
-	var pending = _coll.pending
 	var sp: Dictionary = Data.SPECIES[k]
-	var own := Meta.owned()
-	var has: bool = k in own
+	var has := Meta.is_owned(k)
 	var lo := Meta.loadout(k)
 	var bo := Meta.boosts(k)
 	var col := UiKit.el_css(sp.el)
-	_fill(el.collEss, _ess_chips(Meta.essence()) + _loot_chips(Meta.wallet()))
+	# the header shows the currency the open tab spends: gold and materials for Upgrades, else Essence
+	_fill(el.collEss, _loot_chips(Meta.wallet()) if has and _coll.tab == "upgrades" else _ess_chips(Meta.essence()))
+	# specimen window caption: element, role, HP (on a solid chip, it sits over the scene)
+	var chip := UiKit.chip(sp.el, col, "%s · %s · %d HP" % [Data.ELEM[sp.el].name, sp.get("role", ""), roundi(sp.hp * bo.vital) if has else sp.hp])
+	chip.add_theme_stylebox_override("panel", UiKit.flat(UiKit.alpha(UiKit.NAVY2, 0.88), 11, 1, UiKit.alpha(col, 0.7), Vector4(8, 3, 8, 3)))
+	_fill(el.collSpecChip, [chip])
 	var d: Control = el.collDetail
 	UiKit.clear(d)
-	var prow := UiKit.hbox(8)
-	prow.add_child(UiKit.elchip(sp.el, Data.ELEM[sp.el].name))
-	var nm := UiKit.lbl(sp.name + (" ✦" if Meta.is_shiny(k) else ""), "display", 19, UiKit.INK, {"ellipsis": true})
+	# name row: the name, and the Trait it carries
+	var nrow := UiKit.hbox(8)
+	var nm := UiKit.disp(sp.name + (" ✦" if Meta.is_shiny(k) else ""), UiKit.D_S, UiKit.INK, {"ellipsis": true})
 	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	prow.add_child(nm)
-	prow.add_child(UiKit.lbl("%s · %d HP" % [sp.get("role", ""), roundi(sp.hp * bo.vital) if has else sp.hp], "700", 12, UiKit.MUTE))
-	d.add_child(prow)
+	nrow.add_child(nm)
+	var t_on = lo["trait"] if has else sp.get("trait")
+	if t_on:
+		var tl := UiKit.eyebrow("Trait: " + Data.TRAITS[t_on].name)
+		tl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		nrow.add_child(tl)
+	d.add_child(nrow)
+	var ti := COLL_TABS.find(_coll.tab)
+	d.add_child(UiKit.tabs(["Cards", "Trait", "Upgrades"], ti, func(i: int):
+		Sfx.audio()
+		Sfx.pick()
+		Platform.haptic("select")
+		_coll.tab = COLL_TABS[i]
+		_coll.pending = null
+		_coll_render()))
+	# the tab body has one fixed height (scrolling inside), so switching tabs never moves the stage
+	var body := UiKit.vbox(10)
+	body.custom_minimum_size.y = _coll_body_h()
 	if not has:
-		d.add_child(UiKit.sub("Not found yet. Open a daily pack, or buy one in the item shop."))
-		var cards := UiKit.grid(3, 8)
-		for slot in Data.SLOTS:
-			var cv := CardView.new("coll").face(sp.cards[slot][0], sp.el)
-			cv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			cards.add_child(cv)
-		d.add_child(_pad_top(cards, 6))
-		return
-	# card slots: one row each, options in columns
+		_coll_unknown(body, k)
+	else:
+		match _coll.tab:
+			"trait": _coll_trait(body, k)
+			"upgrades": _coll_upgrades(body, k)
+			_: _coll_cards(body, k)
+	d.add_child(CapScroll.new(body, 0.0, -_coll_body_h()))
+	for x in d.find_children("*", "PanelContainer", true, false):
+		if x.has_meta("upchoice"):
+			_scroll_to(x)
+			break
+
+## Tab body for a creature not found yet: its default cards, its built-in Trait, how to find it.
+func _coll_unknown(body: Control, k: String) -> void:
+	var sp: Dictionary = Data.SPECIES[k]
+	var find := "Not found yet. Open a daily pack, or buy one in the item shop."
+	match _coll.tab:
+		"trait":
+			var x = sp.get("trait")
+			var tp := UiKit.panel(UiKit.inset())
+			var tv := UiKit.vbox(4)
+			tv.add_child(UiKit.lbl(Data.TRAITS[x].name, "display", UiKit.NAME, UiKit.INK, {"lh": -2}))
+			tv.add_child(UiKit.lbl(Data.TRAITS[x].text, "500", UiKit.T_M, UiKit.INK2, {"wrap": true, "lh": -2}))
+			tp.add_child(tv)
+			body.add_child(tp)
+			body.add_child(UiKit.note("Its built-in Trait. " + find))
+		"upgrades":
+			body.add_child(UiKit.sub(find))
+		_:
+			body.add_child(UiKit.note(find))
+			var cards := UiKit.hbox(8)
+			for slot in Data.SLOTS:
+				var cv := CardView.new("coll").face(sp.cards[slot][0], sp.el, {"slot": slot})   # not found yet: a glyph, no face
+				cv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				cards.add_child(cv)
+			body.add_child(cards)
+
+## Height of the Collection's tab body: about a quarter of the screen.
+func _coll_body_h() -> float:
+	return clampf(roundf(Layout.size.y * 0.25), 192.0, 212.0)
+
+## Cards tab: a column per slot (Strike, Skill, Signature), the default card over its alternate.
+## The equipped card is lit; tapping the other one equips it, or offers to unlock it with Essence.
+func _coll_cards(body: Control, k: String) -> void:
+	var sp: Dictionary = Data.SPECIES[k]
+	var lo := Meta.loadout(k)
+	var bo := Meta.boosts(k)
+	var pending = _coll.pending
+	var cols := UiKit.hbox(8)
 	for slot in Data.SLOTS:
-		var sec := _sec("Strike" if slot == "strike" else ("Skill" if slot == "skill" else "Signature"))
-		var cards := UiKit.grid(3, 8)
+		var cv_col := UiKit.vbox(6)
+		cv_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cv_col.add_child(UiKit.eyebrow("Strike" if slot == "strike" else ("Skill" if slot == "skill" else "Signature")))
 		var list: Array = sp.cards[slot]
 		for i in list.size():
 			var def: Dictionary = list[i]
@@ -1130,7 +1302,7 @@ func _coll_render() -> void:
 			var t := Tap.new()
 			t.press_scale = 0.97
 			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var cv := CardView.new("lo").face(Data.boost_card(def, bo.power, bo.spirit), sp.el)
+			var cv := CardView.new("lo").face(Data.boost_card(def, bo.power, bo.spirit), sp.el, {"slot": slot, "faces": [[k, sp.el]]})
 			cv.pressed_state = 1 if on else -1
 			cv.sel = pending != null and pending.has("slot") and pending.slot == slot and pending.i == i
 			if not open:
@@ -1150,27 +1322,36 @@ func _coll_render() -> void:
 				else:
 					_coll.pending = {"slot": slot, "i": i}
 				_coll_render())
-			cards.add_child(t)
-		for i in range(list.size(), 3):
-			cards.add_child(UiKit.spacer())
-		sec.add_child(_pad_top(cards, 6))
-		if pending != null and pending.has("slot") and pending.slot == slot:
-			var p: Dictionary = pending
-			var pdef: Dictionary = list[p.i]
-			sec.add_child(_unlock_box("Unlock [b]%s[/b] for %s's %s slot." % [pdef.name, sp.name, "Skill" if slot == "skill" else "Signature"], Meta.move_cost(k),
-				func(): return Meta.unlock_move(k, p.slot, p.i) and Meta.set_move(k, p.slot, p.i)))
-		d.add_child(sec)
-	# Trait socket: built-in + learned Traits, then learnable ones (source owned) with their cost
-	var tsec := _sec("Trait")
+			cv_col.add_child(t)
+		if list.size() < 2:
+			cv_col.add_child(UiKit.lbl("One option", "500", UiKit.T_S, UiKit.MUTE, {"align": "center"}))
+		cols.add_child(cv_col)
+	body.add_child(cols)
+	if pending != null and pending.has("slot"):
+		var p: Dictionary = pending
+		var pdef: Dictionary = sp.cards[p.slot][p.i]
+		body.add_child(_unlock_box("Unlock [b]%s[/b] for %s's %s slot." % [pdef.name, sp.name, "Skill" if p.slot == "skill" else "Signature"], Meta.move_cost(k),
+			func(): return Meta.unlock_move(k, p.slot, p.i) and Meta.set_move(k, p.slot, p.i)))
+
+## Trait tab: the socketed Trait, then every usable Trait (built-in first) and the learnable ones with
+## their Essence cost. Tapping a usable one sockets it; a learnable one opens the Learn offer.
+func _coll_trait(body: Control, k: String) -> void:
+	var sp: Dictionary = Data.SPECIES[k]
+	var own := Meta.owned()
+	var lo := Meta.loadout(k)
+	var pending = _coll.pending
 	var t_on = lo["trait"]
 	if t_on:
 		var tc := UiKit.el_css(Data.SPECIES[Data.TRAITS[t_on]["from"]].el)
-		var tp := UiKit.panel(UiKit.flat(UiKit.mix(tc, UiKit.DEEP, 0.12), 12, 1.5, UiKit.alpha(tc, 0.55), Vector4(10, 8, 10, 8)))
-		var tv := UiKit.vbox(3)
-		tv.add_child(UiKit.lbl(Data.TRAITS[t_on].name, "display", 16, tc, {"lh": -4}))
-		tv.add_child(UiKit.lbl(Data.TRAITS[t_on].text, "700", 12, UiKit.INK, {"wrap": true, "lh": 0}))
+		var tp := UiKit.panel(UiKit.inset())
+		var tv := UiKit.vbox(4)
+		var th := UiKit.hbox(6)
+		th.add_child(UiKit.icon(Data.SPECIES[Data.TRAITS[t_on]["from"]].el, 14, tc))
+		th.add_child(UiKit.lbl(Data.TRAITS[t_on].name, "display", UiKit.NAME, UiKit.INK, {"lh": -2}))
+		tv.add_child(th)
+		tv.add_child(UiKit.lbl(Data.TRAITS[t_on].text, "500", UiKit.T_M, UiKit.INK2, {"wrap": true, "lh": -2}))
 		tp.add_child(tv)
-		tsec.add_child(tp)
+		body.add_child(tp)
 	var opts := UiKit.grid(3, 6)
 	var keys: Array = Data.TRAITS.keys()
 	var builtin = sp.get("trait")
@@ -1182,25 +1363,23 @@ func _coll_render() -> void:
 		var open: bool = x in usable
 		var holder = Meta.trait_holder(x)
 		var c := UiKit.el_css(Data.SPECIES[def["from"]].el)
-		var st := UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.08), 10, 1.5, UiKit.LINE, Vector4(4, 7, 4, 7))
-		if x == t_on:
-			st = UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.22), 10, 1.5, c, Vector4(4, 7, 4, 7))
-		if pending != null and pending.has("trait") and pending["trait"] == x:
-			st = UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.08), 10, 1.5, UiKit.GOLD, Vector4(4, 7, 4, 7))
+		var st := UiKit.flat(Color(0, 0, 0, 0.18), 4, 1, UiKit.HAIR, Vector4(4, 7, 4, 7))
+		if x == t_on:   # socketed: selected
+			st = UiKit.row_style(true, Vector4(4, 7, 4, 7))
+		if pending != null and pending.has("trait") and pending["trait"] == x:   # the offer below is for this one
+			st = UiKit.flat(UiKit.alpha(c, 0.10), 4, 1.5, c, Vector4(4, 7, 4, 7))
 		var b := Tap.new(st)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var v := UiKit.vbox(3)
 		v.alignment = BoxContainer.ALIGNMENT_CENTER
-		v.add_child(UiKit.lbl(def.name, "display", 13, c, {"align": "center", "lh": -4}))
+		v.add_child(UiKit.lbl(def.name, "700", 13, UiKit.mix(c, UiKit.INK, 0.45), {"align": "center", "lh": -4}))
 		if not open:
 			var cost := _cost(Meta.trait_cost(x), c)
 			cost.alignment = BoxContainer.ALIGNMENT_CENTER
 			v.add_child(cost)
-			if not (pending != null and pending.has("trait") and pending["trait"] == x):
-				b.modulate.a = 0.7
 		else:
 			var tag: String = "Built-in" if x == builtin else (("moves from " + Data.SPECIES[holder].name) if (holder != null and holder != k and x != t_on) else ("from " + Data.SPECIES[def["from"]].name))
-			v.add_child(UiKit.lbl(tag, "700", 9, UiKit.MUTE, {"align": "center", "ellipsis": true}))
+			v.add_child(UiKit.lbl(tag, "500", UiKit.T_S, UiKit.INK2, {"align": "center", "ellipsis": true}))
 		b.add_child(v)
 		b.pressed.connect(func():
 			if x == t_on:
@@ -1215,66 +1394,78 @@ func _coll_render() -> void:
 				_coll.pending = {"trait": x}
 			_coll_render())
 		opts.add_child(b)
-	tsec.add_child(_pad_top(opts, 2))
+	body.add_child(opts)
 	var hidden := keys.filter(func(x): return not (Data.TRAITS[x]["from"] in own)).size()
 	if hidden:
-		tsec.add_child(_pad_top(UiKit.note("%d more Trait%s: own the creature to learn %s." % [hidden, "" if hidden == 1 else "s", "it" if hidden == 1 else "them"]), 6))
+		body.add_child(UiKit.note("%d more Trait%s: own the creature to learn %s." % [hidden, "" if hidden == 1 else "s", "it" if hidden == 1 else "them"]))
 	if pending != null and pending.has("trait"):
 		var x2: String = pending["trait"]
 		var def2: Dictionary = Data.TRAITS[x2]
-		tsec.add_child(_unlock_box("Learn [b]%s[/b]: %s. Any one creature can socket it besides %s." % [def2.name, def2.text, Data.SPECIES[def2["from"]].name],
+		body.add_child(_unlock_box("Learn [b]%s[/b]: %s. Any one creature can socket it besides %s." % [def2.name, def2.text, Data.SPECIES[def2["from"]].name],
 			Meta.trait_cost(x2), func(): return Meta.unlock_trait(x2) and Meta.set_trait(k, x2)))
-	d.add_child(tsec)
-	# permanent upgrades (§5.2): one track per material
-	var ups := _sec("Upgrades")
+
+## What each upgrade track adds per level: the BAL key and the words after "+N%".
+const UP_EFFECT := {"sword": ["up_dmg", "damage"], "orb": ["up_spirit", "shields and heals"], "jewel": ["up_hp", "max HP"]}
+
+## Upgrades tab (§5.2): one track per material (the header shows gold and materials): five pips, what it adds so far, and a
+## button with the next level and its cost (or what is missing).
+func _coll_upgrades(body: Control, k: String) -> void:
+	var w := Meta.wallet()   # shown in the header while this tab is open
+	var list := UiKit.rows()
 	var lv := Meta.upgrades(k)
-	var w := Meta.wallet()
 	for m in Data.MATS:
 		var def: Dictionary = Data.MAT_DEF[m]
 		var c: Color = MAT_COL[m]
 		var n: int = lv.get(m, 0)
 		var cost = Meta.upgrade_cost(k, m)
-		var row := UiKit.panel(UiKit.flat(UiKit.mix(c, UiKit.DEEP, 0.08), 14, 1.5, UiKit.LINE, Vector4(10, 10, 10, 10)))
-		var v := UiKit.vbox(6)
-		row.add_child(v)
-		var pr := UiKit.hbox(8)
-		pr.add_child(UiKit.icon(m, 20, c))
-		var tl := UiKit.lbl(def.track, "display", 16, c)
-		tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pr.add_child(tl)
-		pr.add_child(UiKit.lbl("Lv %d / %d" % [n, Data.BAL.up_max], "700", 12, UiKit.MUTE))
+		var row := UiKit.panel(UiKit.row_style(false, Vector4(0, 6, 0, 6)))
+		var h := UiKit.hbox(10)
+		row.add_child(h)
+		var v := UiKit.vbox(5)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var pr := UiKit.hbox(6)
+		pr.add_child(UiKit.icon(m, 16, c))
+		pr.add_child(UiKit.disp(def.track, UiKit.NAME, UiKit.INK))
 		v.add_child(pr)
-		var pips := UiKit.hbox(4)
-		for i in Data.BAL.up_max:
-			var pip := Panel.new()
-			pip.add_theme_stylebox_override("panel", UiKit.flat(c if i < n else Color(1, 1, 1, 0.1), 3))
-			pip.custom_minimum_size.y = 6
-			pip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			pips.add_child(pip)
-		v.add_child(pips)
-		v.add_child(UiKit.note(def.text))
-		var b := UiScreens.big("Upgrade", true)
-		if cost == null:
-			b.disabled = true
-			UiScreens.set_big(b, "Max level")
-		else:
-			b.disabled = w.gold < cost.gold or w[m] < cost[m]
-			UiScreens.set_big(b, "Upgrade", "· %d %s%s + %d gold" % [cost[m], def.name, "s" if cost[m] > 1 else "", cost.gold])
-			b.pressed.connect(func():
-				if not Meta.buy_upgrade(k, m):
-					return
-				Sfx.audio()
-				Sfx.caught()
-				Platform.haptic("success")
-				_coll_render())
-		v.add_child(b)
-		ups.add_child(row)
-	d.add_child(ups)
-	for x in d.find_children("*", "PanelContainer", true, false):
-		if x.has_meta("upchoice"):
-			_scroll_to(x)
-			break
+		v.add_child(UiKit.pips(n, Data.BAL.up_max))
+		var fx: Array = UP_EFFECT[m]
+		var pct := roundi(Data.BAL[fx[0]] * 100)
+		v.add_child(UiKit.note(("+%d%% %s" % [pct * n, fx[1]]) if n else ("+%d%% %s per level" % [pct, fx[1]])))
+		h.add_child(v)
+		h.add_child(_up_btn(k, m, n, cost, w))
+		list.add_child(row)
+	body.add_child(list)
+
+## The upgrade button: a quiet two-line button, gold-rimmed when affordable. Line 1 is the next level
+## (or what is missing), line 2 its cost.
+func _up_btn(k: String, m: String, n: int, cost, w: Dictionary) -> Tap:
+	var can: bool = cost != null and w.gold >= cost.gold and w[m] >= cost[m]
+	var t := Tap.new(UiKit.flat(Color(0, 0, 0, 0.18), 5, 1, UiKit.GOLD_HI if can else UiKit.LINE, Vector4(10, 6, 10, 6)))
+	t.dis_mod = Color.WHITE   # it says why it can't be bought instead of dimming
+	t.custom_minimum_size = Vector2(112, 44)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var v := UiKit.vbox(0)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	t.add_child(v)
+	if cost == null:
+		v.add_child(UiKit.lbl("Max level", "700", UiKit.T_S, UiKit.INK2, {"align": "center"}))
+		t.disabled = true
+		return t
+	var mname: String = Data.MAT_DEF[m].name
+	var line1 := "Level %d" % (n + 1)
+	if not can:
+		line1 = ("Need %d %s" % [cost[m] - w[m], mname]) if w[m] < cost[m] else ("Need %d gold" % (cost.gold - w.gold))
+	v.add_child(UiKit.lbl(line1, "700", UiKit.T_S, UiKit.GOLD_HI if can else UiKit.INK2, {"align": "center"}))
+	v.add_child(UiKit.lbl("%d %s · %d gold" % [cost[m], mname, cost.gold], "500", UiKit.T_S, UiKit.INK2, {"align": "center"}))
+	t.disabled = not can
+	t.pressed.connect(func():
+		if not Meta.buy_upgrade(k, m):
+			return
+		Sfx.audio()
+		Sfx.caught()
+		Platform.haptic("success")
+		_coll_render())
+	return t
 
 func _pad_top(c: Control, px: int) -> MarginContainer:
 	var m := MarginContainer.new()
@@ -1313,10 +1504,11 @@ func init_run_ui() -> void:
 	el.endShopBtn.pressed.connect(func():
 		Sfx.pick()
 		_show_shop(_back_to_end))
-	el.teamBtn.pressed.connect(func():
-		Sfx.audio()
-		Sfx.pick()
-		show_team())
+	for b in [el.teamBtn, el.dockTeam]:
+		b.pressed.connect(func():
+			Sfx.audio()
+			Sfx.pick()
+			show_team())
 	el.teamDone.pressed.connect(func():
 		Sfx.pick()
 		to_title())
@@ -1338,20 +1530,56 @@ func debug_show(id: String) -> void:
 			_render_picks()
 			_show_title_actor("cinderpip")
 		"coll": _show_collection()
+		"coll-trait": _show_collection("trait")
+		"coll-up":
+			if Platform.ui_check:   # scratch save: one Power level bought, so the shot shows a pip and a "Need" button
+				Meta.buy_upgrade(S.picks[0], "sword")
+			_show_collection("upgrades")
 		"shop": _show_shop(to_title)
 		"pack": _show_pack({"key": "sparkit", "shiny": false}, "Daily pack", "One new friend a day", to_title)
 		"map":
 			start_run()
+		"map-sel":   # the second medallion selected
+			start_run()
+			_map_tap(1)
+		"map-warden":   # floor 4: one medallion, the trail fades up toward Noctyrm
+			start_run()
+			S.floor = 4
+			show_map()
+		"map-late":   # floor 6 in the Dusklands, with an Alpha and a hurt, knocked-out party
+			start_run()
+			S.floor = 6
+			S.party[1].hp = 0.0
+			S.party[1].alive = false
+			S.party[2].hp = S.party[2].max_hp * 0.25
+			show_map()
 		"party":
 			start_run()
 			show_party(func(): show_map(false))
 		"reward":
 			start_run()
-			_show_reward(2, {"gold": 11, "sword": 1, "orb": 0, "jewel": 0})
+			_show_reward(2, {"gold": 11, "sword": 1, "orb": 0, "jewel": 0}, {"thorn": 2})
+		"reward-warden":   # the Warden's haul: five chips on the ribbon, one pick
+			start_run()
+			S.floor = 4
+			_show_reward(1, {"gold": 40, "sword": 1, "orb": 1, "jewel": 0}, {"thorn": 3, "ember": 3})
 		"upgrade":
 			start_run()
 			_show_upgrade(func(): show_map(), func(): show_map())
 		"end":
 			start_run()
 			S.floor = 3
+			run_loot = {"gold": 31, "sword": 1, "orb": 0, "jewel": 1}
+			run_ess = {"ember": 0, "tide": 1, "thorn": 2, "volt": 0}
+			S.stats.perfects = 2
+			S.party[2].hp = 0.0
+			S.party[2].alive = false
 			end_run(false)
+		"end-win":
+			start_run()
+			S.floor = 8
+			run_loot = {"gold": 312, "sword": 3, "orb": 2, "jewel": 4}
+			run_ess = {"ember": 9, "tide": 4, "thorn": 7, "volt": 3}
+			S.stats.perfects = 11
+			S.stats.start = Platform.ticks_msec() - 754000
+			end_run(true)

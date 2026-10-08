@@ -1,29 +1,50 @@
 class_name UiKit
-## Shared look for every screen: the style.css palette (with the HD-2D pack's overrides), fonts,
-## the Theme, and small builders that stand in for the CSS classes (.lbl, .pill, .elchip, .orb, .tag, ...).
+## Shared look for every screen: the warm HD-2D palette, the type system (Pixelify Sans display,
+## Atkinson Hyperlegible body), the Theme, and small builders: windows (WinStyle), hairline lists (Rows),
+## list rows, chips, portraits, labels. Mockup: "UI Directions" ideas 1-3 (docs/UI-QUEUE.md).
 
-# ---- palette (game/src/style.css :root, HD-2D cssVars applied) ----
-const NIGHT := Color("#0a0f1f")
-const DEEP := Color("#141b34")
-const DEEP2 := Color("#1c2547")
-const PANEL := Color(22 / 255.0, 20 / 255.0, 34 / 255.0, 0.86)
-const LINE := Color(1.0, 226 / 255.0, 170 / 255.0, 0.18)
-const INK := Color("#f0f2ff")
-const MUTE := Color("#98a1c8")
-const NEUTRAL := Color("#ffd9a0")
-const GOLD := Color("#ffcf6b")
-const HP := Color("#6ff0a0")
-const FOE := Color("#ff5a6e")
+# ---- palette: parchment on navy glass, brass trim; element colours are accents only ----
+const INK := Color("#f3ead3")        # parchment: primary text
+const INK2 := Color("#cdbf9f")       # secondary text (subs, quiet buttons)
+const MUTE := Color("#a3967a")       # muted text, inactive marks
+const NAVY := Color("#121a33")       # window glass
+const NAVY2 := Color("#0b1024")      # the deepest navy: gaps, wells, dark ink on gold
+const BRASS := Color("#c9a24a")      # trim: window borders, quiet-button outlines
+const GOLD_HI := Color("#f2d68c")    # highlight: selection, labels, studs, currency
+const GOLD_LO := Color("#7a5a1c")    # shaded brass: passed steps, pressed edges
+const PLAQUE_INK := Color("#2a1906") # dark brown text on the brass plaque
+const HAIR := Color(201 / 255.0, 162 / 255.0, 74 / 255.0, 0.24)   # hairline between list rows
+const SCRIM := Color(8 / 255.0, 11 / 255.0, 24 / 255.0)           # header scrim (alpha set where used)
+const SEL_BG := Color("#24293a")     # selected row: navy with an 8% gold wash, opaque so a glow can't tint it
+# older names, kept for existing callers and retargeted to the warm palette
+const NIGHT := NAVY2
+const DEEP := NAVY
+const DEEP2 := Color("#1a2548")      # top of the window gradient
+const PANEL := Color(18 / 255.0, 26 / 255.0, 51 / 255.0, 0.94)
+const LINE := Color(201 / 255.0, 162 / 255.0, 74 / 255.0, 0.45)   # brass outline (quiet buttons, idle tiles)
+const NEUTRAL := INK2
+const GOLD := GOLD_HI
+const HP := Color("#62d68a")
+const FOE := Color("#e8565a")
 const SHIELD := Color("#8fe3ff")
-const PURPLE := Color("#9b7bff")
 const EL := {
-	"ember": Color("#ff7a45"), "tide": Color("#3fb6ff"), "thorn": Color("#5fd36a"), "volt": Color("#ffd23f"),
+	"ember": Color("#ec7a3c"), "tide": Color("#3f9de4"), "thorn": Color("#5cc062"), "volt": Color("#efc63a"),
 }
 const VARS := {
 	"night": NIGHT, "deep": DEEP, "deep2": DEEP2, "panel": PANEL, "line": LINE, "ink": INK, "mute": MUTE,
 	"neutral": NEUTRAL, "gold": GOLD, "hp": HP, "foe": FOE, "shield": SHIELD,
-	"ember": Color("#ff7a45"), "tide": Color("#3fb6ff"), "thorn": Color("#5fd36a"), "volt": Color("#ffd23f"),
+	"ember": Color("#ec7a3c"), "tide": Color("#3f9de4"), "thorn": Color("#5cc062"), "volt": Color("#efc63a"),
 }
+
+# ---- type scale (px on the 390 canvas). Pixelify Sans sits on a grid of about 1/11 em, so display
+# sizes are multiples of 11 and its pixels land whole on 1x shots and 3x phones alike.
+const T_S := 12      # body small: labels, notes, chips
+const T_M := 14      # body
+const T_L := 16      # body large: lead lines
+const D_S := 22      # display small: section titles, big numbers
+const D_M := 33      # display: sheet titles
+const D_L := 44      # display large: screen logos
+const NAME := 16     # creature and item names in rows (display face)
 
 ## Element colour as the UI draws it (TS elCss: the CSS variable, not ELEM.hex).
 static func el_css(el) -> Color:
@@ -57,16 +78,35 @@ static var _fonts := {}
 static var _vars := {}
 static var _theme: Theme
 
-## "display" (Lilita One) or a Baloo 2 weight: "500" "700" "800".
+## "display" = Pixelify Sans Bold (titles, names, numbers); "500" = Atkinson Hyperlegible Regular;
+## "700" / "800" = Atkinson Hyperlegible Bold. The old faces (Lilita One, Baloo 2) stay as fallbacks,
+## then system symbol fonts for the glyphs neither has (★ ✦ →).
 static func font(k: String) -> Font:
 	if _fonts.has(k):
 		return _fonts[k]
-	var path := "res://ui/fonts/lilita-one-400.woff2" if k == "display" else "res://ui/fonts/baloo2-%s.woff2" % k
-	var f: FontFile = load(path)
-	var fb := SystemFont.new()
-	fb.font_names = PackedStringArray(["Apple Symbols", "Noto Sans Symbols 2", "Noto Sans Symbols2", "DejaVu Sans", "Noto Sans", "sans-serif"])
-	f.fallbacks = [fb]
+	var f: Font
+	if k == "display":
+		var px := _file("pixelify-sans.ttf", "lilita-one-400.woff2")
+		px.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED   # keep its pixels on whole px
+		px.hinting = TextServer.HINTING_NONE
+		var fv := FontVariation.new()
+		fv.base_font = px
+		fv.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 700}
+		f = fv
+	else:
+		f = _file("atkinson-400.ttf" if k == "500" else "atkinson-700.ttf", "baloo2-%s.woff2" % ("500" if k == "500" else "800"))
 	_fonts[k] = f
+	return f
+
+## A bundled font file with a fallback chain: the old face, then system symbol fonts.
+static func _file(name: String, old: String) -> FontFile:
+	var f: FontFile = load("res://ui/fonts/" + name)
+	if f.fallbacks.is_empty():
+		var sys := SystemFont.new()
+		sys.font_names = PackedStringArray(["Apple Symbols", "Noto Sans Symbols 2", "Noto Sans Symbols2", "DejaVu Sans", "Noto Sans", "sans-serif"])
+		var o: FontFile = load("res://ui/fonts/" + old)
+		o.fallbacks = [sys]
+		f.fallbacks = [o, sys]
 	return f
 
 ## A font with CSS letter-spacing (in em of `size`).
@@ -76,8 +116,13 @@ static func spaced(k: String, size: int, em: float) -> Font:
 		return font(k)
 	var key := "%s/%d" % [k, px]
 	if not _vars.has(key):
-		var fv := FontVariation.new()
-		fv.base_font = font(k)
+		var base := font(k)
+		var fv: FontVariation
+		if base is FontVariation:   # don't nest variations (the inner wght would be lost)
+			fv = base.duplicate()
+		else:
+			fv = FontVariation.new()
+			fv.base_font = base
 		fv.spacing_glyph = px
 		_vars[key] = fv
 	return _vars[key]
@@ -89,8 +134,8 @@ static func theme() -> Theme:
 	t.default_font = font("500")
 	t.default_font_size = 14
 	t.set_color("font_color", "Label", INK)
-	t.set_constant("line_spacing", "Label", -3)
-	t.set_color("default_color", "RichTextLabel", MUTE)
+	t.set_constant("line_spacing", "Label", 1)
+	t.set_color("default_color", "RichTextLabel", INK2)
 	var empty := StyleBoxEmpty.new()
 	for s in ["panel", "focus"]:
 		t.set_stylebox(s, "ScrollContainer", empty)
@@ -104,6 +149,7 @@ static func theme() -> Theme:
 	return t
 
 # ---- builders ----
+const BODY_LEAD := 4
 ## Label. o: upper, ls (letter-spacing em), wrap, align ("center" "right"), ellipsis, shadow (Color),
 ## shadow_off (Vector2), outline (int), outline_c, lh (extra line spacing px), valign.
 static func lbl(text: String, fk := "500", size := 14, color := INK, o := {}) -> Label:
@@ -137,10 +183,12 @@ static func lbl(text: String, fk := "500", size := 14, color := INK, o := {}) ->
 	if o.has("outline"):
 		l.add_theme_constant_override("outline_size", o.outline)
 		l.add_theme_color_override("font_outline_color", o.get("outline_c", Color.BLACK))
-	l.add_theme_constant_override("line_spacing", o.get("lh", -3))
+	# `lh` was tuned for Baloo 2's tall line box (1.6 em); Atkinson's is 1.24 em, so body text gets
+	# BODY_LEAD back to land near 1.3-1.5 em. The display face is about as tall as Lilita was.
+	l.add_theme_constant_override("line_spacing", o.get("lh", -3) + (0 if fk == "display" else BODY_LEAD))
 	return l
 
-## BBCode label for mixed text ([b] = Baloo 800 in ink). Fits its content height.
+## BBCode label for mixed text ([b] = Atkinson Bold). Fits its content height.
 static func rich(bb: String, size := 14, color := MUTE, fk := "500", align := "") -> RichTextLabel:
 	var r := RichTextLabel.new()
 	r.bbcode_enabled = true
@@ -154,7 +202,7 @@ static func rich(bb: String, size := 14, color := MUTE, fk := "500", align := ""
 	for s in ["normal_font_size", "bold_font_size"]:
 		r.add_theme_font_size_override(s, size)
 	r.add_theme_color_override("default_color", color)
-	r.add_theme_constant_override("line_separation", -2)
+	r.add_theme_constant_override("line_separation", 2)
 	r.text = ("[center]%s[/center]" % bb) if align == "center" else bb
 	return r
 
@@ -261,46 +309,147 @@ static func tile(c: Color, sz: float, radius: float, glyph: String, gsz: float) 
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return boxed(icon(glyph, gsz, c), Vector2(sz, sz), bg)
 
-## .elchip: element glyph + name in a tinted chip.
-static func elchip(el, name := "") -> PanelContainer:
-	var c := el_css(el)
-	var p := panel(flat(alpha(c, 0.22), 6, 1, alpha(c, 0.45), Vector4(7, 4, 7, 3)))
+## .chip: a dark pill with a coloured rim; the glyph carries the colour, the text stays parchment.
+## Used for element mixes, wallet and loot counts, Essence.
+static func chip(glyph: String, c: Color, text: String) -> PanelContainer:
+	var p := panel(flat(Color(0, 0, 0, 0.35), 11, 1, alpha(c, 0.7), Vector4(8, 3, 8, 3)))
+	p.custom_minimum_size.y = 22
 	var h := hbox(4)
-	h.add_child(icon(str(el), 11, c))
-	h.add_child(lbl(name, "800", 10, c, {"upper": true, "ls": 0.1}))
+	if glyph != "":
+		h.add_child(icon(glyph, 12, c))
+	var l := lbl(text, "700", T_S, INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(l)
 	p.add_child(h)
 	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	return p
 
-## .tag: small status chip.
+## .elchip: element glyph + name.
+static func elchip(el, name := "") -> PanelContainer:
+	return chip(str(el), el_css(el), name)
+
+## .tag: small status chip (sentence case, no tracking).
 static func tag(text: String, c: Color) -> PanelContainer:
-	var p := panel(flat(Color(1, 1, 1, 0.08), 6, 0, Color(), Vector4(7, 4, 7, 3)))
-	p.add_child(lbl(text, "800", 10, c, {"upper": true, "ls": 0.06}))
+	var p := panel(flat(Color(0, 0, 0, 0.35), 4, 0, Color(), Vector4(6, 2, 6, 2)))
+	p.add_child(lbl(text, "700", T_S, c))
 	return p
 
 ## .ess: icon + number chip (essence, loot, costs).
 static func ess(glyph: String, c: Color, text: String) -> PanelContainer:
-	var p := panel(flat(alpha(c, 0.14), 7, 1, alpha(c, 0.35), Vector4(8, 4, 8, 3)))
-	var h := hbox(4)
-	h.add_child(icon(glyph, 11, c))
-	h.add_child(lbl(text, "800", 12, c))
-	p.add_child(h)
-	return p
+	return chip(glyph, c, text)
 
+# ---- windows and lists (idea 3) ----
+## The window frame StyleBox: double brass border on navy glass, gold studs on the top edge.
+## `pad` = content margin (16 inside windows); `studs` off for small or nested frames.
+static func window(pad := 16.0, studs := true) -> WinStyle:
+	var w := WinStyle.new(pad)
+	w.studs = studs
+	return w.refresh()
+
+## A PanelContainer framed as a window.
+static func win(pad := 16.0, studs := true) -> PanelContainer:
+	return panel(window(pad, studs))
+
+## A list split by hairlines (see Rows). Put rows styled with row_style() in it.
+static func rows() -> Rows:
+	return Rows.new()
+
+## A list row: flat and transparent (the hairlines separate rows); `sel` = the gold outline and faint gold
+## wash that mark the chosen row. Glow is reserved for act-now rows (act_style).
+static func row_style(sel := false, pad := Vector4(8, 10, 8, 10)) -> StyleBoxFlat:
+	if sel:
+		return flat(SEL_BG, 4, 1.5, GOLD_HI, pad)
+	return flat(Color(0, 0, 0, 0), 4, 0, Color(), pad)
+
+## A row or tile that wants a tap right now (pack ready): gold outline with a soft gold glow.
+static func act_style(pad := Vector4(8, 10, 8, 10)) -> StyleBoxFlat:
+	return glow_box(flat(SEL_BG, 4, 1.5, GOLD_HI, pad), alpha(GOLD_HI, 0.3), 8)
+
+## A quiet well inside a window (an unlock offer, a stat, a detail block): darker glass with a
+## hairline rim. `gold` = it holds the act-now choice (a gold rim instead).
+static func inset(pad := Vector4(12, 10, 12, 10), gold := false) -> StyleBoxFlat:
+	return flat(Color(0, 0, 0, 0.22), 4, 1, alpha(GOLD_HI, 0.55) if gold else HAIR, pad)
+
+## Row content: a leading piece (portrait, tile), a name in the display face, a sub line, and an
+## optional trailing piece (price, marker, button). Returns the HBox; put it in a Tap or a panel.
+static func list_row(lead: Control, title: String, sub_text := "", trail: Control = null, title_c := INK) -> HBoxContainer:
+	var h := hbox(12)
+	if lead:
+		lead.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(lead)
+	var v := vbox(2)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	v.add_child(lbl(title, "display", NAME, title_c, {"wrap": true, "lh": -2}))
+	if sub_text != "":
+		v.add_child(lbl(sub_text, "500", 13, INK2, {"wrap": true, "lh": -4}))
+	h.add_child(v)
+	if trail:
+		trail.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(trail)
+	return h
+
+## .por: element portrait, a lit orb inside a dark gap and an element ring (gold when `sel`).
+## Rings are drawn inside the box, so it never spills.
+static func por(c: Color, sz: float, glyph: String, sel := false) -> Box:
+	var b := Box.new(Vector2(sz, sz))
+	b.add_child(Box.fill(RRect.new({"radius": 999.0}).solid(GOLD_HI if sel else mix(c, Color.BLACK, 0.8))))
+	var gap := RRect.new({"radius": 999.0}).solid(NAVY2)
+	gap.custom_minimum_size = Vector2(sz - 2, sz - 2) if not sel else Vector2(sz - 3, sz - 3)
+	b.add_child(gap)
+	var o := RRect.new({"radius": 999.0, "mode": "radial", "rc": Vector2(0.4, 0.35),
+		"c0": mix(mix(c, Color.WHITE, 0.85), c, 0.12), "c1": mix(c, NAVY2, 0.45)})
+	o.custom_minimum_size = Vector2(sz - 6, sz - 6)
+	b.add_child(o)
+	if glyph != "":
+		var g := icon(glyph, roundf(sz * 0.5), Color.WHITE)
+		b.add_child(g)
+	return b
+
+## .bar: a thin rounded meter (HP outside battle, progress). `frac` 0..1 filled in `c`.
+static func meter(frac: float, c := HP, h := 8.0) -> Control:
+	var m := Control.new()
+	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	m.custom_minimum_size.y = h
+	m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	m.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var bg := flat(Color(0, 0, 0, 0.5), h / 2.0, 1, Color(1, 1, 1, 0.08))
+	var fg := flat(c, h / 2.0)
+	m.draw.connect(func():
+		m.draw_style_box(bg, Rect2(Vector2.ZERO, m.size))
+		var w := roundf(m.size.x * clampf(frac, 0.0, 1.0))
+		if w >= 1.0:
+			m.draw_style_box(fg, Rect2(0, 0, maxf(w, h), m.size.y)))
+	return m
+
+## Header scrim (mockup .scrim): navy fading to clear, behind text drawn over the scene.
+## `solid` = share of the height at full strength before the fade.
+static func scrim(solid := 0.7) -> RRect:
+	return RRect.new({"radius": 0.0, "angle": 180.0, "c0": alpha(SCRIM, 0.88), "c1": alpha(SCRIM, 0.6), "s1": solid,
+		"c2": alpha(SCRIM, 0.0)})
+
+# ---- type roles (idea 2) ----
+## .lbl: the gold sentence-case label over a section or a sheet (replaces tracked uppercase eyebrows).
 static func eyebrow(text: String) -> Label:
-	return lbl(text, "800", 11, MUTE, {"upper": true, "ls": 0.2})
+	return lbl(text, "700", T_S, GOLD_HI)
+
+## .disp: display-face text (titles, names, numbers).
+static func disp(text: String, size := D_S, color := INK, o := {}) -> Label:
+	var d := {"lh": -2}
+	d.merge(o, true)
+	return lbl(text, "display", size, color, d)
 
 static func h2(text: String) -> Label:
-	return lbl(text, "display", 28, INK, {"wrap": true, "lh": -4})
+	return lbl(text, "display", D_M, INK, {"wrap": true, "lh": -4})
 
 static func sub(text: String, align := "") -> Label:
-	return lbl(text, "500", 14, MUTE, {"wrap": true, "lh": 0, "align": align})
+	return lbl(text, "500", T_M, INK2, {"wrap": true, "lh": -2, "align": align})
 
 static func note(text: String) -> Label:
-	return lbl(text, "700", 11, MUTE, {"wrap": true, "lh": -1})
+	return lbl(text, "500", T_S, INK2, {"wrap": true, "lh": -3})
 
 static func best(text: String) -> Label:
-	return lbl(text, "700", 12, MUTE, {"align": "center", "ls": 0.06, "wrap": true})
+	return lbl(text, "500", T_S, INK2, {"align": "center", "wrap": true})
 
 static func clear(n: Node) -> void:
 	for c in n.get_children():
@@ -309,7 +458,7 @@ static func clear(n: Node) -> void:
 
 ## Real seconds since boot (UI motion that ignores hit-stop and slow-mo, like CSS in the TS build).
 static func now() -> float:
-	return Time.get_ticks_usec() / 1e6
+	return Platform.ticks_usec() / 1e6
 
 ## CSS cubic-bezier(x1,y1,x2,y2) evaluated at progress t.
 static func bezier(t: float, x1: float, y1: float, x2: float, y2: float) -> float:
@@ -339,3 +488,215 @@ static func glyph_for(c, el) -> String:
 	if c.get("energy", 0):
 		return "spark"
 	return "star"
+
+# ---- map, reward and results pieces (UI-QUEUE items 8 and 10) ----
+## UI colours of the materials (the Ember / Tide / Thorn accents), as Run.MAT_COL.
+const MAT_C := {"sword": Color("#ec7a3c"), "orb": Color("#3f9de4"), "jewel": Color("#5cc062")}
+
+## One wallet entry without a pill: a tinted glyph and a number (the map and reward footers).
+static func stat(glyph: String, c: Color, text: String) -> HBoxContainer:
+	var h := hbox(3)
+	h.add_child(icon(glyph, 14, c))
+	var l := lbl(text, "700", T_S, INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(l)
+	return h
+
+## The wallet as one row: gold, then each material (Meta.wallet() shape). Never wraps.
+static func wallet_row(w: Dictionary, sep := 10) -> HBoxContainer:
+	var h := hbox(sep)
+	h.add_child(stat("coin", GOLD_HI, str(w.get("gold", 0))))
+	for m in MAT_C:
+		h.add_child(stat(m, MAT_C[m], str(w.get(m, 0))))
+	h.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return h
+
+## A party member as a portrait with a thin HP bar under it and no name (names truncate at this size).
+## `lead` = the gold ring. A knocked-out creature is dimmed with an empty bar.
+static func party_por(c, sz := 30.0, lead := false) -> VBoxContainer:
+	var v := vbox(4)
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var p := por(el_css(c.el), sz, str(c.el), lead)
+	if not c.alive or c.hp <= 0:
+		p.modulate = Color(0.5, 0.5, 0.55)
+	v.add_child(p)
+	var frac: float = clampf(c.hp / float(c.max_hp), 0.0, 1.0)
+	var m := meter(frac, HP if frac > 0.3 else FOE, 4.0)
+	m.custom_minimum_size.x = sz
+	m.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(m)
+	return v
+
+## A loot or Essence chip sized for the ribbon (28 px tall, 14 px text).
+static func loot_chip(glyph: String, c: Color, text: String) -> PanelContainer:
+	var p := panel(flat(Color(0, 0, 0, 0.45), 14, 1, alpha(c, 0.8), Vector4(10, 4, 10, 4)))
+	p.custom_minimum_size.y = 28
+	var h := hbox(5)
+	h.add_child(icon(glyph, 14, c))
+	var l := lbl(text, "700", T_M, INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(l)
+	p.add_child(h)
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return p
+
+## A ribbon chip holding several glyph + number pairs after one word ("+ Essence  [ember] 9  [tide] 4").
+## pairs: [[glyph, Color, text], ...].
+static func multi_chip(word: String, pairs: Array) -> PanelContainer:
+	var p := panel(flat(Color(0, 0, 0, 0.45), 14, 1, alpha(BRASS, 0.8), Vector4(10, 4, 10, 4)))
+	p.custom_minimum_size.y = 28
+	var h := hbox(8)
+	var w := lbl(word, "700", T_M, INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	w.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(w)
+	for pr in pairs:
+		var s := hbox(3)
+		s.add_child(icon(pr[0], 14, pr[1]))
+		var l := lbl(pr[2], "700", T_M, INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		s.add_child(l)
+		h.add_child(s)
+	p.add_child(h)
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return p
+
+## The ribbon band behind "Victory" and a loot row: deep navy fading out at both ends between two
+## gold hairlines. Put it behind content with Box.fill (it draws inside its rect).
+static func ribbon_band() -> Control:
+	var c := Control.new()
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.draw.connect(func():
+		var w := c.size.x
+		var h := c.size.y
+		var fade := w * 0.15
+		var deep := alpha(NAVY2, 0.92)
+		for band in [[0.0, h, deep], [0.0, 1.0, GOLD_HI], [h - 1.0, 1.0, GOLD_HI]]:
+			var y: float = band[0]
+			var bh: float = band[1]
+			var on: Color = band[2]
+			var off := alpha(on, 0.0)
+			c.draw_polygon(PackedVector2Array([Vector2(0, y), Vector2(fade, y), Vector2(fade, y + bh), Vector2(0, y + bh)]),
+				PackedColorArray([off, on, on, off]))
+			c.draw_rect(Rect2(fade, y, w - 2 * fade, bh), on)
+			c.draw_polygon(PackedVector2Array([Vector2(w - fade, y), Vector2(w, y), Vector2(w, y + bh), Vector2(w - fade, y + bh)]),
+				PackedColorArray([on, off, off, on])))
+	c.resized.connect(c.queue_redraw)
+	return c
+
+## Pips for picks remaining: `left` filled gold diamonds, then `total - left` hollow ones.
+static func pick_pips(left: int, total: int, sz := 10.0) -> Control:
+	var c := Control.new()
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var n := maxi(total, left)
+	var step := sz + 4.0
+	c.custom_minimum_size = Vector2(n * step - 2.0, sz + 4.0)
+	c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	c.draw.connect(func():
+		var r := sz * 0.6
+		for i in n:
+			var o := Vector2(1.0 + i * step + sz / 2.0, c.size.y / 2.0)
+			var pts := PackedVector2Array([o + Vector2(0, -r), o + Vector2(r, 0), o + Vector2(0, r), o + Vector2(-r, 0)])
+			if i < left:
+				c.draw_colored_polygon(pts, GOLD_HI)
+			else:
+				pts.append(pts[0])
+				c.draw_polyline(pts, alpha(GOLD_HI, 0.6), 1.0, true))
+	return c
+
+# ---- title dock and bestiary pieces (UI Directions ideas 8 and 9) ----
+## A frame with no glass: the window's double brass border and studs around a see-through middle.
+## For a window onto the stage (the Collection's specimen window), where the 3D scene is the content.
+static func window_frame(studs := true) -> WinStyle:
+	var w := WinStyle.new(0)
+	w.studs = studs
+	w.shadow = false
+	w.top = Color(0, 0, 0, 0)
+	w.bottom = Color(0, 0, 0, 0)
+	return w.refresh()
+
+## Level pips (upgrade tracks): `n` of `total` fixed-size bars filled in `c`, the rest dark navy.
+static func pips(n: int, total: int, c := GOLD_HI, w := 22.0, h := 8.0, sep := 4.0) -> Control:
+	var m := Control.new()
+	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	m.custom_minimum_size = Vector2(total * w + (total - 1) * sep, h)
+	m.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	m.draw.connect(func():
+		for i in total:
+			var r := Rect2(i * (w + sep), 0, w, h)
+			m.draw_rect(r, c if i < n else Color("#2a3350"))
+			if i < n:   # a light top edge, like the plaque's bevel
+				m.draw_rect(Rect2(r.position, Vector2(w, 1)), mix(c, Color.WHITE, 0.5)))
+	return m
+
+## A tab strip: sentence-case labels over a brass hairline; the current tab is gold with a 2px gold
+## underline. `f.call(i)` runs when another tab is tapped.
+static func tabs(names: Array, cur: int, f: Callable) -> Control:
+	var wrap := Control.new()
+	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var h := hbox(0)
+	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	wrap.add_child(h)
+	for i in names.size():
+		var on := i == cur
+		var t := Tap.new(flat(Color(0, 0, 0, 0), 0, 0, Color(), Vector4(14, 6, 14, 8)))
+		t.press_scale = 1.0
+		t.add_child(lbl(str(names[i]), "700", T_M, GOLD_HI if on else INK2, {"align": "center"}))
+		if on:
+			t.draw.connect(func(): t.draw_rect(Rect2(0, t.size.y - 2, t.size.x, 2), GOLD_HI))
+		t.pressed.connect(func(): if not on: f.call(i))
+		h.add_child(t)
+	wrap.draw.connect(func(): wrap.draw_rect(Rect2(0, wrap.size.y - 1, wrap.size.x, 1), alpha(BRASS, 0.3)))
+	wrap.custom_minimum_size.y = h.get_combined_minimum_size().y
+	h.minimum_size_changed.connect(func(): wrap.custom_minimum_size.y = h.get_combined_minimum_size().y)
+	return wrap
+
+# ---- battle HUD pieces (UI-QUEUE items 5-6) ----
+const FACE_SHADER := preload("res://ui/por_face.gdshader")
+const CRYSTAL := Color("#57c8ff")       # the cards' crystal blue (energy orb, energy particles)
+const CRYSTAL_HI := Color("#e6fbff")
+const CRYSTAL_LO := Color("#2178c2")
+const GUARD := Color("#9fe8ff")         # "this creature resists the incoming heavy" (shield marker)
+
+## A round creature portrait: the creature's face (its in-game sprite, recoloured as on stage) on a
+## lit element orb, inside a dark gap and a ring (`ring`; default a light tint of the element).
+## Everything is drawn inside `sz`. `set_face_ko(box, true)` greys it out.
+static func face_por(key: String, el: String, sz: float, ring := Color(0, 0, 0, 0)) -> Box:
+	var c := el_css(el)
+	var b := Box.new(Vector2(sz, sz))
+	var rim := RRect.new({"radius": 999.0}).solid(ring if ring.a > 0.0 else mix(c, Color.WHITE, 0.75))
+	b.add_child(Box.fill(rim))
+	var gap := RRect.new({"radius": 999.0}).solid(NAVY2)
+	gap.custom_minimum_size = Vector2(sz - 3, sz - 3)
+	b.add_child(gap)
+	var o := RRect.new({"radius": 999.0, "mode": "radial", "rc": Vector2(0.4, 0.35),
+		"c0": mix(mix(c, Color.WHITE, 0.6), c, 0.3), "c1": mix(c, NAVY2, 0.55)})
+	o.custom_minimum_size = Vector2(sz - 6, sz - 6)
+	b.add_child(o)
+	var f := TextureRect.new()
+	f.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	f.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	f.stretch_mode = TextureRect.STRETCH_SCALE
+	f.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	f.custom_minimum_size = Vector2(sz - 6, sz - 6)
+	var m := ShaderMaterial.new()
+	m.shader = FACE_SHADER
+	m.set_shader_parameter("rsize", Vector2(sz - 6, sz - 6))
+	f.material = m
+	if key != "":
+		f.texture = CardView.face_tex(key, el, 1.0, Vector2(0.5, 0.4))
+	b.add_child(f)
+	b.set_meta("face", f)
+	b.set_meta("rim", rim)
+	return b
+
+## Grey a face_por out (knocked out) or bring it back.
+static func set_face_ko(b: Box, ko: bool) -> void:
+	var m: ShaderMaterial = (b.get_meta("face") as TextureRect).material
+	m.set_shader_parameter("sat", 0.0 if ko else 1.0)
+	m.set_shader_parameter("bright", 0.55 if ko else 1.0)
+	b.modulate = Color(0.62, 0.62, 0.66) if ko else Color.WHITE
+
+## Small HUD frame over the scene (floor pill, mute, quit): navy glass with a brass hairline.
+static func hud_btn_style(radius := 8.0, pad := Vector4(0, 0, 0, 0)) -> StyleBoxFlat:
+	return glow_box(flat(alpha(NAVY, 0.9), radius, 1, LINE, pad), Color(0, 0, 0, 0.3), 4, Vector2(0, 2))

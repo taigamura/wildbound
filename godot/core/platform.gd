@@ -10,6 +10,36 @@ var _cfg: ConfigFile = null
 
 var is_native: bool = OS.get_name() == "iOS" or OS.get_name() == "Android"
 
+## UI check mode (`-- --ui-check`, used by scripts/ui-check.sh): a blank scratch save, a seeded RNG
+## and a clock that advances exactly 1/60 s per frame, so a screen renders the same pixels every run.
+var ui_check := false
+## Simulated safe-area insets in px (`-- --safe=<top>,<bottom>`), so desktop shots show the notch.
+var safe_insets := Vector2(-1, -1)
+
+func _init() -> void:
+	if "--ui-check" in OS.get_cmdline_user_args():
+		ui_check = true
+		seed(1)
+		save_path = "user://ui-check.cfg"
+		_wipe(save_path)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--safe="):
+			var p := a.substr(7).split(",")
+			safe_insets = Vector2(float(p[0]), float(p[1]))
+
+func _wipe(path: String) -> void:
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+## Monotonic clock for everything in the game (real time, or frame-locked in UI check mode).
+func ticks_usec() -> int:
+	if ui_check:
+		return Engine.get_process_frames() * 1000000 / 60
+	return Time.get_ticks_usec()
+
+func ticks_msec() -> int:
+	return ticks_usec() / 1000
+
 func _ensure() -> void:
 	if _cfg != null:
 		return
@@ -19,6 +49,8 @@ func _ensure() -> void:
 
 ## Point the store at another file and reload (tests use a scratch path).
 func use_save_path(path: String) -> void:
+	if ui_check:
+		_wipe(path)
 	save_path = path
 	_cfg = null
 	_ensure()
@@ -51,7 +83,7 @@ var _last_warn := -1000
 func haptic(kind: String) -> void:
 	if OS.get_name() != "iOS" and OS.get_name() != "Android":
 		return
-	var now := Time.get_ticks_msec()
+	var now := ticks_msec()
 	if now - _last_haptic < 45 and (kind == "light" or kind == "select"):
 		return   # don't spam the Taptic Engine
 	if kind == "warning":

@@ -13,8 +13,7 @@ var base := Vector2.ZERO          # unposed top-left inside the hand
 var playing := false              # TS .play: flying off, waiting for drawInto's repaint
 var flown := false                # flicked off the top: the next card snaps to its fan spot
 var dragging := false             # TS .drag: transitions off
-var poor := false
-var dim_kind := ""
+var dim := false
 
 var cur := {"x": 0.0, "y": 0.0, "r": 0.0, "s": 1.0}
 var _from := {}
@@ -24,6 +23,7 @@ var _t0 := 0.0
 func _init(idx: int) -> void:
 	i = idx
 	mouse_filter = MOUSE_FILTER_STOP
+	set_meta("ui_check_free", true)   # the fan lifts and magnifies slots past the hand's box on purpose
 	add_child(face)
 	set_process(false)
 
@@ -72,20 +72,13 @@ func _apply() -> void:
 	rotation = deg_to_rad(cur.r)
 	scale = Vector2(cur.s, cur.s)
 
-## Dimming: poor = can't afford it; kind "bench" = the lead isn't of its element, "dead" = no living creature is.
-func set_dim(is_poor: bool, kind := "") -> void:
-	if is_poor == poor and kind == dim_kind:
+## Dims the slot while no card can be played (outside the "battle" mode). Off-element, dead and
+## can't-afford are drawn by the card itself (CardView).
+func set_dim(busy: bool) -> void:
+	if busy == dim:
 		return
-	poor = is_poor
-	dim_kind = kind
-	var c := Color.WHITE
-	if kind == "dead":
-		c = Color(0.42, 0.42, 0.46) if poor else Color(0.62, 0.62, 0.66)
-	elif poor:
-		c = Color(0.5, 0.5, 0.56)
-	elif kind == "bench":
-		c = Color(0.6, 0.6, 0.68)
-	create_tween().set_ignore_time_scale(true).tween_property(self, "modulate", c, 0.2)
+	dim = busy
+	create_tween().set_ignore_time_scale(true).tween_property(self, "modulate", Color(0.5, 0.5, 0.56) if busy else Color.WHITE, 0.2)
 
 func has_global(p: Vector2) -> bool:
 	return Rect2(Vector2.ZERO, size).has_point(get_global_transform().affine_inverse() * p)
