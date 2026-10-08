@@ -53,8 +53,15 @@ var BAL := {
 	"shop_mat": 30, "shop_pack": 150, "shop_sell": 15,
 	# daily pack
 	"pack_reset_hour": 4,
-	# loadouts & essence (§16)
-	"ess_wild": 1, "ess_alpha": 2, "ess_warden": 3, "ess_boss": 2, "move_cost": 5, "trait_cost": 8,
+	# pack meter (§11): points per fight won; a full meter banks one pack
+	"pts_wild": 2, "pts_alpha": 3, "pts_warden": 5, "pts_boss": 10, "pack_meter": 50,
+	# packs (§11): pick 1 of `pack_choices`; unowned species weigh `pack_new_weight`× an owned one;
+	# a copy of a fully-collected creature (copies ≥ the last tier) converts to `dupe_gold` gold
+	"pack_choices": 3, "pack_new_weight": 3, "dupe_gold": 25,
+	# owner rule (§4.3): a same-element card played by a lead that isn't its owner fires a basic hit
+	"basic_cost": 1, "basic_dmg": 4,
+	# essence (§16): now only learns Traits; cards unlock from copies (COPY_TIERS)
+	"ess_wild": 1, "ess_alpha": 2, "ess_warden": 3, "ess_boss": 2, "trait_cost": 8,
 	# trait numbers
 	"bulwark_delay": 3.0, "ebb_heal": 4, "deep_roots": 1.5, "thirst": 0.3, "overshade": 0.5, "livewire_chain": 3,
 }
@@ -82,6 +89,29 @@ const STATUS_EL := {"burn": "ember", "soak": "tide", "root": "thorn", "shock": "
 const STATUS_NAME := {"burn": "Burn", "soak": "Soak", "root": "Root", "shock": "Shock"}
 const STATUS_PAST := {"burn": "Burned", "soak": "Soaked", "root": "Rooted", "shock": "Shocked"}
 var STATUS_DUR := {}
+
+# ================= copies (§16.1) =================
+## Copies owned → what unlocks. Card options are indices into SPECIES[k].cards[slot] (0 is the default).
+## Each tier needs `n` copies total (the first copy is owning the creature).
+const COPY_TIERS := [
+	{"n": 2, "slot": "skill", "i": 1},
+	{"n": 3, "slot": "sig", "i": 1},
+	{"n": 5, "slot": "skill", "i": 2},
+	{"n": 7, "slot": "sig", "i": 2},
+	{"n": 10, "shiny": true},
+]
+## Copies needed to unlock card option i of a slot (0 = always), or -1 if no tier unlocks it.
+func copies_for(slot: String, i: int) -> int:
+	if i == 0:
+		return 0
+	for t in COPY_TIERS:
+		if t.get("slot") == slot and t.get("i") == i:
+			return t.n
+	return -1
+
+## Copies at which a creature is fully collected (shiny); later copies turn into gold.
+func max_copies() -> int:
+	return COPY_TIERS[-1].n
 
 # ================= cards =================
 const SLOTS: Array[String] = ["strike", "skill", "sig"]
@@ -217,32 +247,32 @@ func _build_species() -> void:
 	SPECIES = {
 		# ---------- Ember
 		"emberwick": {"name": "Emberwick", "el": "ember", "hp": 50, "trait": "afterglow", "size": 1.0, "feats": ["ears", "flame", "tail"], "role": "Balanced",
-			"cards": {"strike": [C("Peck", 1, {"dmg": 6})], "skill": [C("Kindle", 2, {"status": "burn"}), C("Flare Step", 1, {"energy": 1, "chain": 1})], "sig": [C("Wickflare", 3, {"dmg": 14, "bonus_if": {"status": "burn", "dmg": 8}}), C("Wildfire", 3, {"dmg": 8, "status": "burn", "chain": 1})]}},
+			"cards": {"strike": [C("Peck", 1, {"dmg": 6})], "skill": [C("Kindle", 2, {"status": "burn"}), C("Flare Step", 1, {"energy": 1, "chain": 1}), C("Stoke", 2, {"dmg": 6, "bonus_if": {"status": "burn", "dmg": 6}})], "sig": [C("Wickflare", 3, {"dmg": 14, "bonus_if": {"status": "burn", "dmg": 8}}), C("Wildfire", 3, {"dmg": 8, "status": "burn", "chain": 1}), C("Pyre Bloom", 4, {"dmg": 8, "hits": 2, "status": "burn"})]}},
 		"cinderpip": {"name": "Cinderpip", "el": "ember", "hp": 35, "trait": "quickfuse", "size": 0.85, "feats": ["ears", "flame"], "role": "Glass cannon", "atk": 1.2, "spd": 1.1,
-			"cards": {"strike": [C("Scorch", 1, {"dmg": 7})], "skill": [C("Flicker", 1, {"discount": 1}), C("Flare Up", 1, {"chain": 1, "self_dmg": 2})], "sig": [C("Flashfire", 4, {"dmg": 24}), C("Ember Barrage", 3, {"dmg": 5, "hits": 3})]}},
+			"cards": {"strike": [C("Scorch", 1, {"dmg": 7})], "skill": [C("Flicker", 1, {"discount": 1}), C("Flare Up", 1, {"chain": 1, "self_dmg": 2}), C("Sootburst", 2, {"status": "burn", "chain": 1})], "sig": [C("Flashfire", 4, {"dmg": 24}), C("Ember Barrage", 3, {"dmg": 5, "hits": 3}), C("Pop Flare", 2, {"dmg": 9, "chain": 1})]}},
 		"kilnback": {"name": "Kilnback", "el": "ember", "hp": 75, "trait": "bulwark", "size": 1.22, "feats": ["horns", "spikes", "flame"], "role": "Tank", "atk": 0.85, "spd": 0.9,
-			"cards": {"strike": [C("Bash", 1, {"dmg": 5})], "skill": [C("Hearth Shell", 2, {"shield": 12}), C("Forge", 2, {"shield": 6, "next_strike": 2})], "sig": [C("Slow Burn", 3, {"status": "burn", "shield": 8}), C("Magma Ram", 3, {"dmg": 16, "self_dmg": 4})]}},
+			"cards": {"strike": [C("Bash", 1, {"dmg": 5})], "skill": [C("Hearth Shell", 2, {"shield": 12}), C("Forge", 2, {"shield": 6, "next_strike": 2}), C("Ashwall", 2, {"shield_team": 5})], "sig": [C("Slow Burn", 3, {"status": "burn", "shield": 8}), C("Magma Ram", 3, {"dmg": 16, "self_dmg": 4}), C("Furnace Heart", 4, {"shield": 12, "heal": 10})]}},
 		# ---------- Tide
 		"bellspring": {"name": "Bellspring", "el": "tide", "hp": 55, "trait": "ebb", "size": 0.95, "feats": ["fin", "tail", "whisk"], "role": "Sustain",
-			"cards": {"strike": [C("Splash", 1, {"dmg": 5})], "skill": [C("Drench", 2, {"status": "soak"}), C("Tidecall", 2, {"shield_team": 5})], "sig": [C("Lantern Tide", 3, {"dmg": 10, "heal_team": 8}), C("Undertide", 3, {"dmg": 14, "bonus_if": {"status": "soak", "dmg": 6}})]}},
+			"cards": {"strike": [C("Splash", 1, {"dmg": 5})], "skill": [C("Drench", 2, {"status": "soak"}), C("Tidecall", 2, {"shield_team": 5}), C("Tolling Wave", 2, {"heal_team": 4, "cleanse": true})], "sig": [C("Lantern Tide", 3, {"dmg": 10, "heal_team": 8}), C("Undertide", 3, {"dmg": 14, "bonus_if": {"status": "soak", "dmg": 6}}), C("Riptide Peal", 4, {"dmg": 8, "hits": 2, "status": "soak"})]}},
 		"puddlet": {"name": "Puddlet", "el": "tide", "hp": 40, "trait": "undercurrent", "size": 0.85, "feats": ["fin", "whisk"], "role": "Healer", "atk": 0.9,
-			"cards": {"strike": [C("Drip", 1, {"dmg": 4})], "skill": [C("Mend", 2, {"heal": 15}), C("Bubble", 1, {"shield": 7})], "sig": [C("Spring Rain", 4, {"heal_team": 12, "cleanse": true}), C("Wellspring", 3, {"heal_team": 6, "energy": 2})]}},
+			"cards": {"strike": [C("Drip", 1, {"dmg": 4})], "skill": [C("Mend", 2, {"heal": 15}), C("Bubble", 1, {"shield": 7}), C("Puddle Hop", 1, {"energy": 1, "heal": 4})], "sig": [C("Spring Rain", 4, {"heal_team": 12, "cleanse": true}), C("Wellspring", 3, {"heal_team": 6, "energy": 2}), C("Drizzle Volley", 3, {"dmg": 4, "hits": 3, "heal_team": 4})]}},
 		"brinecrab": {"name": "Brinecrab", "el": "tide", "hp": 80, "trait": "counterweave", "size": 1.18, "feats": ["horns", "fin", "whisk"], "role": "Tank", "atk": 0.9, "spd": 0.9,
-			"cards": {"strike": [C("Pinch", 1, {"dmg": 6})], "skill": [C("Barnacle", 2, {"shield": 14}), C("Brace", 1, {"reflect": 0.3})], "sig": [C("Undertow", 3, {"dmg": 12, "status": "soak"}), C("Tidal Clamp", 3, {"dmg": 10, "shield": 10})]}},
+			"cards": {"strike": [C("Pinch", 1, {"dmg": 6})], "skill": [C("Barnacle", 2, {"shield": 14}), C("Brace", 1, {"reflect": 0.3}), C("Saltcrust", 2, {"status": "soak", "shield": 7})], "sig": [C("Undertow", 3, {"dmg": 12, "status": "soak"}), C("Tidal Clamp", 3, {"dmg": 10, "shield": 10}), C("Abyss Pincer", 4, {"dmg": 16, "bonus_if": {"status": "soak", "dmg": 8}})]}},
 		# ---------- Thorn
 		"truffmole": {"name": "Truffmole", "el": "thorn", "hp": 55, "trait": "deeproots", "size": 1.0, "feats": ["leaf", "ears"], "role": "Control",
-			"cards": {"strike": [C("Dig", 1, {"dmg": 6})], "skill": [C("Tangle", 2, {"status": "root"}), C("Burrow", 2, {"shield": 8, "next_strike": 2})], "sig": [C("Sporeburst", 3, {"dmg": 12, "heal": 6}), C("Rootquake", 4, {"dmg": 16, "status": "root"})]}},
+			"cards": {"strike": [C("Dig", 1, {"dmg": 6})], "skill": [C("Tangle", 2, {"status": "root"}), C("Burrow", 2, {"shield": 8, "next_strike": 2}), C("Truffle Hunt", 1, {"energy": 1, "next_strike": 2})], "sig": [C("Sporeburst", 3, {"dmg": 12, "heal": 6}), C("Rootquake", 4, {"dmg": 16, "status": "root"}), C("Fairy Ring", 3, {"status": "root", "heal_team": 6})]}},
 		"brambat": {"name": "Brambat", "el": "thorn", "hp": 40, "trait": "thirst", "size": 0.9, "feats": ["wings", "ears", "spikes"], "role": "Drain", "atk": 1.1, "spd": 1.1,
-			"cards": {"strike": [C("Nip", 1, {"dmg": 5, "heal": 2})], "skill": [C("Thornveil", 2, {"reflect": 0.5}), C("Hemlock", 2, {"status": "root", "heal": 6})], "sig": [C("Leech Dive", 3, {"dmg": 12, "lifesteal": 0.5}), C("Thorn Storm", 4, {"dmg": 8, "hits": 2, "reflect": 0.3})]}},
+			"cards": {"strike": [C("Nip", 1, {"dmg": 5, "heal": 2})], "skill": [C("Thornveil", 2, {"reflect": 0.5}), C("Hemlock", 2, {"status": "root", "heal": 6}), C("Briar Bite", 2, {"dmg": 4, "hits": 2, "lifesteal": 0.5})], "sig": [C("Leech Dive", 3, {"dmg": 12, "lifesteal": 0.5}), C("Thorn Storm", 4, {"dmg": 8, "hits": 2, "reflect": 0.3}), C("Gorge", 3, {"heal": 8, "next_strike": 3})]}},
 		"mossling": {"name": "Mossling", "el": "thorn", "hp": 50, "trait": "overshade", "size": 1.1, "feats": ["spikes", "leaf"], "role": "Support", "atk": 0.9,
-			"cards": {"strike": [C("Swat", 1, {"dmg": 5})], "skill": [C("Overgrow", 2, {"status": "root", "shield": 6}), C("Photosynth", 2, {"heal_team": 5})], "sig": [C("Canopy", 3, {"shield_team": 8}), C("Strangle Vine", 3, {"dmg": 10, "bonus_if": {"status": "root", "dmg": 6}})]}},
+			"cards": {"strike": [C("Swat", 1, {"dmg": 5})], "skill": [C("Overgrow", 2, {"status": "root", "shield": 6}), C("Photosynth", 2, {"heal_team": 5}), C("Moss Pillow", 1, {"shield": 5, "chain": 1})], "sig": [C("Canopy", 3, {"shield_team": 8}), C("Strangle Vine", 3, {"dmg": 10, "bonus_if": {"status": "root", "dmg": 6}}), C("Verdant Bloom", 4, {"heal_team": 7, "shield_team": 5})]}},
 		# ---------- Volt
 		"skiray": {"name": "Skiray", "el": "volt", "hp": 45, "trait": "relay", "size": 0.9, "feats": ["antenna", "ears", "tail"], "role": "Tempo", "spd": 1.15,
-			"cards": {"strike": [C("Zap", 0, {"dmg": 3})], "skill": [C("Static", 2, {"status": "shock"}), C("Tailwind", 1, {"chain": 2})], "sig": [C("Gale Strike", 3, {"dmg": 10, "chain": 1}), C("Arc Lash", 3, {"dmg": 6, "status": "shock"})]}},
+			"cards": {"strike": [C("Zap", 0, {"dmg": 3})], "skill": [C("Static", 2, {"status": "shock"}), C("Tailwind", 1, {"chain": 2}), C("Crosswind", 1, {"dmg": 4, "chain": 1})], "sig": [C("Gale Strike", 3, {"dmg": 10, "chain": 1}), C("Arc Lash", 3, {"dmg": 6, "status": "shock"}), C("Squall Dive", 4, {"dmg": 6, "hits": 3, "chain": 1})]}},
 		"sparkit": {"name": "Sparkit", "el": "volt", "hp": 35, "trait": "livewire", "size": 0.85, "feats": ["antenna", "tail"], "role": "Glass cannon", "atk": 1.2, "spd": 1.1,
-			"cards": {"strike": [C("Jolt", 1, {"dmg": 7})], "skill": [C("Overcharge", 1, {"energy": 2, "self_dmg": 4}), C("Supercharge", 2, {"next_strike": 3})], "sig": [C("Thunderclap", 4, {"dmg": 22}), C("Ball Lightning", 3, {"dmg": 14, "chain": 1})]}},
+			"cards": {"strike": [C("Jolt", 1, {"dmg": 7})], "skill": [C("Overcharge", 1, {"energy": 2, "self_dmg": 4}), C("Supercharge", 2, {"next_strike": 3}), C("Crackle", 2, {"dmg": 3, "hits": 3, "chain": 1})], "sig": [C("Thunderclap", 4, {"dmg": 22}), C("Ball Lightning", 3, {"dmg": 14, "chain": 1}), C("Short Circuit", 3, {"dmg": 19, "self_dmg": 6})]}},
 		"coilsnail": {"name": "Coilsnail", "el": "volt", "hp": 70, "trait": "grounded", "size": 1.12, "feats": ["horns", "antenna", "wings"], "role": "Tank", "atk": 0.85, "spd": 0.9,
-			"cards": {"strike": [C("Prod", 1, {"dmg": 5})], "skill": [C("Capacitor", 2, {"shield": 10, "next_strike": 2}), C("Grounding", 2, {"shield": 8, "cleanse": true})], "sig": [C("Discharge", 3, {"from_shield": true}), C("Static Field", 3, {"shield_team": 6, "status": "shock"})]}},
+			"cards": {"strike": [C("Prod", 1, {"dmg": 5})], "skill": [C("Capacitor", 2, {"shield": 10, "next_strike": 2}), C("Grounding", 2, {"shield": 8, "cleanse": true}), C("Coil Up", 1, {"shield": 4, "energy": 1})], "sig": [C("Discharge", 3, {"from_shield": true}), C("Static Field", 3, {"shield_team": 6, "status": "shock"}), C("Volt Bastion", 4, {"shield": 16, "reflect": 0.5})]}},
 		# ---------- Warden & boss
 		"warden": {"name": "Gravewood", "el": "thorn", "hp": 300, "size": 1.45, "feats": ["horns", "spikes", "leaf", "tail"], "warden": true},
 		"noctyrm": {"name": "Noctyrm", "el": "ember", "hp": 270, "size": 1.5, "feats": ["wings", "tail", "spikes", "horns", "crown"], "boss": true, "heavy": "Eclipse Volley"},

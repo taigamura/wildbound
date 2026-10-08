@@ -321,12 +321,14 @@ static func build(ui) -> void:
 	el.ptDone = big("Done")
 	_screen(ui, "scr-party", null, [phead, el.ptList, el.ptDone], 0.82)
 
-	# ---- pack
-	var pk_logo := logo(ui, "packH1", "Daily pack", UiKit.D_L, "packP", "One new friend a day")
-	el.packCard = _flip(ui)
+	# ---- pack (§11): three face-down cards; Run fills packChoices with flip_card()s
+	var pk_logo := logo(ui, "packH1", "Daily pack", UiKit.D_L, "packP", "Pick one to keep")
+	el.packChoices = UiKit.hbox(8)
+	el.packChoices.custom_minimum_size.y = PACK_CARD_H
 	el.packTxt = UiKit.vbox(6)
+	el.packTxt.custom_minimum_size.y = 40   # one or two lines, so the sheet doesn't jump after the pick
 	el.packOk = big("Nice!")
-	_screen(ui, "scr-pack", pk_logo, [el.packCard, el.packTxt, el.packOk])
+	_screen(ui, "scr-pack", pk_logo, [el.packChoices, el.packTxt, el.packOk])
 
 	# ---- collection (idea 9: a bestiary)
 	_coll(ui)
@@ -356,6 +358,36 @@ static func build(ui) -> void:
 	e_pad.add_child(_vbox_with(8, [_named(ui, "endLootH", UiKit.lbl("Loot banked", "700", UiKit.T_S, UiKit.GOLD_HI, {"align": "center"})), el.endLoot]))
 	e_rib.add_child(Box.fill(e_pad))
 	el.endRibbon = e_rib
+	# the pack meter: this run's points filling the bar (Run animates it), and Open when a pack was earned
+	el.endPack = UiKit.vbox(6)
+	var ph := UiKit.hbox(8)
+	ph.add_child(UiKit.icon("pack", 16, UiKit.GOLD_HI))
+	var pl := UiKit.lbl("Pack meter", "700", UiKit.T_S, UiKit.GOLD_HI, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	pl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ph.add_child(pl)
+	el.endPackGain = UiKit.lbl("", "700", UiKit.T_S, UiKit.INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	el.endPackGain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	el.endPackGain.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ph.add_child(el.endPackGain)
+	# under it, the bar with "18 to go" (or "Pack earned!") at its right
+	el.endPackBar = UiKit.fill_bar(10.0)
+	el.endPackBar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	el.endPackTo = UiKit.lbl("", "700", UiKit.T_S, UiKit.INK2, {"valign": VERTICAL_ALIGNMENT_CENTER, "align": "right"})
+	el.endPackTo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	el.endPackTo.custom_minimum_size.x = 104   # the bar keeps its width while the text changes
+	var pb := UiKit.hbox(8)
+	pb.add_child(el.endPackBar)
+	pb.add_child(el.endPackTo)
+	var pv: VBoxContainer = el.endPack
+	pv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pv.add_child(ph)
+	pv.add_child(pb)
+	el.endPackOpen = quiet("Open pack")
+	el.endPackOpen.visible = false
+	el.endPackRow = UiKit.hbox(12)
+	el.endPackRow.add_child(pv)
+	el.endPackRow.add_child(el.endPackOpen)
 	el.endParty = UiKit.hbox(12, BoxContainer.ALIGNMENT_CENTER)
 	el.againBtn = big("Run again")
 	el.endShopBtn = ghost("Item shop")
@@ -364,7 +396,7 @@ static func build(ui) -> void:
 	for b in [el.endShopBtn, el.titleBtn]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		r2.add_child(b)
-	_screen(ui, "scr-end", e_logo, [el.endStats, e_rib, el.endParty, el.againBtn, r2], 0.74)
+	_screen(ui, "scr-end", e_logo, [el.endStats, e_rib, el.endPackRow, el.endParty, el.againBtn, r2], 0.74)
 
 # ------------------------------------------------------------------ reward ribbon
 
@@ -579,70 +611,85 @@ static func _coll(ui) -> void:
 	for n in [head, outer, scr]:
 		n.item_rect_changed.connect(fit)
 
-# ------------------------------------------------------------------ pack flip card
+# ------------------------------------------------------------------ pack flip cards
 
-static func _flip(ui) -> Control:
-	var card := Tap.new()
-	card.press_scale = 1.0
-	card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var bx := Box.new(Vector2(150, 200))
-	card.add_child(bx)
-	# back: navy glass in a brass frame, a gold "W", wiggling
-	var back := Box.new(Vector2(150, 200))
-	back.add_child(Box.fill(RRect.new({"radius": 8.0, "c0": UiKit.DEEP2, "c1": UiKit.NAVY2, "angle": 160.0,
-		"border_w": 2.0, "border_c": UiKit.BRASS, "glow": 24.0, "glow_c": UiKit.alpha(UiKit.GOLD_HI, 0.25)})))
-	var inset := RRect.new({"radius": 5.0, "c0": Color(0, 0, 0, 0), "c1": Color(0, 0, 0, 0), "border_w": 1.0,
-		"border_c": UiKit.alpha(UiKit.BRASS, 0.4)})
-	inset.custom_minimum_size = Vector2(138, 188)
-	back.add_child(inset)
-	var bv := UiKit.vbox(8)
-	bv.alignment = BoxContainer.ALIGNMENT_CENTER
-	bv.add_child(UiKit.lbl("W", "display", 55, UiKit.GOLD_HI, {"align": "center", "shadow": UiKit.PLAQUE_INK, "shadow_off": Vector2(0, 3), "lh": -12}))
-	bv.add_child(UiKit.lbl("Wildbound", "display", UiKit.NAME, UiKit.INK2, {"align": "center"}))
-	back.add_child(bv)
-	back.pivot_offset = Vector2(75, 100)
+## Height of a pack choice card (three sit side by side in the sheet).
+const PACK_CARD_H := 168.0
+
+## One pack choice: a face-down card (navy glass, brass frame, a gold "W") over a face-up one whose
+## content goes in meta "fv" (a centred VBox). flip_tint colours the front; flip_open turns it over.
+## The whole card is the Tap; its meta "card" is the Box to fade or pop (Tap owns its own modulate).
+static func flip_card() -> Tap:
+	var t := Tap.new()
+	t.press_scale = 0.97
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var bx := Box.new()
+	bx.custom_minimum_size.y = PACK_CARD_H
+	t.add_child(bx)
+	# back: navy glass in a brass frame, a gold "W"
+	var back := Box.new()
+	back.add_child(Box.fill(RRect.new({"radius": 7.0, "c0": UiKit.DEEP2, "c1": UiKit.NAVY2, "angle": 160.0,
+		"border_w": 2.0, "border_c": UiKit.BRASS, "glow": 16.0, "glow_c": UiKit.alpha(UiKit.GOLD_HI, 0.2)})))
+	var bm := MarginContainer.new()
+	bm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for k in ["left", "top", "right", "bottom"]:
+		bm.add_theme_constant_override("margin_" + k, 6)
+	bm.add_child(RRect.new({"radius": 4.0, "c0": Color(0, 0, 0, 0), "c1": Color(0, 0, 0, 0), "border_w": 1.0,
+		"border_c": UiKit.alpha(UiKit.BRASS, 0.4)}))
+	back.add_child(Box.fill(bm))
+	back.add_child(UiKit.lbl("W", "display", 44, UiKit.GOLD_HI, {"align": "center", "shadow": UiKit.PLAQUE_INK, "shadow_off": Vector2(0, 3), "lh": -10}))
 	bx.add_child(Box.fill(back))
-	# front: element card
-	var front := Box.new(Vector2(150, 200))
-	var fbg := RRect.new({"radius": 8.0, "angle": 170.0, "border_w": 2.0, "glow": 30.0})
+	# front: the creature, tinted in its element
+	var front := Box.new()
+	var fbg := RRect.new({"radius": 7.0, "angle": 170.0, "border_w": 2.0, "glow": 18.0})
 	front.add_child(Box.fill(fbg))
 	var fm := MarginContainer.new()
 	fm.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for k in ["left", "top", "right", "bottom"]:
-		fm.add_theme_constant_override("margin_" + k, 12)
-	var fv := UiKit.vbox(8)
+	for k in ["left", "right"]:
+		fm.add_theme_constant_override("margin_" + k, 6)
+	for k in ["top", "bottom"]:
+		fm.add_theme_constant_override("margin_" + k, 10)
+	var fv := UiKit.vbox(4)
 	fv.alignment = BoxContainer.ALIGNMENT_CENTER
 	fm.add_child(fv)
 	front.add_child(Box.fill(fm))
-	front.pivot_offset = Vector2(75, 100)
+	front.visible = false
 	bx.add_child(Box.fill(front))
-	ui.el.packBack = back
-	ui.el.packFrontFace = front
-	ui.el.packFrontBg = fbg
-	ui.el.packFront = fv
-	return card
+	t.set_meta("card", bx)
+	t.set_meta("back", back)
+	t.set_meta("front", front)
+	t.set_meta("bg", fbg)
+	t.set_meta("fv", fv)
+	t.resized.connect(func():
+		for n in [bx, back, front]:
+			n.pivot_offset = t.size / 2.0)
+	return t
 
-## Colour the front face (.flip --c).
-static func flip_color(ui, c: Color) -> void:
-	ui.el.packFrontBg.look({"c0": UiKit.mix(c, UiKit.DEEP2, 0.45), "c1": UiKit.DEEP, "border_c": c, "glow_c": UiKit.alpha(c, 0.8)})
+## Colour a flip card's front in `c` (`sel` = the kept card: a gold border).
+static func flip_tint(t: Tap, c: Color, sel := false) -> void:
+	(t.get_meta("bg") as RRect).look({"c0": UiKit.mix(c, UiKit.DEEP2, 0.5), "c1": UiKit.DEEP, "border_c": UiKit.GOLD_HI if sel else c,
+		"glow_c": UiKit.alpha(UiKit.GOLD_HI if sel else c, 0.75 if sel else 0.45)})
 
-## Closed (back showing, wiggling) or open (rotateY .6s cubic-bezier(.3,1.4,.5,1), as a 2D scale-x flip).
-static func flip_set(ui, open: bool) -> void:
-	var back: Control = ui.el.packBack
-	var front: Control = ui.el.packFrontFace
+## Face down (gently bobbing) or face up. `animate` = false turns it over at once (screenshots, resume).
+static func flip_open(t: Tap, open: bool, animate := true) -> void:
+	var back: Control = t.get_meta("back")
+	var front: Control = t.get_meta("front")
 	Fx.stop(back)
 	Fx.stop(front)
+	back.scale = Vector2.ONE
+	front.scale = Vector2.ONE
+	back.rotation = 0
 	if not open:
 		front.visible = false
 		back.visible = true
-		back.scale = Vector2.ONE
-		back.modulate.a = 1.0
-		Fx.kf(back, 1.2, [[0.0, {"r": 0.0, "s": 1.0}], [0.5, {"r": -2.0, "s": 1.03}], [1.0, {"r": 0.0, "s": 1.0}]],
-			{"loop": "loop", "ease": [0.42, 0, 0.58, 1]})
+		Fx.kf(back, 1.4, [[0.0, {"s": 1.0}], [0.5, {"s": 1.025}], [1.0, {"s": 1.0}]], {"loop": "loop", "ease": [0.42, 0, 0.58, 1]})
 		return
-	back.rotation = 0
-	Fx.kf(back, 0.22, [[0.0, {"sx": 1.0, "sy": 1.0}], [1.0, {"sx": 0.0, "sy": 1.0}]], {"ease": [0.4, 0.0, 1.0, 1.0],
+	if not animate:
+		back.visible = false
+		front.visible = true
+		return
+	Fx.kf(back, 0.18, [[0.0, {"sx": 1.0, "sy": 1.0}], [1.0, {"sx": 0.0, "sy": 1.0}]], {"ease": [0.4, 0.0, 1.0, 1.0],
 		"done": func():
 			back.visible = false
 			front.visible = true
-			Fx.kf(front, 0.45, [[0.0, {"sx": 0.0, "sy": 1.0}], [1.0, {"sx": 1.0, "sy": 1.0}]], {"ease": [0.3, 1.4, 0.5, 1.0]})})
+			Fx.kf(front, 0.4, [[0.0, {"sx": 0.0, "sy": 1.0}], [1.0, {"sx": 1.0, "sy": 1.0}]], {"ease": [0.3, 1.4, 0.5, 1.0]})})

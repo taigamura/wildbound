@@ -31,6 +31,7 @@ func _ready() -> void:
 	debug = {
 		"hurt": _dbg_hurt, "energy": _dbg_energy, "add": _dbg_add, "essence": _dbg_essence,
 		"loot": _dbg_loot, "trait": _dbg_trait, "heavy": _dbg_heavy,
+		"copies": _dbg_copies, "packpts": _dbg_packpts,
 	}
 
 # ---------- small helpers ----------
@@ -221,13 +222,16 @@ func play_card(i: int) -> void:
 		Sfx.deny()
 		Platform.haptic("warning")
 		if block == "bench":
-			Fx.toast("Swap to a %s creature to play this" % Data.ELEM[S.card_el(r)].name)
+			Fx.toast("Swap to %s to play this" % _bench_owner(r).name)
 		card_denied.emit(i, block)
 		return
 	if S.card_dead(r):
 		_discard(i)
 		return
-	var co := S.card_of(r)   # fires as the lead: its Power/Spirit and Traits, "self" = the lead
+	if S.card_basic(r):
+		_play_basic(i)
+		return
+	var co := S.card_of(r)   # the owner leads: its Power/Spirit and Traits, "self" = the owner
 	var def: Dictionary = co.def
 	var pow: float = co.pow
 	var by: Mon = co.by
@@ -251,6 +255,45 @@ func play_card(i: int) -> void:
 	if _has(by, "livewire") and not S.wired and S.chain >= Data.BAL.livewire_chain:
 		S.wired = true
 		_trait_energy("livewire")
+	Ui.refresh_hand()
+
+## Who a benched card waits for: its owner if alive, else a living lineup member of its element.
+func _bench_owner(r: CardRef) -> Mon:
+	var c := S.card_waiting_for(r)
+	if c != null:
+		return c
+	for m in S.team():
+		if m.alive and m.el == S.card_el(r):
+			return m
+	return S.mon(r.uid)
+
+## A same-element card the lead doesn't own: a basic hit for BAL.basic_cost, BAL.basic_dmg × the lead's
+## Power in the lead's element. It counts toward the chain; no card effects, no Traits, the discount is
+## kept, and it isn't the lead's "played" card (Quickfuse).
+func _play_basic(i: int) -> void:
+	var r: CardRef = S.hand[i]
+	var me := S.act()
+	S.energy -= Data.BAL.basic_cost
+	S.hand[i] = null
+	S.disc.append(r)
+	Sfx.card()
+	Platform.haptic("light")
+	card_played.emit(i)
+	_draw_into(i)
+	S.chain = mini(Data.BAL.chain_max, S.chain + 1) if S.chain_t <= Data.BAL.chain_win else 0
+	S.chain_t = 0
+	if not S.chain:
+		S.wired = false   # a fresh chain re-arms Live Wire (bookkeeping, not a Trait effect)
+	var pm = S.actor_for(me)
+	var pp: Vector2 = pm.head()
+	var dmg: float = Data.BAL.basic_dmg * me.power * (1 + Data.BAL.chain_step * S.chain)
+	var el := me.el
+	var tok := S.tok
+	Fx.pop_num(Vector2(pp.x, pp.y - Layout.U * 0.8), "BASIC", "", "", _el_hex(el))
+	_lunge(pm, 0.28)
+	Stage.projectile(pp, _enemy_head, el, {"size": 0.22, "arc": 0.6, "dur": 0.28}, func():
+		if tok == S.tok:
+			_hurt_enemy(dmg, el, 0))
 	Ui.refresh_hand()
 
 ## A dead card (no living creature of its element): pay to throw it away and draw. No chain, no Traits, discount kept.
@@ -283,7 +326,7 @@ func _resolve_card(C: Dictionary, pow: float, me: Mon, slot: String) -> void:
 	if C.get("reflect"):
 		me.reflect = C.reflect
 		Sfx.shield()
-		Fx.pop_num(Vector2(pp.x, pp.y - U * 0.8), str(roundi(C.reflect * 100)) + "%", "shield", "Thornveil")
+		Fx.pop_num(Vector2(pp.x, pp.y - U * 0.8), str(roundi(C.reflect * 100)) + "%", "shield", C.name)
 	if C.get("next_strike"):
 		me.next_strike = C.next_strike
 		Sfx.focus()
@@ -927,3 +970,12 @@ func _dbg_heavy() -> void:
 			e.count += 1
 		e.windup = e.iv + Data.BAL.heavy_extra
 		e.t = e.windup - 1
+
+## Set a species' copy count to n (adds copies; never removes).
+func _dbg_copies(k: String, n := 2) -> void:
+	while Meta.copies(k) < mini(n, Data.max_copies()):
+		Meta.add_copy(k)
+
+## Add n pack points (banks a token every BAL.pack_meter).
+func _dbg_packpts(n := 50) -> void:
+	Meta.add_pack_pts(n)

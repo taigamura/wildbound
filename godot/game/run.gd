@@ -8,6 +8,10 @@ const MAT_COL := {"sword": UiKit.EL.ember, "orb": UiKit.EL.tide, "jewel": UiKit.
 
 var run_ess := {}
 var run_loot := {}
+## Pack points banked this run, the meter's points when it started, and the packs this run earned (§11).
+var run_pts := 0
+var run_pts0 := 0
+var run_packs := 0
 var _pack_n := 0
 
 func _el() -> Dictionary:
@@ -74,6 +78,11 @@ func start_run() -> void:
 	S.stats = {"start": Platform.ticks_msec(), "dealt": 0, "perfects": 0}
 	run_ess = Meta.empty_essence()
 	run_loot = Data.no_loot()
+	run_pts = 0
+	run_pts0 = Meta.pack_pts()
+	run_packs = 0
+	if _pack_tw != null and _pack_tw.is_valid():   # "Run again" mid-fill: no "Pack earned!" haptic on the map
+		_pack_tw.kill()
 	Stage.set_biome(0)
 	place_player(true)
 	Sfx.win()
@@ -113,6 +122,19 @@ func _cost(c: Dictionary, color := Color(0, 0, 0, 0)) -> HBoxContainer:
 	h.add_child(UiKit.lbl(str(c.n), "700", UiKit.T_S, UiKit.INK))
 	h.add_child(UiKit.icon(c.el, 12, col))
 	return h
+
+# ================= pack meter (§11) =================
+## Bank a won fight's pack points (kept win or lose). Returns {n: points, gained: packs this add earned}.
+func _fight_pts(e) -> Dictionary:
+	var n: int = Data.BAL.pts_wild
+	match e.kind:
+		"alpha": n = Data.BAL.pts_alpha
+		"warden": n = Data.BAL.pts_warden
+		"boss": n = Data.BAL.pts_boss
+	var r := Meta.add_pack_pts(n)
+	run_pts += n
+	run_packs += int(r.gained)
+	return {"n": n, "gained": int(r.gained)}
 
 # ================= loot (§5.1) =================
 ## Bank loot now (kept win or lose) and count it toward this run's total.
@@ -383,6 +405,7 @@ func after_fight() -> void:
 		_fight_essence(e)
 		loot = _roll_loot(e)
 		_bank(loot)
+	var pts := _fight_pts(e) if e != null else {"n": 0, "gained": 0}
 	if e != null and e.kind == "boss":
 		end_run(true)
 		return
@@ -394,7 +417,7 @@ func after_fight() -> void:
 	for k in run_ess:
 		if run_ess[k] - before.get(k, 0) > 0:
 			ess[k] = run_ess[k] - before.get(k, 0)
-	_show_reward(2 if (e != null and e.kind == "alpha") else 1, loot, ess)
+	_show_reward(2 if (e != null and e.kind == "alpha") else 1, loot, ess, true, pts)
 
 # ================= rewards =================
 func _upgradable() -> bool:
@@ -407,8 +430,9 @@ func _upgradable() -> bool:
 ## Picks this reward screen started with (Alphas give 2), for the pip row.
 var _rw_total := 1
 
-## The loot ribbon's chips: gold, each material, then each element's Essence (`ess`), skipping zeros.
-func _ribbon_chips(l: Dictionary, ess: Dictionary) -> Array:
+## The loot ribbon's chips: gold, each material, then each element's Essence (`ess`), skipping zeros,
+## then the fight's pack points (`pts`, and "Pack earned!" when they filled the meter).
+func _ribbon_chips(l: Dictionary, ess: Dictionary, pts := {}) -> Array:
 	var out: Array = []
 	if l.get("gold", 0):
 		out.append(UiKit.loot_chip("coin", UiKit.GOLD_HI, "+%d gold" % l.gold))
@@ -424,11 +448,14 @@ func _ribbon_chips(l: Dictionary, ess: Dictionary) -> Array:
 		out.append(UiKit.loot_chip(pairs[0][0], pairs[0][1], "%s Essence" % pairs[0][2]))
 	elif pairs.size() > 1:
 		out.append(UiKit.multi_chip("Essence", pairs))
+	if pts.get("n", 0):   # one chip, so a pack earned doesn't push the ribbon to another line
+		out.append(UiKit.loot_chip("pack", UiKit.GOLD_HI, ("+%d pts · Pack earned!" if pts.get("gained", 0) else "+%d pack pts") % pts.n))
 	return out
 
 ## `ess` = the Essence this fight earned; `fresh` = first showing (the ribbon pops in; later picks and
-## coming back from the upgrade screen show it at rest).
-func _show_reward(picks: int, loot, ess := {}, fresh := true) -> void:
+## coming back from the upgrade screen show it at rest). `pts` = the fight's pack points ({n, gained}).
+var _rw_pts := {}
+func _show_reward(picks: int, loot, ess := {}, fresh := true, pts := {}) -> void:
 	var el := _el()
 	S.mode = "reward"
 	if picks <= 0:
@@ -436,9 +463,12 @@ func _show_reward(picks: int, loot, ess := {}, fresh := true) -> void:
 		return
 	if fresh:
 		_rw_total = picks
+		_rw_pts = pts
+		if pts.get("gained", 0):
+			_later(0.9, func(): if Ui.current == "scr-reward": Fx.toast("Pack earned! Open it from the title screen"))
 	el.rwEyebrow.text = "Victory"
 	el.rwTitle.text = "Choose a reward"
-	var got: Array = _ribbon_chips(loot if loot != null else {}, ess)
+	var got: Array = _ribbon_chips(loot if loot != null else {}, ess, _rw_pts)
 	_fill(el.rwSubLoot, got)
 	el.rwSubLoot.visible = not got.is_empty()
 	if fresh:
@@ -509,7 +539,7 @@ func _show_upgrade(on_done: Callable, on_back: Callable) -> void:
 		row.add_child(nm)
 		var cards := UiKit.grid(3, 8)
 		for slot in Data.SLOTS:
-			var co: Dictionary = S.card_of(CardRef.new(c.uid, slot))
+			var co: Dictionary = S.card_of(CardRef.new(c.uid, slot), c)   # as its owner plays it (§4.3)
 			var up = c.ups.get(slot)
 			var t := Tap.new()
 			t.press_scale = 0.97
@@ -544,7 +574,7 @@ func _pick_upgrade(c: Mon, slot: String, cv: CardView, all: Array, on_done: Call
 			x.restyle()
 	cv.sel = true
 	cv.restyle()
-	var def: Dictionary = S.card_of(CardRef.new(c.uid, slot)).def
+	var def: Dictionary = S.card_of(CardRef.new(c.uid, slot), c).def
 	var base: Dictionary = S.base_card(c, slot)
 	var box: Control = el.upChoiceBox
 	UiKit.clear(box)
@@ -675,8 +705,8 @@ func end_run(won: bool, quit := false) -> void:
 	Meta.record_run(won, reached)
 	el.endH.text = "Expedition won" if won else ("Retreated" if quit else "Run over")
 	el.endP.text = ("Noctyrm is sealed. Your party walks out of the wild (+%d gold)." % Data.BAL.win_gold) if won \
-		else ("You left on floor %d. Your loot is safe." % S.floor) if quit \
-		else ("Your party fell on floor %d. Your loot is safe." % S.floor)
+		else ("You left on floor %d. Your loot and pack points are safe." % S.floor) if quit \
+		else ("Your party fell on floor %d. Your loot and pack points are safe." % S.floor)
 	# floor, gold, Perfect Swaps and time as large pixel numbers
 	UiKit.clear(el.endStats)
 	for s in [[str(reached), "Floor"], [str(run_loot.get("gold", 0)), "Gold"], [str(S.stats.perfects), "Perfect swaps"],
@@ -692,6 +722,7 @@ func end_run(won: bool, quit := false) -> void:
 		got = [UiKit.lbl("Nothing this time", "500", UiKit.T_M, UiKit.INK2)]
 	_fill(el.endLoot, got)
 	Fx.reveal(got)
+	_pack_meter_anim()
 	UiKit.clear(el.endParty)
 	for i in S.lineup.size():
 		var c = S.mon(S.lineup[i])
@@ -724,7 +755,70 @@ func _back_to_end() -> void:
 		S.title_actor.destroy()
 	S.title_actor = null
 	S.mode = "over"
+	_el().endPackOpen.visible = run_packs > 0 and _packs_waiting() > 0
 	Ui.show("scr-end")
+
+# ---- the results screen's pack meter ----
+var _pack_tw: Tween
+
+func _to_go(pts: int) -> String:
+	return "%d/%d · %d to go" % [pts, Data.BAL.pack_meter, Data.BAL.pack_meter - pts]
+
+## Fill the meter from where it stood when the run began over this run's points, wrapping (with
+## "Pack earned!", a heavy haptic and the Open button) each time it fills. Real time, like all UI motion.
+func _pack_meter_anim() -> void:
+	var el := _el()
+	var meter := float(Data.BAL.pack_meter)
+	var bar: Control = el.endPackBar
+	var to_l: Label = el.endPackTo
+	var open: Tap = el.endPackOpen
+	if _pack_tw != null and _pack_tw.is_valid():
+		_pack_tw.kill()
+	open.visible = false
+	el.endPackGain.text = ("+%d this run" % run_pts) if run_pts else "Win fights to fill it"
+	to_l.text = _to_go(run_pts0)
+	to_l.add_theme_color_override("font_color", UiKit.INK2)
+	UiKit.set_fill(bar, run_pts0 / meter, run_pts0 / meter)
+	_on(open, func():
+		Sfx.pick()
+		_open_next_pack(_back_to_end, false))
+	if run_pts <= 0:
+		return
+	var tw := bar.create_tween()
+	tw.set_ignore_time_scale(true)
+	_pack_tw = tw
+	tw.tween_interval(0.35)
+	var per := clampf(0.8 / run_pts, 0.02, 0.06)   # seconds per point: the whole fill takes about 0.8s
+	var cur := run_pts0
+	var base := run_pts0
+	var left := run_pts
+	var earned := false
+	while left > 0:
+		var a := cur
+		var b := mini(cur + left, Data.BAL.pack_meter)
+		var f0 := base
+		var after := earned
+		tw.tween_method(func(v: float):
+			UiKit.set_fill(bar, v / meter, f0 / meter)
+			if not after:
+				to_l.text = _to_go(int(v)), float(a), float(b), (b - a) * per)
+		left -= b - a
+		if b >= Data.BAL.pack_meter:
+			earned = true
+			tw.tween_callback(func():
+				to_l.text = "Pack earned!"
+				to_l.add_theme_color_override("font_color", UiKit.GOLD_HI)
+				if Ui.current == "scr-end":   # left mid-fill (title, shop): no sound or haptic elsewhere
+					Sfx.caught()
+					Platform.haptic("heavy")
+				to_l.pivot_offset = to_l.size / 2.0
+				Fx.kf(to_l, 0.35, [[0.0, {"s": 1.0}], [0.5, {"s": 1.2}], [1.0, {"s": 1.0}]])
+				open.visible = _packs_waiting() > 0)
+			tw.tween_interval(0.15)
+			cur = 0
+			base = 0
+		else:
+			cur = b
 
 # ================= title =================
 ## Home screen (idea 8): the lead alone on the stage; the team as a pill of portraits over the Start
@@ -742,9 +836,10 @@ func _render_title() -> void:
 	var wins := Meta.wins()
 	el.bestT.text = ("Won %d · best floor %d" % [wins, best]) if wins else (("Best run: floor %d" % best) if best else "Runs take about five minutes")
 	UiScreens.set_dock_cell(el.dockTeam, "Team", "%d/%d" % [S.picks.size(), Data.BAL.lineup])
-	var ready := Meta.pack_ready()
-	UiScreens.set_dock_cell(el.packBtn, "Daily pack", "Ready" if ready else "in " + Meta.next_pack_in(), ready, not ready)
-	el.packBtn.disabled = not ready
+	var n := _packs_waiting()
+	UiScreens.set_dock_cell(el.packBtn, ("Packs ×%d" % n) if n > 1 else ("Pack" if n else "Packs"),
+		"Ready" if n else "%d/%d" % [Meta.pack_pts(), Data.BAL.pack_meter], n > 0, n == 0)
+	el.packBtn.disabled = n == 0
 	var sh := Meta.shinies().size()
 	UiScreens.set_dock_cell(el.collBtn, "Collection", "%d/%d%s" % [own.size(), Data.ROSTER.size(), (" · %d ✦" % sh) if sh else ""])
 	UiScreens.set_dock_cell(el.shopBtn, "Item shop", "%d gold" % Meta.wallet().gold)
@@ -1000,16 +1095,35 @@ func to_title() -> void:
 	_show_title_actor(S.picks[0])
 
 # ================= packs (§11) =================
-func _show_daily_pack() -> void:
-	var res = Meta.open_pack()
-	if res == null:
-		to_title()
-		return
-	_show_pack(res, "Daily pack", "One new friend a day", to_title, true)
+## Packs the player can open now: a pending pick, today's free pack and the banked tokens.
+func _packs_waiting() -> int:
+	return Meta.packs_ready() + (1 if Meta.pack_pending().size() else 0)
 
-## The card-flip reveal for any pack (daily or bought). `join` = true adds a new creature to the
-## title-screen team if there's room (the daily pack only, so "Run again" keeps its team).
-func _show_pack(res: Dictionary, title: String, blurb: String, back: Callable, join := false) -> void:
+## Open the next pack: a pick left pending first, else today's free pack, else a banked token.
+## `join` = a new creature joins the title-screen team if there's room (not from the results screen,
+## so "Run again" keeps its team).
+func _open_next_pack(back: Callable, join: bool) -> void:
+	var src := Meta.pending_source()
+	if src == "":
+		src = "daily" if Meta.pack_ready() else ("token" if Meta.pack_tokens() > 0 else "")
+	var ch: Array = Meta.open_pack(src) if src != "" else []
+	if ch.is_empty():
+		back.call()
+		return
+	_show_pack(ch, Meta.pending_source(), back, join)
+
+const PACK_TITLES := {
+	"daily": ["Daily pack", "Pick one to keep. A new pack every day."],
+	"token": ["Pack earned", "Your expeditions filled the meter. Pick one to keep."],
+	"shop": ["Creature pack", "Fresh from the shop. Pick one to keep."],
+}
+
+## The open pack: {cards: [Tap], keys: [String], open: [bool], picked: String, join: bool}.
+var _pk := {}
+
+## Pick 1 of 3: the rolled creatures turn face up one after another; tapping one keeps it (the
+## others fade) and the line under them says what it gave. Leaving needs a pick (the roll is saved).
+func _show_pack(choices: Array, source: String, back: Callable, join := false) -> void:
 	var el := _el()
 	S.mode = "meta"
 	if S.title_actor != null and is_instance_valid(S.title_actor):
@@ -1017,44 +1131,140 @@ func _show_pack(res: Dictionary, title: String, blurb: String, back: Callable, j
 	S.title_actor = null
 	_pack_n += 1
 	var n := _pack_n
-	el.packH1.text = title
-	el.packP.text = blurb
-	UiScreens.flip_set(Ui, false)
-	_fill(el.packTxt, [UiKit.sub("Tap the card", "center")])
-	var k = res.get("key")
-	var sp = Data.SPECIES[k] if k != null else null
-	UiScreens.flip_color(Ui, UiKit.el_css(sp.el) if sp else UiKit.GOLD)
-	var f: Control = el.packFront
-	UiKit.clear(f)
-	if sp:
-		f.add_child(UiKit.orb(UiKit.el_css(sp.el), 56, sp.el, 26))
-		f.add_child(UiKit.lbl(sp.name + (" ✦" if res.shiny else ""), "display", 22, UiKit.INK, {"align": "center"}))
-		f.add_child(UiKit.lbl("Shiny!" if res.shiny else "New creature", "700", 12, UiKit.MUTE, {"align": "center", "wrap": true}))
-	else:
-		f.add_child(UiKit.lbl("All shiny!", "display", 22, UiKit.INK, {"align": "center"}))
-		f.add_child(UiKit.lbl("You have every shiny. Nothing left to find… for now.", "700", 12, UiKit.MUTE, {"align": "center", "wrap": true}))
-	var state := {"opened": false}
-	var reveal := func():
-		if state.opened or n != _pack_n or Ui.current != "scr-pack":
-			return
-		state.opened = true
-		UiScreens.flip_set(Ui, true)
-		Sfx.caught()
-		Platform.haptic("heavy")
-		if k != null and sp:
-			_show_title_actor(k)
-			_fill(el.packTxt, [UiKit.sub(("%s now shines in every run." % sp.name) if res.shiny else ("%s joins your collection. Add it to your team on the title screen." % sp.name), "center")])
-		else:
-			UiKit.clear(el.packTxt)
-	_on(el.packCard, reveal)
-	_later(1.2, reveal)
+	var tt: Array = PACK_TITLES.get(source, PACK_TITLES.daily)
+	el.packH1.text = tt[0]
+	el.packP.text = tt[1]
+	UiKit.clear(el.packChoices)
+	_pk = {"cards": [], "keys": choices.duplicate(), "open": [], "picked": "", "join": join}
+	for i in choices.size():
+		var t := UiScreens.flip_card()
+		_pack_face(t, choices[i])
+		UiScreens.flip_open(t, false)
+		t.pressed.connect(_pack_tap.bind(i))
+		el.packChoices.add_child(t)
+		_pk.cards.append(t)
+		_pk.open.append(false)
+		_later(0.3 + i * 0.22, func(): if n == _pack_n and Ui.current == "scr-pack": _pack_reveal(i, true))
+	_fill(el.packTxt, [UiKit.sub("Tap a creature to keep it.", "center")])
+	UiScreens.set_big(el.packOk, "Pick one")
+	el.packOk.disabled = true
 	_on(el.packOk, func():
+		if _pk.picked == "":
+			return
 		Sfx.pick()
-		if join and k != null and not res.shiny and not (k in S.picks) and S.picks.size() < Data.BAL.lineup:
-			S.picks.append(k)
 		back.call())
 	Ui.show("scr-pack")
 	Ui.measure(true)
+
+## A choice's face: the creature's face, its name, NEW or the copy it would become, and what that
+## copy would give (its role for a new creature, the card or shiny it unlocks, or gold when complete).
+func _pack_face(t: Tap, k: String) -> void:
+	var sp: Dictionary = Data.SPECIES[k]
+	var col := UiKit.el_css(sp.el)
+	UiScreens.flip_tint(t, col)
+	var fv: VBoxContainer = t.get_meta("fv")
+	UiKit.clear(fv)
+	var por := UiKit.face_por(k, sp.el, 52)
+	por.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	fv.add_child(por)
+	fv.add_child(UiKit.lbl(sp.name, "display", UiKit.NAME, UiKit.INK, {"align": "center", "lh": -2}))
+	var c := Meta.copies(k)
+	var mx := Data.max_copies()
+	var tag := "NEW" if c == 0 else ("Complete" if c >= mx else "Copy %d/%d" % [c + 1, mx])
+	fv.add_child(UiKit.lbl(tag, "700", UiKit.T_S, UiKit.GOLD_HI if c == 0 else UiKit.mix(col, UiKit.INK, 0.55), {"align": "center"}))
+	var what := ""
+	var now := false
+	if c == 0:
+		what = str(sp.get("role", ""))
+	elif c >= mx:
+		what = "+%d gold" % Data.BAL.dupe_gold
+		now = true
+	else:
+		var nt = Meta.next_tier(k)
+		if nt != null:
+			now = nt.n == c + 1
+			if nt.get("shiny", false):
+				what = "Turns shiny" if now else "Shiny at %d" % nt.n
+			else:
+				what = ("Unlocks " + _tier_name(k, nt)) if now else "%s at %d" % [_tier_name(k, nt), nt.n]
+	var w := UiKit.lbl(what, "700" if now else "500", UiKit.T_S, UiKit.GOLD_HI if now else UiKit.INK2, {"align": "center", "wrap": true, "lh": -3})
+	w.custom_minimum_size.y = 30   # two lines, so the three cards line up
+	fv.add_child(w)
+
+## What a COPY_TIERS entry unlocks for species k: the card's name, or "Shiny".
+func _tier_name(k: String, t) -> String:
+	if t == null:
+		return ""
+	if t.get("shiny", false):
+		return "Shiny"
+	return Data.SPECIES[k].cards[t.slot][t.i].name
+
+func _pack_reveal(i: int, animate: bool) -> void:
+	if _pk.is_empty() or i >= _pk.open.size() or _pk.open[i]:
+		return
+	_pk.open[i] = true
+	UiScreens.flip_open(_pk.cards[i], true, animate)
+	Sfx.caught()
+	Platform.haptic("heavy")
+
+## A tap on a face-down card turns them all over (no blind picks); on a face-up one it keeps it.
+func _pack_tap(i: int) -> void:
+	if _pk.is_empty() or _pk.picked != "":
+		return
+	if not _pk.open[i]:
+		for j in _pk.cards.size():
+			_pack_reveal(j, true)
+		return
+	_pack_keep(i)
+
+func _pack_keep(i: int) -> void:
+	var el := _el()
+	var k: String = _pk.keys[i]
+	var res := Meta.pick_pack(k)
+	if res.is_empty():
+		return
+	_pk.picked = k
+	Sfx.audio()
+	Sfx.caught()
+	Platform.haptic("select")
+	var sp: Dictionary = Data.SPECIES[k]
+	for j in _pk.cards.size():
+		var t: Tap = _pk.cards[j]
+		t.dis_mod = Color.WHITE
+		t.disabled = true
+		var card: Control = t.get_meta("card")
+		if j == i:
+			UiScreens.flip_tint(t, UiKit.el_css(sp.el), true)
+			Fx.kf(card, 0.4, [[0.0, {"s": 1.0}], [0.45, {"s": 1.07}], [1.0, {"s": 1.0}]], {"ease": [0.3, 1.4, 0.5, 1.0]})
+		else:
+			Fx.kf(card, 0.3, [[0.0, {"a": 1.0}], [1.0, {"a": 0.3}]])
+	var joined := false
+	if _pk.join and res.fresh and not (k in S.picks) and S.picks.size() < Data.BAL.lineup:
+		S.picks.append(k)
+		Meta.save_lineup(S.picks)   # the team is saved on every change (§4.2)
+		joined = true
+	_show_title_actor(k)
+	_fill(el.packTxt, [UiKit.sub(_pack_result(res, joined), "center")])
+	UiScreens.set_big(el.packOk, "Nice!")
+	el.packOk.disabled = false
+
+## The line under the cards after a pick.
+func _pack_result(res: Dictionary, joined: bool) -> String:
+	var k: String = res.key
+	var nm: String = Data.SPECIES[k].name
+	if res.fresh:
+		return "%s joins your collection%s." % [nm, " and your team" if joined else ""]
+	if res.gold:
+		return "%s is fully collected: +%d gold." % [nm, res.gold]
+	if res.shiny:
+		return "%s is now shiny! It sparkles in every run." % nm
+	for t in res.unlocked:
+		if not t.get("shiny", false):
+			return "Copy %d of %s: %s unlocked and equipped." % [res.copies, nm, _tier_name(k, t)]
+	var nt = Meta.next_tier(k)
+	if nt == null:
+		return "Copy %d of %s." % [res.copies, nm]
+	return "Copy %d of %s. Next: %s at %d copies." % [res.copies, nm, _tier_name(k, nt), nt.n]
 
 # ================= item shop (§5.3) =================
 func _show_shop(back: Callable) -> void:
@@ -1090,13 +1300,13 @@ func _show_shop(back: Callable) -> void:
 		var d: Dictionary = Data.MAT_DEF[m]
 		add.call(buy, m, d.name, "%s upgrades · you have %d" % [d.track, w[m]], MAT_COL[m], str(Data.BAL.shop_mat),
 			"" if w.gold >= Data.BAL.shop_mat else short.call(Data.BAL.shop_mat - w.gold), func(): if Meta.buy_mat(m): paid.call())
-	var empty := Meta.pack_empty()
-	add.call(buy, "star", "Creature pack", "You own every creature and every shiny" if empty else "A creature you don’t own, else a shiny",
-		UiKit.GOLD_HI, str(Data.BAL.shop_pack), "All collected" if empty else ("" if w.gold >= Data.BAL.shop_pack else short.call(Data.BAL.shop_pack - w.gold)),
+	var waiting := Meta.pack_pending().size() > 0   # a pack already rolled: tapping opens it, free
+	add.call(buy, "pack", "Creature pack", "A pack is waiting: open it first" if waiting else "Pick 1 of 3 creatures",
+		UiKit.GOLD_HI, str(Data.BAL.shop_pack), "" if waiting or w.gold >= Data.BAL.shop_pack else short.call(Data.BAL.shop_pack - w.gold),
 		func():
-			var r = Meta.buy_pack()
-			if r != null:
-				_show_pack(r, "Creature pack", "Fresh from the shop", again))
+			var r: Array = Meta.buy_pack()
+			if r.size():
+				_show_pack(r, Meta.pending_source(), again))
 	for m in Data.MATS:
 		var d: Dictionary = Data.MAT_DEF[m]
 		add.call(sell, m, "Sell a %s" % d.name, "You have %d" % w[m], MAT_COL[m], "+%d" % Data.BAL.shop_sell,
@@ -1210,8 +1420,14 @@ func _coll_render() -> void:
 	var lo := Meta.loadout(k)
 	var bo := Meta.boosts(k)
 	var col := UiKit.el_css(sp.el)
-	# the header shows the currency the open tab spends: gold and materials for Upgrades, else Essence
-	_fill(el.collEss, _loot_chips(Meta.wallet()) if has and _coll.tab == "upgrades" else _ess_chips(Meta.essence()))
+	# the header shows the currency the open tab spends: gold and materials for Upgrades, Essence for
+	# Traits; the Cards tab spends nothing (cards unlock from copies), so it shows the copies
+	if has and _coll.tab == "upgrades":
+		_fill(el.collEss, _loot_chips(Meta.wallet()))
+	elif _coll.tab == "trait":
+		_fill(el.collEss, _ess_chips(Meta.essence()))
+	else:
+		_fill(el.collEss, [UiKit.ess("pack", UiKit.GOLD_HI, "%d/%d copies" % [Meta.copies(k), Data.max_copies()])] if has else [])
 	# specimen window caption: element, role, HP (on a solid chip, it sits over the scene)
 	var chip := UiKit.chip(sp.el, col, "%s · %s · %d HP" % [Data.ELEM[sp.el].name, sp.get("role", ""), roundi(sp.hp * bo.vital) if has else sp.hp])
 	chip.add_theme_stylebox_override("panel", UiKit.flat(UiKit.alpha(UiKit.NAVY2, 0.88), 11, 1, UiKit.alpha(col, 0.7), Vector4(8, 3, 8, 3)))
@@ -1256,7 +1472,7 @@ func _coll_render() -> void:
 ## Tab body for a creature not found yet: its default cards, its built-in Trait, how to find it.
 func _coll_unknown(body: Control, k: String) -> void:
 	var sp: Dictionary = Data.SPECIES[k]
-	var find := "Not found yet. Open a daily pack, or buy one in the item shop."
+	var find := "Not found yet. Open packs: one a day, one per full pack meter, or buy one in the item shop."
 	match _coll.tab:
 		"trait":
 			var x = sp.get("trait")
@@ -1282,13 +1498,29 @@ func _coll_unknown(body: Control, k: String) -> void:
 func _coll_body_h() -> float:
 	return clampf(roundf(Layout.size.y * 0.25), 192.0, 212.0)
 
-## Cards tab: a column per slot (Strike, Skill, Signature), the default card over its alternate.
-## The equipped card is lit; tapping the other one equips it, or offers to unlock it with Essence.
+## Cards tab: the copies line (how many, what the next copy unlocks), then a column per slot (Strike,
+## Skill, Signature) with the default card over its alternates. The equipped card is lit; tapping an
+## unlocked one equips it. A locked one says how many copies it needs (copies come from packs).
 func _coll_cards(body: Control, k: String) -> void:
 	var sp: Dictionary = Data.SPECIES[k]
 	var lo := Meta.loadout(k)
 	var bo := Meta.boosts(k)
-	var pending = _coll.pending
+	var c := Meta.copies(k)
+	var mx := Data.max_copies()
+	var cl := UiKit.hbox(8)
+	var ce := UiKit.eyebrow("Copies %d/%d" % [c, mx])
+	ce.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cl.add_child(ce)
+	var pp := UiKit.pips(c, mx, UiKit.GOLD_HI, 8.0, 6.0, 3.0)
+	pp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cl.add_child(pp)
+	body.add_child(cl)
+	var nt = Meta.next_tier(k)
+	var nxt := "Fully collected. More copies turn into %d gold." % Data.BAL.dupe_gold
+	if nt != null:
+		nxt = ("Shiny at %d copies." % nt.n) if nt.get("shiny", false) \
+			else ("Next: %s (%s) at %d copies." % [_tier_name(k, nt), "Skill" if nt.slot == "skill" else "Signature", nt.n])
+	body.add_child(UiKit.note(nxt + " Copies come from packs."))
 	var cols := UiKit.hbox(8)
 	for slot in Data.SLOTS:
 		var cv_col := UiKit.vbox(6)
@@ -1299,15 +1531,15 @@ func _coll_cards(body: Control, k: String) -> void:
 			var def: Dictionary = list[i]
 			var on: bool = slot == "strike" or lo.get(slot, 0) == i
 			var open := Meta.move_unlocked(k, slot, i)
+			var need := Data.copies_for(slot, i)
 			var t := Tap.new()
 			t.press_scale = 0.97
 			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			var cv := CardView.new("lo").face(Data.boost_card(def, bo.power, bo.spirit), sp.el, {"slot": slot, "faces": [[k, sp.el]]})
 			cv.pressed_state = 1 if on else -1
-			cv.sel = pending != null and pending.has("slot") and pending.slot == slot and pending.i == i
-			if not open:
-				var mc := Meta.move_cost(k)
-				cv.add_lock(mc.n, mc.el)
+			if not open:   # the strip's lock tag: copies, not Essence (long and short forms)
+				cv._tags.push_front(["Needs %d copies" % need, "%d copies" % need, "lock"])
+				cv._build_tags()
 			cv.restyle()
 			t.add_child(cv)
 			t.pressed.connect(func():
@@ -1318,20 +1550,14 @@ func _coll_cards(body: Control, k: String) -> void:
 				Platform.haptic("select")
 				if open:
 					Meta.set_move(k, slot, i)
-					_coll.pending = null
+					_coll_render()
 				else:
-					_coll.pending = {"slot": slot, "i": i}
-				_coll_render())
+					Fx.toast("%s needs %d copies of %s" % [def.name, need, sp.name]))
 			cv_col.add_child(t)
 		if list.size() < 2:
 			cv_col.add_child(UiKit.lbl("One option", "500", UiKit.T_S, UiKit.MUTE, {"align": "center"}))
 		cols.add_child(cv_col)
 	body.add_child(cols)
-	if pending != null and pending.has("slot"):
-		var p: Dictionary = pending
-		var pdef: Dictionary = sp.cards[p.slot][p.i]
-		body.add_child(_unlock_box("Unlock [b]%s[/b] for %s's %s slot." % [pdef.name, sp.name, "Skill" if p.slot == "skill" else "Signature"], Meta.move_cost(k),
-			func(): return Meta.unlock_move(k, p.slot, p.i) and Meta.set_move(k, p.slot, p.i)))
 
 ## Trait tab: the socketed Trait, then every usable Trait (built-in first) and the learnable ones with
 ## their Essence cost. Tapping a usable one sockets it; a learnable one opens the Learn offer.
@@ -1489,7 +1715,7 @@ func init_run_ui() -> void:
 	el.packBtn.pressed.connect(func():
 		Sfx.audio()
 		Sfx.pick()
-		_show_daily_pack())
+		_open_next_pack(to_title, true))
 	el.collBtn.pressed.connect(func():
 		Sfx.audio()
 		Sfx.pick()
@@ -1536,7 +1762,19 @@ func debug_show(id: String) -> void:
 				Meta.buy_upgrade(S.picks[0], "sword")
 			_show_collection("upgrades")
 		"shop": _show_shop(to_title)
-		"pack": _show_pack({"key": "sparkit", "shiny": false}, "Daily pack", "One new friend a day", to_title)
+		"pack", "pack-pick":   # three choices: new, a copy that unlocks a card, a copy that turns shiny (scratch save)
+			Platform.use_save_path("user://shot-pack.cfg")
+			Platform.store_set("copies", {"emberwick": 1, "bellspring": 2, "truffmole": 1, "sparkit": 9})
+			Platform.store_set("packPending", ["cinderpip", "bellspring", "sparkit"])
+			Platform.store_set("packSource", "daily")
+			Platform.store_set("packDay", Meta._pack_day())
+			Platform.store_set("packPts", 32)
+			S.picks = Meta.last_lineup()
+			_open_next_pack(to_title, true)
+			if id == "pack-pick":   # every card face up, Bellspring kept (its third copy unlocks Undertide)
+				for i in _pk.cards.size():
+					_pack_reveal(i, false)
+				_pack_keep(1)
 		"map":
 			start_run()
 		"map-sel":   # the second medallion selected
@@ -1558,11 +1796,11 @@ func debug_show(id: String) -> void:
 			show_party(func(): show_map(false))
 		"reward":
 			start_run()
-			_show_reward(2, {"gold": 11, "sword": 1, "orb": 0, "jewel": 0}, {"thorn": 2})
+			_show_reward(2, {"gold": 11, "sword": 1, "orb": 0, "jewel": 0}, {"thorn": 2}, true, {"n": 3, "gained": 0})
 		"reward-warden":   # the Warden's haul: five chips on the ribbon, one pick
 			start_run()
 			S.floor = 4
-			_show_reward(1, {"gold": 40, "sword": 1, "orb": 1, "jewel": 0}, {"thorn": 3, "ember": 3})
+			_show_reward(1, {"gold": 40, "sword": 1, "orb": 1, "jewel": 0}, {"thorn": 3, "ember": 3}, true, {"n": 5, "gained": 1})
 		"upgrade":
 			start_run()
 			_show_upgrade(func(): show_map(), func(): show_map())
@@ -1574,6 +1812,11 @@ func debug_show(id: String) -> void:
 			S.stats.perfects = 2
 			S.party[2].hp = 0.0
 			S.party[2].alive = false
+			run_pts0 = 38   # the meter wraps: a pack earned, 10 points into the next
+			run_pts = 22
+			run_packs = 1
+			if Platform.ui_check:   # scratch save: bank the token so Open shows
+				Meta.add_pack_pts(50)
 			end_run(false)
 		"end-win":
 			start_run()
@@ -1582,4 +1825,6 @@ func debug_show(id: String) -> void:
 			run_ess = {"ember": 9, "tide": 4, "thorn": 7, "volt": 3}
 			S.stats.perfects = 11
 			S.stats.start = Platform.ticks_msec() - 754000
+			run_pts0 = 12
+			run_pts = 31
 			end_run(true)

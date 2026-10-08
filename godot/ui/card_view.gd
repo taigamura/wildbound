@@ -6,11 +6,14 @@ extends Container
 ##   crystal rail (left): one crystal per energy of cost (a 0-cost card: one hollow crystal), the
 ##     number under them from 3; crystals you can't afford yet are red outlines, a cost cut (−1
 ##     upgrade, discounts, Quickfuse) leaves hollow ones
-##   face window: every living teammate who can play the card (S.card_faces), split for 2 or 3;
-##     a glyph for cards with no creature (reward options, undiscovered species)
-##   name, a rules box of fixed height, and a status strip under it (Strong, upgraded, can't afford)
+##   face window: the card's owner (S.card_faces); a glyph for cards with no creature (reward
+##     options, undiscovered species)
+##   name, a rules box of fixed height, and a status strip under it (Basic, Strong, upgraded,
+##     can't afford)
 ##   foil by slot: Strike plain, Skill crosshatch, Signature gold double frame and a moving sheen
 ## Off-element cards are desaturated with a swap chip in the window; dead ones grey with KO over it.
+## A basic card (same-element lead that isn't the owner, S.card_basic) keeps its colour but costs
+## BAL.basic_cost on the rail, its rules text is dimmed and the strip reads "BASIC n" (the hit's damage).
 ## Colours are this file's own constants (the in-game tokens: the card always sits on the diorama).
 
 const W0 := 85.0   # design width; every length below is design px × u
@@ -44,6 +47,7 @@ var sel := false        # picked (upgrade screen, pending unlock)
 var pressed_state := 0  # Collection: 1 equipped, -1 not equipped, 0 neither
 var bench := false      # off-element: swap to a creature of its element to play it
 var dead := false       # no living teammate of its element: swipe to discard
+var basic := -1         # >= 0: plays as a basic hit for this much damage (rules text dimmed)
 var locked := false
 var empty := true
 
@@ -66,10 +70,11 @@ var _slot := "strike"
 var _cost := 0
 var _base := 0               # crystals: the cost before cuts; -1 = no crystals (reward options)
 var _energy := -1.0          # current energy, for red crystals and "Need N more"; < 0 = not shown
-var _face_list: Array = []   # [species, element] per face, the card's owner first
+var _face_list: Array = []   # [[species, element]] of the card's owner; empty = the glyph
 var _glyph := ""
 var _tags: Array = []        # [full text, short text, kind]
 var _lock_n := 0
+var _lock_txt: Array = []    # [full, short] text of the lock tag
 var _sat := 1.0
 var _bright := 1.0
 
@@ -112,18 +117,20 @@ func _init(variant := "hand") -> void:
 
 ## A creature's card. o: slot ("strike" "skill" "sig": the foil), cost (now), base (before cuts;
 ## default cost), faces ([species, element] list; empty = the card's glyph), bench, dead,
+## basic (the basic hit's damage: the card plays as a basic hit for `cost`; -1 = not basic),
 ## strong (the multiplier, or true for ×1.5), upgraded ("power"/"+30%" or "cost"/"−1"),
 ## pow (scales the rules text), energy (shows what can't be afforded).
 func face(def: Dictionary, el, o := {}) -> CardView:
 	_args = ["face", def, el, o]
 	dead = o.get("dead", false)
 	bench = o.get("bench", false) and not dead
+	basic = int(o.get("basic", -1)) if not (dead or bench) else -1
 	c = EL_C.get(str(el), GOLD)
 	_slot = o.get("slot", "strike")
 	_cost = int(o.get("cost", def.cost))
-	_base = maxi(_cost, int(o.get("base", _cost)))
+	_base = _cost if basic >= 0 else maxi(_cost, int(o.get("base", _cost)))   # a basic hit's rail is just its cost
 	_energy = o.get("energy", -1.0)
-	_face_list = o.get("faces", [])
+	_face_list = (o.get("faces", []) as Array).slice(0, 1)   # only the owner's face
 	_glyph = UiKit.glyph_for(def, el)
 	_tags.clear()
 	var strong = o.get("strong", 0.0)
@@ -132,7 +139,9 @@ func face(def: Dictionary, el, o := {}) -> CardView:
 	var up := str(o.get("upgraded", ""))
 	if not dead and strong > 1.0:
 		_tags.append(["Strong ×" + Data.num(strong), "×" + Data.num(strong), "strong"])
-	if not dead and up in ["power", "+30%"]:
+	if basic >= 0:   # first in the strip; upgrades don't touch a basic hit
+		_tags.push_front(["BASIC %d" % basic, "BASIC %d" % basic, "basic"])
+	elif not dead and up in ["power", "+30%"]:
 		_tags.append(["+30% effect", "+30%", "up"])
 	elif not dead and up in ["cost", "−1"]:
 		_tags.append(["−1 cost", "−1", "up"])
@@ -145,6 +154,7 @@ func option(glyph: String, name: String, text: String, color: Color) -> CardView
 	_args = ["option", glyph, name, text, color]
 	dead = false
 	bench = false
+	basic = -1
 	c = color
 	_slot = "strike"
 	_cost = 0
@@ -178,10 +188,12 @@ func set_energy(e: float) -> void:
 	_under.queue_redraw()
 	restyle()
 
-## The price tag on a locked Collection card, in the strip.
-func add_lock(n: int, _el: String) -> void:
+## The price tag on a locked Collection card, in the strip: "n Essence" unless `full` (and `short`,
+## used when the strip is shared) say otherwise, e.g. add_lock(3, el, "3 copies", "×3").
+func add_lock(n: int, _el: String, full := "", short := "") -> void:
 	locked = true
 	_lock_n = n
+	_lock_txt = [full if full != "" else "%d Essence" % n, short if short != "" else str(n)]
 	_build_tags()
 	restyle()
 
@@ -208,9 +220,9 @@ func _build_tags() -> void:
 	var list: Array = _tags.duplicate()
 	if _poor():
 		var n := _cost - floori(_energy)
-		list.push_front(["Need %d more" % n, "Need %d" % n, "poor"])
+		list.insert(1 if basic >= 0 else 0, ["Need %d more" % n, "Need %d" % n, "poor"])   # BASIC stays first
 	if locked:
-		list.push_front(["%d Essence" % _lock_n, str(_lock_n), "lock"])
+		list.push_front([_lock_txt[0], _lock_txt[1], "lock"])
 	UiKit.clear(_strip)
 	for t in list:
 		var l := _lbl("body")
@@ -220,8 +232,7 @@ func _build_tags() -> void:
 
 func _build_faces() -> void:
 	UiKit.clear(_faces)
-	var n := _face_list.size()
-	if n == 0:
+	if _face_list.is_empty():
 		var g := TextureRect.new()
 		g.texture = Glyphs.tex(_glyph)
 		g.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -231,19 +242,16 @@ func _build_faces() -> void:
 		g.set_meta("glyph", true)
 		_faces.add_child(g)
 		return
-	# slot aspect in design px (window 60 or 57 × 42, 1 px between faces)
-	var ww := 57.0 if _slot == "sig" else 60.0
-	var aspect := ((ww - (n - 1)) / n) / 42.0
-	for i in n:
-		var f: Array = _face_list[i]
-		var t := TextureRect.new()
-		t.texture = face_tex(f[0], f[1], aspect, Vector2(0.55, 0.35) if n == 3 else Vector2(0.5, 0.4))
-		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		t.stretch_mode = TextureRect.STRETCH_SCALE
-		t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		t.material = _face_mat
-		t.mouse_filter = MOUSE_FILTER_IGNORE
-		_faces.add_child(t)
+	# the window's aspect in design px (60 or 57 × 42)
+	var f: Array = _face_list[0]
+	var t := TextureRect.new()
+	t.texture = face_tex(f[0], f[1], (57.0 if _slot == "sig" else 60.0) / 42.0)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_SCALE
+	t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	t.material = _face_mat
+	t.mouse_filter = MOUSE_FILTER_IGNORE
+	_faces.add_child(t)
 
 # ------------------------------------------------------------------ faces
 
@@ -389,7 +397,7 @@ func restyle() -> void:
 	_foil.visible = sig and not empty
 	set_process(_foil.visible)
 	nm.add_theme_color_override("font_color", _tone(INK))
-	tx.add_theme_color_override("font_color", _tone(INK2))
+	tx.add_theme_color_override("font_color", _tone(INK2) if basic < 0 else Color(_tone(INK2), 0.4))
 	_cost_l.text = str(_cost) if _base >= 0 and _cost >= 3 else ""
 	_cost_l.add_theme_color_override("font_color", _tone(RED if _poor() else CRYSTAL_INK))
 	_ko.visible = dead
@@ -424,17 +432,14 @@ func _notification(what: int) -> void:
 	fit_child_in_rect(_win, wr)
 	fit_child_in_rect(_faces, wr)
 	fit_child_in_rect(_ko, wr)
-	var faces := _faces.get_children()
-	if faces.size() == 1 and faces[0].has_meta("glyph"):
-		var g := roundf(wr.size.y * 0.6)
-		faces[0].position = ((wr.size - Vector2(g, g)) / 2.0).round()
-		faces[0].size = Vector2(g, g)
-	else:
-		var gap := maxf(1.0, roundf(u))
-		var sw := (wr.size.x - gap * (faces.size() - 1)) / maxf(1.0, faces.size())
-		for i in faces.size():
-			faces[i].position = Vector2(i * (sw + gap), 0)
-			faces[i].size = Vector2(sw, wr.size.y)
+	for f in _faces.get_children():
+		if f.has_meta("glyph"):
+			var g := roundf(wr.size.y * 0.6)
+			f.position = ((wr.size - Vector2(g, g)) / 2.0).round()
+			f.size = Vector2(g, g)
+		else:
+			f.position = Vector2.ZERO
+			f.size = wr.size
 	_ko.add_theme_font_size_override("font_size", roundi(15.0 * u))
 	# name, rules box (shorter when the strip is in use), cost under the crystals
 	var nr := Rect2(17.0 * u, 55.0 * u, 65.0 * u, 13.0 * u)
@@ -469,7 +474,8 @@ func _notification(what: int) -> void:
 	var cs := 16.0 * u
 	fit_child_in_rect(_chip, Rect2(size.x - (10.0 if sig else 7.0) * u - cs, (10.0 if sig else 9.0) * u, cs, cs))
 
-## Strip tag colours: Strong gold, upgraded tinted in the element, can't afford red, lock price.
+## Strip tag colours: Strong gold, basic hit crystal blue, upgraded tinted in the element, can't afford
+## red, lock price.
 func _style_tag(l: Label, kind: String, u: float) -> void:
 	var bgc := GOLD
 	var ink := Color("#2a1906")
@@ -479,6 +485,10 @@ func _style_tag(l: Label, kind: String, u: float) -> void:
 			bgc = c.lerp(NAVY2, 0.7)
 			ink = INK
 			line = c
+		"basic":
+			bgc = Color("#12284a")
+			ink = CRYSTAL_INK
+			line = CRYSTAL_GLOW
 		"poor":
 			bgc = Color("#4a1714")
 			ink = Color("#ffc2b8")
@@ -611,12 +621,6 @@ func _draw_over(l: Control) -> void:
 	var fc := _frame_c()
 	if dead:   # KO shade, confined to the window
 		l.draw_rect(wr, Color(0, 0, 0, 0.45))
-	var faces := _faces.get_children()
-	if faces.size() > 1:
-		for i in range(1, faces.size()):
-			var f: Control = faces[i]
-			var gap := maxf(1.0, roundf(u))
-			l.draw_rect(Rect2(wr.position.x + f.position.x - gap, wr.position.y, gap, wr.size.y), fc)
 	var fr := StyleBoxFlat.new()
 	fr.draw_center = false
 	fr.border_color = fc

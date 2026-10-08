@@ -91,8 +91,17 @@ func test_data() -> void:
 	eq(Dt.ROSTER.size(), 12, "12 roster")
 	for k in Dt.ROSTER:
 		var sp: Dictionary = Dt.SPECIES[k]
-		check(sp.cards.strike.size() == 1 and sp.cards.skill.size() == 2 and sp.cards.sig.size() == 2, k + " card slots")
+		check(sp.cards.strike.size() == 1 and sp.cards.skill.size() == 3 and sp.cards.sig.size() == 3, k + " card slots")
+		for slot in ["skill", "sig"]:
+			check(Dt.scalable(sp.cards[slot][2]), k + " " + slot + " option 3 scales with +30%")
 		check(Dt.TRAITS.has(sp["trait"]) and Dt.TRAITS[sp["trait"]].from == k, k + " trait")
+	var card_names := {}
+	for k in Dt.ROSTER:
+		for slot in Dt.SLOTS:
+			for c in Dt.SPECIES[k].cards[slot]:
+				check(not card_names.has(c.name), "card name unique: " + c.name)
+				card_names[c.name] = true
+	eq(card_names.size(), 84, "84 cards in the roster (12 × 7)")
 	var wick: Dictionary = Dt.SPECIES.emberwick.cards.sig[0]
 	eq(Dt.card_text(wick), "14 dmg, +8 if Burned", "Wickflare text")
 	var up: Dictionary = Dt.scale_card(wick, 1.3)
@@ -165,24 +174,21 @@ func test_audio() -> void:
 # ---------------------------------------------------------------- meta
 func test_meta() -> void:
 	section = "meta"
+	var mx: int = Dt.max_copies()
 	eq(Mt.owned(), ["emberwick", "bellspring", "truffmole"], "starters owned")
+	eq(Mt.copies("emberwick"), 1, "starter has 1 copy")
+	eq(Mt.copies("skiray"), 0, "unowned has 0 copies")
 	eq(Mt.add_owned(["skiray", "emberwick", "bogus"]), ["skiray"], "add_owned returns new")
 	check(Mt.is_owned("skiray"), "skiray owned")
-	check(Mt.pack_ready(), "pack ready")
-	var p = Mt.open_pack()
-	check(p != null and p.key in Dt.ROSTER and not p.shiny and not (p.key in Dt.STARTERS), "pack gives a new non-starter")
-	check(Mt.open_pack() == null and not Mt.pack_ready(), "one pack per day")
+	eq(Mt.copies("skiray"), 1, "add_owned gives 1 copy")
 	check(Mt.next_pack_in().contains("h "), "next_pack_in format")
-	eq(Mt.buy_pack(), null, "can't buy pack when poor")
-	Mt.add_loot({"gold": 200})
-	var p2 = Mt.buy_pack()
-	check(p2 != null, "bought a pack")
-	eq(Mt.wallet().gold, 50, "pack cost 150")
-	# all owned → shinies
-	Mt.add_owned(Dt.ROSTER)
-	var p3 = Mt._roll_pack()
-	check(p3.shiny and Mt.is_shiny(p3.key), "shiny once everything is owned")
+	_test_copies()
+	_test_migration()
+	_test_pack_meter()
+	_test_packs()
 	# loot
+	Pf.store_set("loot", null)
+	Mt.add_loot({"gold": 50})
 	check(not Mt.spend_loot({"gold": 999}), "spend fails when short")
 	eq(Mt.wallet().gold, 50, "nothing spent on failure")
 	check(Mt.buy_mat("sword"), "buy mat")
@@ -206,24 +212,31 @@ func test_meta() -> void:
 	eq(Mt.last_lineup(), ["emberwick"], "default lineup")
 	Mt.save_lineup(["truffmole", "skiray", "bogus", "x"])
 	eq(Mt.last_lineup(), ["truffmole", "skiray"], "saved lineup filtered")
-	# essence & unlocks
+	# loadouts: alternates unlock from copies, not Essence
 	eq(Mt.essence(), {"ember": 0, "tide": 0, "thorn": 0, "volt": 0}, "no essence")
-	check(not Mt.unlock_move("emberwick", "skill", 1), "unlock needs essence")
-	Mt.earn("ember", 12)
-	check(Mt.unlock_move("emberwick", "skill", 1), "unlock Flare Step")
-	eq(Mt.essence().ember, 7, "move cost 5")
-	check(not Mt.unlock_move("emberwick", "skill", 1), "already unlocked")
-	check(not Mt.unlock_move("emberwick", "skill", 5), "no such card")
-	eq(Mt.loadout("emberwick").skill, 0, "not equipped until set")
-	check(Mt.set_move("emberwick", "skill", 1), "equip Flare Step")
-	check(not Mt.set_move("emberwick", "sig", 1), "locked sig can't be equipped")
-	eq(Mt.loadout("emberwick").skill, 1, "loadout skill")
+	check(not Mt.move_unlocked("truffmole", "skill", 1), "1 copy: alt skill locked")
+	check(not Mt.set_move("truffmole", "skill", 1), "locked skill can't be equipped")
+	Mt.earn("thorn", 20)
+	check(not Mt.has_method("unlock_move"), "essence no longer unlocks cards")
+	eq(Mt.essence().thorn, 20, "no essence spent on cards")
+	Mt.add_copy("truffmole")
+	check(Mt.move_unlocked("truffmole", "skill", 1), "2 copies: alt skill unlocked")
+	eq(Mt.loadout("truffmole").skill, 1, "tier unlock equips the card")
+	check(Mt.set_move("truffmole", "skill", 0), "re-equip default")
+	eq(Mt.loadout("truffmole").skill, 0, "default back")
+	check(not Mt.set_move("truffmole", "sig", 1), "sig needs 3 copies")
 	eq(Mt.loadout("emberwick")["trait"], "afterglow", "built-in trait")
-	# traits
+	eq(Mt.add_copy("emberwick").unlocked.size(), 1, "emberwick 2nd copy")
+	eq(Mt.loadout("emberwick").skill, 1, "Flare Step equipped (test_state relies on this)")
+	# traits (still Essence)
+	Mt.earn("ember", 7)
 	check(not Mt.unlock_trait("afterglow"), "trait needs 8 essence")
 	Mt.earn("ember", 1)
 	check(Mt.unlock_trait("afterglow"), "learn Afterglow")
+	eq(Mt.essence().ember, 0, "trait cost 8")
 	check(Mt.trait_unlocked("afterglow"), "afterglow learned")
+	check(not Mt.unlock_trait("afterglow"), "already learned")
+	check(not Mt.unlock_trait("quickfuse") or Mt.is_owned("cinderpip"), "trait source must be owned")
 	check(Mt.set_trait("truffmole", "afterglow"), "socket on truffmole")
 	eq(Mt.loadout("truffmole")["trait"], "afterglow", "truffmole has afterglow")
 	eq(Mt.trait_holder("afterglow"), "truffmole", "holder")
@@ -235,8 +248,176 @@ func test_meta() -> void:
 	eq(Mt.loadout("skiray")["trait"], "afterglow", "built-in socketing doesn't evict others")
 	Mt.set_trait("skiray", "relay")
 	eq(Mt.trait_holder("afterglow"), null, "no holder")
-	eq(Mt.move_cost("emberwick"), {"el": "ember", "n": 5}, "move cost")
 	eq(Mt.trait_cost("relay"), {"el": "volt", "n": 8}, "trait cost")
+	check(not Dt.BAL.has("move_cost"), "move_cost gone from BAL")
+
+## Copies and COPY_TIERS: skill alt at 2, sig alt at 3, shiny at max, overflow → gold.
+func _test_copies() -> void:
+	section = "meta/copies"
+	eq(Dt.copies_for("skill", 0), 0, "default needs 0")
+	eq(Dt.copies_for("skill", 1), 2, "alt skill at 2")
+	eq(Dt.copies_for("sig", 1), 3, "alt sig at 3")
+	eq(Dt.copies_for("strike", 1), -1, "no strike tier")
+	var r: Dictionary = Mt.add_copy("mossling")
+	eq([r.key, r.copies, r.fresh, r.unlocked, r.shiny, r.gold], ["mossling", 1, true, [], false, 0], "first copy owns it")
+	check(Mt.is_owned("mossling"), "mossling owned")
+	eq(Mt.next_tier("mossling").n, 2, "next tier: 2 copies")
+	r = Mt.add_copy("mossling")
+	check(not r.fresh and r.copies == 2, "second copy")
+	eq(r.unlocked.size(), 1, "one tier reached")
+	eq([r.unlocked[0].slot, r.unlocked[0].i], ["skill", 1], "skill alt tier")
+	check(Mt.move_unlocked("mossling", "skill", 1) and not Mt.move_unlocked("mossling", "sig", 1), "skill alt only")
+	eq(Mt.loadout("mossling").skill, 1, "alt skill equipped on unlock")
+	r = Mt.add_copy("mossling")
+	eq([r.unlocked[0].slot, r.unlocked[0].i], ["sig", 1], "sig alt tier")
+	eq(Mt.loadout("mossling").sig, 1, "alt sig equipped on unlock")
+	eq(Mt.add_copy("bogus"), {}, "bogus key")
+	var shiny_seen := false
+	for i in range(3, Dt.max_copies()):
+		r = Mt.add_copy("mossling")
+		for t in r.unlocked:
+			check(t.get("shiny", false) or Mt._has_card("mossling", t.slot, t.i), "only real card tiers reported")
+		shiny_seen = shiny_seen or r.shiny
+	eq(Mt.copies("mossling"), Dt.max_copies(), "maxed")
+	check(shiny_seen and Mt.is_shiny("mossling"), "shiny at max copies")
+	eq(Mt.next_tier("mossling"), null, "no next tier when maxed")
+	check("mossling" in Mt.shinies(), "listed in shinies")
+	var g0: int = Mt.wallet().gold
+	r = Mt.add_copy("mossling")
+	eq([r.copies, r.gold, r.shiny, r.unlocked], [Dt.max_copies(), Dt.BAL.dupe_gold, false, []], "overflow copy → gold")
+	eq(Mt.wallet().gold, g0 + Dt.BAL.dupe_gold, "overflow gold banked")
+	eq(Mt.copies("mossling"), Dt.max_copies(), "copies capped")
+
+## Old saves: "owned"/"shiny"/"learned" without a "copies" entry.
+func _test_migration() -> void:
+	section = "meta/migration"
+	var keep_copies = Pf.store_get("copies", null)
+	var keep_learned = Pf.store_get("learned", null)
+	var keep_lo = Pf.store_get("loadout", null)
+	Pf.store_set("copies", null)
+	Pf.store_set("owned", ["emberwick", "bellspring", "truffmole", "sparkit", "kilnback"])
+	Pf.store_set("shiny", ["kilnback"])
+	Pf.store_set("learned", ["sparkit.sig.1", "trait.livewire"])
+	eq(Mt.copies("sparkit"), 1, "legacy owned → 1 copy")
+	eq(Mt.copies("emberwick"), 1, "starter → 1 copy")
+	eq(Mt.copies("kilnback"), Dt.max_copies(), "legacy shiny → max copies")
+	check(Mt.is_shiny("kilnback") and not Mt.is_shiny("sparkit"), "shiny derived from copies")
+	eq(Mt.copies("puddlet"), 0, "legacy unowned → 0")
+	check(Mt.move_unlocked("sparkit", "sig", 1), "essence-learned card stays unlocked")
+	check(not Mt.move_unlocked("sparkit", "skill", 1), "unlearned alt still locked")
+	check(Mt.move_unlocked("kilnback", "skill", 1) and Mt.move_unlocked("kilnback", "sig", 1), "shiny migrant has every card")
+	check(Mt.trait_unlocked("livewire"), "learned trait kept")
+	Mt.add_copy("sparkit")
+	eq(Pf.store_get("copies", {}).get("sparkit"), 2, "copies written on first change")
+	eq(Pf.store_get("copies", {}).get("kilnback"), Dt.max_copies(), "migrated counts written back")
+	eq(Mt.copies("emberwick"), 1, "migrated starter kept")
+	# restore
+	Pf.store_set("copies", keep_copies)
+	Pf.store_set("learned", keep_learned)
+	Pf.store_set("loadout", keep_lo)
+	Pf.store_set("owned", null)
+	Pf.store_set("shiny", null)
+
+## Pack points bank per fight; every pack_meter points becomes a token, overflow carries.
+func _test_pack_meter() -> void:
+	section = "meta/meter"
+	eq([Mt.pack_pts(), Mt.pack_tokens()], [0, 0], "empty meter")
+	var r: Dictionary = Mt.add_pack_pts(Dt.BAL.pts_wild)
+	eq(r, {"pts": 2, "tokens": 0, "gained": 0}, "wild points")
+	r = Mt.add_pack_pts(Dt.BAL.pack_meter - 1)
+	eq(r, {"pts": 1, "tokens": 1, "gained": 1}, "token earned, overflow carries")
+	r = Mt.add_pack_pts(Dt.BAL.pack_meter * 2)
+	eq([r.pts, r.tokens, r.gained], [1, 3, 2], "two tokens at once")
+	eq([Mt.pack_pts(), Mt.pack_tokens()], [1, 3], "meter persisted")
+	Pf.use_save_path(SAVE)   # reload from disk
+	eq([Mt.pack_pts(), Mt.pack_tokens()], [1, 3], "meter survives reload")
+	eq(Mt.add_pack_pts(0).gained, 0, "zero points")
+
+## Pick-1-of-3 packs: distinct choices, persisted pending, daily/token/shop consumption.
+func _test_packs() -> void:
+	section = "meta/packs"
+	# picks are random: restore copies and loadouts afterwards so later sections see a fixed collection
+	var keep_all = Pf.store_get("copies", null)
+	var keep_lo = Pf.store_get("loadout", null)
+	check(Mt.pack_ready(), "daily ready")
+	eq(Mt.packs_ready(), Mt.pack_tokens() + 1, "packs_ready = tokens + daily")
+	eq(Mt.pack_pending(), [], "nothing pending")
+	eq(Mt.pending_source(), "", "no source")
+	eq(Mt.open_pack("bogus"), [], "bad source opens nothing")
+	var ch: Array = Mt.open_pack("daily")
+	eq(ch.size(), Dt.BAL.pack_choices, "3 choices")
+	var u := {}
+	for k in ch:
+		check(k in Dt.ROSTER, "choice in roster")
+		u[k] = true
+	eq(u.size(), ch.size(), "choices distinct")
+	check(not Mt.pack_ready(), "daily consumed")
+	eq(Mt.pending_source(), "daily", "source daily")
+	Pf.use_save_path(SAVE)   # "close the app"
+	eq(Mt.pack_pending(), ch, "pending persists across reload")
+	var tok: int = Mt.pack_tokens()
+	eq(Mt.open_pack("token"), ch, "pending returned, no reroll")
+	eq(Mt.pack_tokens(), tok, "pending doesn't consume a token")
+	eq(Mt.open_pack("daily"), ch, "pending returned for daily too")
+	var g0: int = Mt.wallet().gold
+	eq(Mt.buy_pack(), ch, "buying while pending returns pending")
+	eq(Mt.wallet().gold, g0, "uncharged while pending")
+	eq(Mt.pick_pack("bogus"), {}, "can't pick something not offered")
+	var notoff: Array = Dt.ROSTER.filter(func(k): return not (k in ch))
+	eq(Mt.pick_pack(notoff[0]), {}, "can't pick a roster species not offered")
+	var c0: int = Mt.copies(ch[0])
+	var r: Dictionary = Mt.pick_pack(ch[0])
+	var maxed: bool = c0 >= Dt.max_copies()
+	eq([r.key, r.copies, r.fresh, r.gold], [ch[0], c0 if maxed else c0 + 1, c0 == 0, Dt.BAL.dupe_gold if maxed else 0], "picked adds a copy (or gold when maxed)")
+	eq(Mt.pack_pending(), [], "pending cleared")
+	eq(Mt.pending_source(), "", "source cleared")
+	eq(Mt.pick_pack(ch[1]), {}, "can't pick twice")
+	eq(Mt.open_pack("daily"), [], "daily can't be opened twice")
+	# token
+	if tok == 0:
+		Mt.add_pack_pts(Dt.BAL.pack_meter)
+		tok = 1
+	var ch2: Array = Mt.open_pack("token")
+	eq(ch2.size(), Dt.BAL.pack_choices, "token pack")
+	eq(Mt.pack_tokens(), tok - 1, "token consumed")
+	eq(Mt.pending_source(), "token", "source token")
+	Mt.pick_pack(ch2[2])
+	Pf.store_set("packTokens", 0)
+	eq(Mt.open_pack("token"), [], "no tokens, nothing to open")
+	eq(Mt.packs_ready(), 0, "nothing ready")
+	# shop
+	Pf.store_set("loot", null)
+	eq(Mt.buy_pack(), [], "can't buy when poor")
+	Mt.add_loot({"gold": 200})
+	var ch3: Array = Mt.buy_pack()
+	eq(ch3.size(), Dt.BAL.pack_choices, "bought a pack")
+	eq(Mt.wallet().gold, 50, "pack cost 150")
+	eq(Mt.pending_source(), "shop", "source shop")
+	Mt.pick_pack(ch3[0])
+	# weighting: unowned are drawn more than their share
+	var unowned_n := 0
+	var total := 0
+	var owned_now: Array = Mt.owned()
+	for i in 300:
+		var c: Array = Mt._roll_choices()
+		if i < 5:
+			check(c.size() == 3 and c[0] != c[1] and c[1] != c[2] and c[0] != c[2], "distinct roll")
+		for k in c:
+			total += 1
+			if not (k in owned_now):
+				unowned_n += 1
+	var share: float = float(Dt.ROSTER.size() - owned_now.size()) / Dt.ROSTER.size()
+	check(float(unowned_n) / total > share + 0.05, "unowned weighted up (%d/%d vs share %.2f)" % [unowned_n, total, share])
+	# never empty: everything maxed still rolls, picks pay gold
+	var all := {}
+	for k in Dt.ROSTER:
+		all[k] = Dt.max_copies()
+	Pf.store_set("copies", all)
+	var c4: Array = Mt._start_pack("shop")
+	eq(c4.size(), 3, "maxed collection still rolls 3")
+	eq(Mt.pick_pack(c4[0]).gold, Dt.BAL.dupe_gold, "maxed pick → gold")
+	Pf.store_set("copies", keep_all)
+	Pf.store_set("loadout", keep_lo)
 
 # ---------------------------------------------------------------- state
 func _fresh_party(keys: Array) -> void:
@@ -471,88 +652,130 @@ func test_cards() -> void:
 	eq(hp0 - e.hp, roundf(10 * 1.5), "Discharge = shield")
 	eq(coil.shield, 0.0, "shield consumed")
 
-## Cards belong to elements: any lead of the card's element plays it, as itself.
+## The owner rule: the owning lead plays a card in full; a same-element lead plays it as a basic hit;
+## another element can't play it; with no living creature of its element it is dead.
 func test_element_cards() -> void:
-	section = "element cards"
+	section = "owner cards"
 	var e := _battle(["emberwick", "cinderpip", "bellspring"], "mossling")
 	var wick: Mon = St.party[0]
 	var pip: Mon = St.party[1]
 	var bell: Mon = St.party[2]
 	var scorch := CardRef.new(pip.uid, "strike")   # Scorch (1): 7 dmg
-	eq(St.card_el(scorch), "ember", "card element = source element")
-	eq(St.card_block(scorch), "", "same-element bench card playable by the lead")
-	check(not St.card_benched(scorch), "same-element card not benched")
+	var peck := CardRef.new(wick.uid, "strike")     # Peck (1): 6 dmg
+	var wsig := CardRef.new(wick.uid, "sig")        # Wickflare (3): 14 dmg
+	eq(St.card_el(scorch), "ember", "card element = owner element")
+	# owner leading: full card
+	check(not St.card_basic(peck), "owner leading: not basic")
+	eq(St.card_by(peck), wick, "owner fires its card")
+	eq(St.card_waiting_for(peck), null, "owner leads: waiting for nobody")
+	# same element, not the owner: basic hit
+	check(St.card_basic(scorch), "same-element non-owner: basic")
+	eq(St.card_block(scorch), "", "basic card playable")
+	check(not St.card_benched(scorch), "basic card isn't benched")
+	eq(St.card_waiting_for(scorch), pip, "basic card waits for its owner")
+	eq(St.card_cost(scorch), Dt.BAL.basic_cost, "basic costs BAL.basic_cost")
+	eq(St.card_cost(wsig), 3, "the owner's own card keeps its cost")
+	St.active = pip.uid
+	eq(St.card_cost(wsig), Dt.BAL.basic_cost, "a 3-cost card plays basic for 1")
+	St.active = wick.uid
+	wick.power = 2.0
+	pip.power = 1.0
+	eq(St.basic_dmg(scorch), 8, "basic damage = 4 × the lead's Power")
+	eq(St.card_by(scorch), wick, "basic fires as the lead (Power)")
+	# other element: blocked
 	var splash := CardRef.new(bell.uid, "strike")
 	eq(St.card_block(splash), "bench", "other element waits for a swap")
 	check(St.card_benched(splash), "other element benched")
-	# stats come from the lead, not the source
-	wick.power = 2.0
-	pip.power = 1.0
-	var co: Dictionary = St.card_of(scorch)
-	eq(co.by, wick, "fired by the lead")
-	eq(co.src, pip, "source kept")
-	eq(co.def.dmg, 14, "lead's Power applies: 7×2")
-	eq(St.card_of(scorch, pip).def.dmg, 7, "explicit firer")
+	check(not St.card_basic(splash), "other element isn't basic")
+	eq(St.card_by(splash), bell, "preview by the owner")
+	# faces: only the owner
+	eq(St.card_faces(scorch), [pip], "faces: owner only")
+	eq(St.card_faces(wsig), [wick], "faces: owner only (2)")
+	# play the basic: 1 energy, 4×Power in the lead's element (ember vs thorn ×1.5), +1 chain, no discount use
+	St.discount = 1
+	St.chain = 1
+	St.chain_t = 0
 	_hand(0, scorch.uid, scorch.slot)
 	var hp0 := e.hp
 	var en0: float = St.energy
+	var played := []
+	var on_played := func(i): played.append(i)
+	Bt.card_played.connect(on_played)
 	Bt.play_card(0)
-	eq(hp0 - e.hp, 21.0, "Scorch by Emberwick: 14×1.5")
-	eq(St.energy, en0 - 1, "Scorch costs 1")
-	eq(wick.played, 1, "the lead counts the play")
-	eq(pip.played, 0, "the source doesn't")
+	Bt.card_played.disconnect(on_played)
+	eq(played, [0], "basic emits card_played")
+	eq(hp0 - e.hp, float(roundi(4 * 2.0 * 1.2 * 1.5)), "basic: 4×2 Power ×chain 2 ×1.5 element")
+	eq(St.energy, en0 - 1, "basic costs 1")
+	eq(St.chain, 2, "basic adds a chain step")
+	eq(St.discount, 1, "basic leaves the discount")
+	eq(wick.played, 0, "basic isn't the lead's played card")
+	eq(pip.played, 0, "nor the owner's")
 	eq(St.active, wick.uid, "playing never swaps")
-	# Quickfuse belongs to whoever leads
-	pip.trait_key = "quickfuse"
-	pip.played = 0
-	var wsig := CardRef.new(wick.uid, "sig")
-	eq(St.card_cost(wsig), 3, "Emberwick leading: no Quickfuse")
-	St.active = pip.uid
-	eq(St.card_cost(wsig), 0, "Cinderpip leading: Quickfuse frees Emberwick's card")
-	St.active = wick.uid
-	# in-run upgrades stay on the card
-	pip.ups["strike"] = "cost"
-	eq(St.card_of(scorch).def.cost, 0, "upgrade follows the card")
-	pip.ups.clear()
-	# face window: living teammates of the card's element, the source first; swaps don't change it
-	eq(St.card_faces(scorch), [pip, wick], "Scorch: Cinderpip, then Emberwick")
-	eq(St.card_faces(wsig), [wick, pip], "Wickflare: Emberwick first")
-	eq(St.card_faces(splash), [bell], "the only Tide creature")
+	St.discount = 0
+	# a basic doesn't trigger the lead's Quickfuse (and Quickfuse doesn't free it)
+	wick.trait_key = "quickfuse"
+	wick.played = 0
+	eq(St.card_cost(scorch), 1, "Quickfuse doesn't free a basic")
+	_hand(1, scorch.uid, scorch.slot)
+	Bt.play_card(1)
+	eq(wick.played, 0, "Quickfuse still armed after a basic")
+	eq(St.card_cost(wsig), 0, "Quickfuse frees the owner's own card")
+	wick.trait_key = "afterglow"
+	# the owner's card plays in full with its effects
+	St.chain_t = 99
+	wick.power = 1.0
+	_hand(2, wsig.uid, wsig.slot)
+	hp0 = e.hp
+	en0 = St.energy
+	Bt.play_card(2)
+	eq(hp0 - e.hp, roundf(14 * 1.5), "Wickflare in full by its owner")
+	eq(St.energy, en0 - 3, "Wickflare costs 3")
+	eq(wick.played, 1, "the owner counts the play")
+	# off-element deny toast names the owner
 	St.active = bell.uid
-	eq(St.card_faces(scorch), [pip, wick], "a swap keeps the faces")
-	St.active = wick.uid
-	# dead only when every creature of the element is down
+	var fx = mod("Fx")
+	fx.log.clear()
+	_hand(3, wick.uid, "skill")
+	Bt.play_card(3)
+	var toasts: Array = fx.log.filter(func(l): return l[0] == "toast")
+	check(toasts.size() > 0 and "Emberwick" in str(toasts[-1][1]), "bench toast names the owner")
+	# owner KO'd, same-element teammate leads: basic
 	wick.alive = false
-	eq(St.card_faces(wsig), [pip], "a KO drops its face; the card shows who's left")
-	eq(St.card_faces(scorch), [pip], "and from every card it shared")
-	St.active = bell.uid
-	check(not St.card_dead(scorch), "Cinderpip alive: Ember cards live on")
-	check(not St.card_dead(wsig), "the fainted source's card lives on")
-	eq(St.card_block(wsig), "bench", "Ember card waits for Cinderpip")
+	wick.hp = 0
 	St.active = pip.uid
-	eq(St.card_block(wsig), "", "Cinderpip plays Emberwick's card")
-	pip.alive = false
+	check(not St.card_dead(wsig), "Cinderpip alive: Emberwick's card lives on")
+	check(St.card_basic(wsig), "owner KO'd: basic for the same-element lead")
+	eq(St.card_waiting_for(wsig), null, "a KO'd owner isn't waited for")
+	eq(St.card_faces(wsig), [wick], "faces: still the owner")
 	St.active = bell.uid
+	eq(St.card_block(wsig), "bench", "off-element lead: benched")
+	# every creature of the element down: dead
+	pip.alive = false
 	check(St.card_dead(scorch), "all Ember down: dead")
-	check(St.card_dead(wsig), "all Ember down: dead (other source)")
+	check(St.card_dead(wsig), "all Ember down: dead (other owner)")
+	check(not St.card_basic(scorch), "dead isn't basic")
 	check(not St.card_benched(scorch), "dead isn't benched")
-	eq(St.card_faces(wsig), [wick], "dead card: just its source")
-	eq(St.card_faces(scorch), [pip], "dead card: just its source (other)")
 	eq(St.card_block(scorch), "", "dead card can be discarded")
 	wick.alive = true
+	wick.hp = wick.max_hp
 	pip.alive = true
-	eq(St.card_faces(wsig), [wick, pip], "a revive brings the faces back")
-	# Thirst on the lead heals the lead on another creature's Strike
+	# Thirst: a basic Strike from a teammate doesn't heal the lead
 	e = _battle(["truffmole", "brambat"], "puddlet")
 	var mole: Mon = St.party[0]
 	var bat: Mon = St.party[1]
 	mole.trait_key = "thirst"
 	mole.hp = 10
 	bat.hp = 10
-	_hand(0, bat.uid, "strike")   # Nip: dmg, heal self 2
+	_hand(0, bat.uid, "strike")   # Nip: dmg, heal self 2 (but as a basic: no effects)
 	Bt.play_card(0)
-	check(mole.hp > 12.0, "lead healed by Nip and its Thirst")
-	eq(bat.hp, 10.0, "source not healed")
+	eq(mole.hp, 10.0, "basic: no Thirst, no Nip heal")
+	eq(bat.hp, 10.0, "owner not healed")
+	St.active = bat.uid
+	St.chain_t = 99
+	bat.trait_key = "thirst"
+	_hand(1, bat.uid, "strike")
+	Bt.play_card(1)
+	check(bat.hp > 12.0, "owner leading: Nip heals and Thirst fires")
 
 func test_statuses() -> void:
 	section = "status"
