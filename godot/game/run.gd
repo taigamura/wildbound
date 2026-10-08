@@ -437,7 +437,8 @@ func _show_upgrade(on_done: Callable, on_back: Callable) -> void:
 			t.press_scale = 0.97
 			t.dis_mod = Color(1, 1, 1, 0.45)
 			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var cv := CardView.new("mini").face(co.def, c.el, {"pow": co.pow, "upgraded": "+30%" if up == "power" else ("−1" if up == "cost" else "")})
+			var faces := S.card_faces(CardRef.new(c.uid, slot)).map(func(m: Mon): return [m.key, m.el])
+			var cv := CardView.new("mini").face(co.def, c.el, {"slot": slot, "base": S.base_card(c, slot).cost, "faces": faces, "pow": co.pow, "upgraded": up if up != null else ""})
 			t.add_child(cv)
 			t.disabled = up != null and up != ""
 			cards_all.append(cv)
@@ -1113,7 +1114,7 @@ func _coll_render() -> void:
 		d.add_child(UiKit.sub("Not found yet. Open a daily pack, or buy one in the item shop."))
 		var cards := UiKit.grid(3, 8)
 		for slot in Data.SLOTS:
-			var cv := CardView.new("coll").face(sp.cards[slot][0], sp.el)
+			var cv := CardView.new("coll").face(sp.cards[slot][0], sp.el, {"slot": slot})   # not found yet: a glyph, no face
 			cv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			cards.add_child(cv)
 		d.add_child(_pad_top(cards, 6))
@@ -1130,7 +1131,7 @@ func _coll_render() -> void:
 			var t := Tap.new()
 			t.press_scale = 0.97
 			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var cv := CardView.new("lo").face(Data.boost_card(def, bo.power, bo.spirit), sp.el)
+			var cv := CardView.new("lo").face(Data.boost_card(def, bo.power, bo.spirit), sp.el, {"slot": slot, "faces": [[k, sp.el]]})
 			cv.pressed_state = 1 if on else -1
 			cv.sel = pending != null and pending.has("slot") and pending.slot == slot and pending.i == i
 			if not open:
