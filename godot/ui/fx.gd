@@ -189,6 +189,31 @@ func callout(text: String, color := Color("#ffcf6b")) -> void:
 		[1.0, {"a": 0.0, "s": 1.1, "r": -3.0, "y": -30.0}],
 	], {"base": base, "ease": [0.2, 1.4, 0.3, 1.0], "free": true})
 
+# ------------------------------------------------------------------ loot reveal (real time)
+
+## Pop `items` (Controls, e.g. loot chips in a row) in one after another: each scales up from 0.4 with a
+## small overshoot while fading in, with a coin tick (Sfx.tick) and a light haptic as it lands. Real time,
+## like the rest of the UI motion. o: delay (before the first, default 0.2), step (between items, 0.12;
+## shortened so the whole row lands within 0.5s of the first). The end state is the plain, fully visible
+## layout, so a still frame after ~1s shows everything.
+func reveal(items: Array, o := {}) -> void:
+	var t0: float = o.get("delay", 0.2)
+	var step: float = minf(o.get("step", 0.12), 0.5 / maxf(1.0, items.size() - 1.0))
+	for i in items.size():
+		var n: Control = items[i]
+		if not is_instance_valid(n):
+			continue
+		var centre := func(): n.pivot_offset = n.size / 2.0
+		centre.call()
+		n.resized.connect(centre)
+		var d := t0 + i * step
+		kf(n, 0.34, [[0.0, {"s": 0.4, "a": 0.0}], [0.55, {"s": 1.12, "a": 1.0}], [1.0, {"s": 1.0, "a": 1.0}]],
+			{"delay": d, "ease": [0.3, 0.0, 0.4, 1.0]})
+		get_tree().create_timer(d + 0.12, true, false, true).timeout.connect(func():
+			if is_instance_valid(n) and n.is_visible_in_tree():
+				Sfx.tick()
+				Platform.haptic("light"))
+
 # ------------------------------------------------------------------ keyframe animator (real time)
 
 ## Run CSS-like keyframes on a CanvasItem. frames: [[t 0..1, {x y s sx sy r a b}], ...]; each property

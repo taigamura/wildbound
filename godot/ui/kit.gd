@@ -493,3 +493,117 @@ static func glyph_for(c, el) -> String:
 	if c.get("energy", 0):
 		return "spark"
 	return "star"
+
+# ---- map, reward and results pieces (UI-QUEUE items 8 and 10) ----
+## UI colours of the materials (the Ember / Tide / Thorn accents), as Run.MAT_COL.
+const MAT_C := {"sword": Color("#ec7a3c"), "orb": Color("#3f9de4"), "jewel": Color("#5cc062")}
+
+## One wallet entry without a pill: a tinted glyph and a number (the map and reward footers).
+static func stat(glyph: String, c: Color, text: String) -> HBoxContainer:
+	var h := hbox(3)
+	h.add_child(icon(glyph, 14, c))
+	var l := lbl(text, "700", T_S, INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(l)
+	return h
+
+## The wallet as one row: gold, then each material (Meta.wallet() shape). Never wraps.
+static func wallet_row(w: Dictionary, sep := 10) -> HBoxContainer:
+	var h := hbox(sep)
+	h.add_child(stat("coin", GOLD_HI, str(w.get("gold", 0))))
+	for m in MAT_C:
+		h.add_child(stat(m, MAT_C[m], str(w.get(m, 0))))
+	h.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return h
+
+## A party member as a portrait with a thin HP bar under it and no name (names truncate at this size).
+## `lead` = the gold ring. A knocked-out creature is dimmed with an empty bar.
+static func party_por(c, sz := 30.0, lead := false) -> VBoxContainer:
+	var v := vbox(4)
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var p := por(el_css(c.el), sz, str(c.el), lead)
+	if not c.alive or c.hp <= 0:
+		p.modulate = Color(0.5, 0.5, 0.55)
+	v.add_child(p)
+	var frac: float = clampf(c.hp / float(c.max_hp), 0.0, 1.0)
+	var m := meter(frac, HP if frac > 0.3 else FOE, 4.0)
+	m.custom_minimum_size.x = sz
+	m.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(m)
+	return v
+
+## A loot or Essence chip sized for the ribbon (28 px tall, 14 px text).
+static func loot_chip(glyph: String, c: Color, text: String) -> PanelContainer:
+	var p := panel(flat(Color(0, 0, 0, 0.45), 14, 1, alpha(c, 0.8), Vector4(10, 4, 10, 4)))
+	p.custom_minimum_size.y = 28
+	var h := hbox(5)
+	h.add_child(icon(glyph, 14, c))
+	var l := lbl(text, "700", T_M, INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(l)
+	p.add_child(h)
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return p
+
+## A ribbon chip holding several glyph + number pairs after one word ("+ Essence  [ember] 9  [tide] 4").
+## pairs: [[glyph, Color, text], ...].
+static func multi_chip(word: String, pairs: Array) -> PanelContainer:
+	var p := panel(flat(Color(0, 0, 0, 0.45), 14, 1, alpha(BRASS, 0.8), Vector4(10, 4, 10, 4)))
+	p.custom_minimum_size.y = 28
+	var h := hbox(8)
+	var w := lbl(word, "700", T_M, INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+	w.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(w)
+	for pr in pairs:
+		var s := hbox(3)
+		s.add_child(icon(pr[0], 14, pr[1]))
+		var l := lbl(pr[2], "700", T_M, INK, {"valign": VERTICAL_ALIGNMENT_CENTER})
+		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		s.add_child(l)
+		h.add_child(s)
+	p.add_child(h)
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return p
+
+## The ribbon band behind "Victory" and a loot row: deep navy fading out at both ends between two
+## gold hairlines. Put it behind content with Box.fill (it draws inside its rect).
+static func ribbon_band() -> Control:
+	var c := Control.new()
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.draw.connect(func():
+		var w := c.size.x
+		var h := c.size.y
+		var fade := w * 0.15
+		var deep := alpha(NAVY2, 0.92)
+		for band in [[0.0, h, deep], [0.0, 1.0, GOLD_HI], [h - 1.0, 1.0, GOLD_HI]]:
+			var y: float = band[0]
+			var bh: float = band[1]
+			var on: Color = band[2]
+			var off := alpha(on, 0.0)
+			c.draw_polygon(PackedVector2Array([Vector2(0, y), Vector2(fade, y), Vector2(fade, y + bh), Vector2(0, y + bh)]),
+				PackedColorArray([off, on, on, off]))
+			c.draw_rect(Rect2(fade, y, w - 2 * fade, bh), on)
+			c.draw_polygon(PackedVector2Array([Vector2(w - fade, y), Vector2(w, y), Vector2(w, y + bh), Vector2(w - fade, y + bh)]),
+				PackedColorArray([on, off, off, on])))
+	c.resized.connect(c.queue_redraw)
+	return c
+
+## Pips for picks remaining: `left` filled gold diamonds, then `total - left` hollow ones.
+static func pips(left: int, total: int, sz := 10.0) -> Control:
+	var c := Control.new()
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var n := maxi(total, left)
+	var step := sz + 4.0
+	c.custom_minimum_size = Vector2(n * step - 2.0, sz + 4.0)
+	c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	c.draw.connect(func():
+		var r := sz * 0.6
+		for i in n:
+			var o := Vector2(1.0 + i * step + sz / 2.0, c.size.y / 2.0)
+			var pts := PackedVector2Array([o + Vector2(0, -r), o + Vector2(r, 0), o + Vector2(0, r), o + Vector2(-r, 0)])
+			if i < left:
+				c.draw_colored_polygon(pts, GOLD_HI)
+			else:
+				pts.append(pts[0])
+				c.draw_polyline(pts, alpha(GOLD_HI, 0.6), 1.0, true))
+	return c
